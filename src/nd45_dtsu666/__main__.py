@@ -25,7 +25,7 @@ def _cmd_run(args) -> int:
 
     async def _main() -> None:
         stop_event = asyncio.Event()
-        _install_signal_handlers(asyncio.get_event_loop(), stop_event)
+        _install_signal_handlers(asyncio.get_running_loop(), stop_event)
         await run_app(config, registers, stop_event)
 
     asyncio.run(_main())
