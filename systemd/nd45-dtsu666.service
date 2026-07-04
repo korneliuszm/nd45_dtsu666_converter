@@ -1,0 +1,19 @@
+[Unit]
+Description=ND45 -> DTSU666 Modbus bridge (Sigenergy Power Sensor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nd45_dtsu666
+ExecStart=/opt/nd45_dtsu666/.venv/bin/python -m nd45_dtsu666 run \
+  --config /opt/nd45_dtsu666/config/config.json \
+  --registers /opt/nd45_dtsu666/config/registers.json
+Restart=always
+RestartSec=2
+# Logs go to journald via stdout/stderr
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
