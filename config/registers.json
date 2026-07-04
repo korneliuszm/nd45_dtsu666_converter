@@ -1,0 +1,62 @@
+{
+  "nd45_source": {
+    "word_order": "big",
+    "byte_order": "big",
+    "points": {
+      "u_l1":   {"addr": 50},
+      "u_l2":   {"addr": 74},
+      "u_l3":   {"addr": 98},
+      "u_l12":  {"addr": 140},
+      "u_l23":  {"addr": 142},
+      "u_l31":  {"addr": 144},
+      "i_l1":   {"addr": 52},
+      "i_l2":   {"addr": 76},
+      "i_l3":   {"addr": 100},
+      "p_l1":   {"addr": 56},
+      "p_l2":   {"addr": 80},
+      "p_l3":   {"addr": 104},
+      "p_total":{"addr": 128},
+      "q_l1":   {"addr": 58},
+      "q_l2":   {"addr": 82},
+      "q_l3":   {"addr": 106},
+      "q_total":{"addr": 130},
+      "pf_l1":  {"addr": 64},
+      "pf_l2":  {"addr": 88},
+      "pf_l3":  {"addr": 112},
+      "pf_total":{"addr": 136},
+      "freq":   {"addr": 818},
+      "imp_energy_total": {"compose": [912, 914], "factors": [1000, 1]},
+      "exp_energy_total": {"compose": [928, 930], "factors": [1000, 1]}
+    }
+  },
+  "dtsu_target": {
+    "word_order": "big",
+    "byte_order": "big",
+    "points": {
+      "u_l12":  {"addr": 8192, "from": "u_l12", "scale": 10},
+      "u_l23":  {"addr": 8194, "from": "u_l23", "scale": 10},
+      "u_l31":  {"addr": 8196, "from": "u_l31", "scale": 10},
+      "u_l1":   {"addr": 8198, "from": "u_l1", "scale": 10},
+      "u_l2":   {"addr": 8200, "from": "u_l2", "scale": 10},
+      "u_l3":   {"addr": 8202, "from": "u_l3", "scale": 10},
+      "i_l1":   {"addr": 8204, "from": "i_l1", "scale": 1000},
+      "i_l2":   {"addr": 8206, "from": "i_l2", "scale": 1000},
+      "i_l3":   {"addr": 8208, "from": "i_l3", "scale": 1000},
+      "p_total":{"addr": 8210, "from": "p_total", "scale": 10, "sign": 1},
+      "p_l1":   {"addr": 8212, "from": "p_l1", "scale": 10, "sign": 1},
+      "p_l2":   {"addr": 8214, "from": "p_l2", "scale": 10, "sign": 1},
+      "p_l3":   {"addr": 8216, "from": "p_l3", "scale": 10, "sign": 1},
+      "q_total":{"addr": 8218, "from": "q_total", "scale": 10},
+      "q_l1":   {"addr": 8220, "from": "q_l1", "scale": 10},
+      "q_l2":   {"addr": 8222, "from": "q_l2", "scale": 10},
+      "q_l3":   {"addr": 8224, "from": "q_l3", "scale": 10},
+      "pf_total":{"addr": 8234, "from": "pf_total", "scale": 1000},
+      "pf_l1":  {"addr": 8236, "from": "pf_l1", "scale": 1000},
+      "pf_l2":  {"addr": 8238, "from": "pf_l2", "scale": 1000},
+      "pf_l3":  {"addr": 8240, "from": "pf_l3", "scale": 1000},
+      "freq":   {"addr": 8260, "from": "freq", "scale": 100},
+      "imp_ep": {"addr": 4126, "from": "imp_energy_total", "scale": 1},
+      "exp_ep": {"addr": 4136, "from": "exp_energy_total", "scale": 1}
+    }
+  }
+}
