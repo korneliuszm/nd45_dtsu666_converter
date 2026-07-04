@@ -1,5 +1,5 @@
 {
   "nd45":   {"host": "192.168.1.10", "port": 502, "unit_id": 1, "poll_interval_s": 0.3, "timeout_s": 1.0, "reconnect_delay_s": 1.0, "reconnect_delay_max_s": 30.0},
-  "dtsu":   {"port": "/dev/ttyAMA0", "baudrate": 9600, "parity": "N", "stopbits": 1, "slave_id": 1},
+  "dtsu":   {"port": "/dev/ttyAMA2", "baudrate": 9600, "parity": "N", "stopbits": 1, "slave_id": 1},
   "safety": {"max_data_age_s": 3.0, "check_interval_s": 0.5, "min_restart_interval_s": 5.0}
 }

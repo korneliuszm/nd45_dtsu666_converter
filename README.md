@@ -12,7 +12,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e .
 ```
 
-Edit `config/config.json`: set ND45 `host`, the RS-485 device `port` (`/dev/ttyAMA0` etc.),
+Edit `config/config.json`: set ND45 `host`, the RS-485 device `port` (`/dev/ttyAMA2` etc.),
 `slave_id`, and `baudrate`.
 
 ## Bench test before connecting Sigenergy
