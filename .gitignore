@@ -24,3 +24,6 @@ config/config.local.json
 Thumbs.db
 .idea/
 .vscode/
+
+# SDD scratch
+.superpowers/
