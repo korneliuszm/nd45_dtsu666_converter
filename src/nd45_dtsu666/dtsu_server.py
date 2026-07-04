@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import Counter, deque
 from collections.abc import Callable
 
 from pymodbus.datastore import (
@@ -23,10 +24,61 @@ log = logging.getLogger(__name__)
 _HOLDING_FC = 3
 
 
-def build_context(target: TargetSide, slave_id: int) -> ModbusServerContext:
+class RtuActivity:
+    """Records Modbus RTU read requests received from the storage (Sigenergy)."""
+
+    def __init__(self, recent_maxlen: int = 8, rate_window: float = 5.0) -> None:
+        self.total = 0
+        self.last_ts: float | None = None
+        self._blocks: Counter[tuple[int, int, int]] = Counter()
+        self._recent: deque[tuple[float, int, int, int]] = deque(maxlen=recent_maxlen)
+        self._times: deque[float] = deque()
+        self._rate_window = rate_window
+
+    def record(self, fc: int, address: int, count: int, ts: float) -> None:
+        self.total += 1
+        self.last_ts = ts
+        self._blocks[(fc, address, count)] += 1
+        self._recent.append((ts, fc, address, count))
+        self._times.append(ts)
+        while self._times and ts - self._times[0] > self._rate_window:
+            self._times.popleft()
+
+    def summary(self, now: float) -> dict:
+        recent_times = [t for t in self._times if now - t <= self._rate_window]
+        return {
+            "total": self.total,
+            "last_seen_age": None if self.last_ts is None else now - self.last_ts,
+            "rate": len(recent_times) / self._rate_window,
+            "blocks": self._blocks.most_common(),
+            "recent": list(self._recent),
+        }
+
+
+class RecordingSlaveContext(ModbusSlaveContext):
+    """Slave context that logs every getValues (an RTU read) into an RtuActivity."""
+
+    def __init__(
+        self, activity: RtuActivity, *args, clock: Callable[[], float] = time.monotonic, **kwargs
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._activity = activity
+        self._clock = clock
+
+    def getValues(self, fc_as_hex, address, count=1):
+        self._activity.record(fc_as_hex, address, count, self._clock())
+        return super().getValues(fc_as_hex, address, count)
+
+
+def build_context(
+    target: TargetSide, slave_id: int, activity: RtuActivity | None = None
+) -> ModbusServerContext:
     max_addr = max(pt.addr for pt in target.points.values())
     block = ModbusSequentialDataBlock(0, [0] * (max_addr + 2))
-    slave = ModbusSlaveContext(hr=block, zero_mode=True)
+    if activity is not None:
+        slave = RecordingSlaveContext(activity, hr=block, zero_mode=True)
+    else:
+        slave = ModbusSlaveContext(hr=block, zero_mode=True)
     return ModbusServerContext(slaves={slave_id: slave}, single=False)
 
 

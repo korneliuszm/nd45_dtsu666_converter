@@ -5,7 +5,13 @@ import pytest
 from nd45_dtsu666.canonical import CanonicalStore, HealthGate
 from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import DtsuConf, load_registers
-from nd45_dtsu666.dtsu_server import build_context, supervise_server, update_datastore
+from nd45_dtsu666.dtsu_server import (
+    RecordingSlaveContext,
+    RtuActivity,
+    build_context,
+    supervise_server,
+    update_datastore,
+)
 
 
 def _read_point(context, slave_id, pt, target):
@@ -125,3 +131,47 @@ async def test_supervisor_retries_when_serve_fails():
     stop.set()
     await asyncio.wait_for(task, timeout=1.0)
     assert len(created) >= 2  # recreated after failure => it retried
+
+
+def test_rtu_activity_summary_tally_and_last_seen():
+    a = RtuActivity()
+    a.record(3, 8192, 64, ts=100.0)
+    a.record(3, 8192, 64, ts=100.5)
+    a.record(3, 4126, 24, ts=101.0)
+    s = a.summary(now=102.0)
+    assert s["total"] == 3
+    assert s["last_seen_age"] == pytest.approx(1.0)  # 102.0 - 101.0
+    blocks = dict(s["blocks"])
+    assert blocks[(3, 8192, 64)] == 2
+    assert blocks[(3, 4126, 24)] == 1
+    assert s["recent"][-1] == (101.0, 3, 4126, 24)
+
+
+def test_rtu_activity_summary_empty():
+    s = RtuActivity().summary(now=5.0)
+    assert s["total"] == 0
+    assert s["last_seen_age"] is None
+    assert s["blocks"] == []
+
+
+def test_recording_context_records_reads_and_delegates():
+    target = load_registers("config/registers.json").dtsu_target
+    activity = RtuActivity()
+    context = build_context(target, slave_id=1, activity=activity)
+    update_datastore(context, 1, {"u_l1": 230.0}, target)
+    addr = target.points["u_l1"].addr
+
+    regs = context[1].getValues(3, addr, count=2)
+
+    assert regs != [0, 0]  # real datastore values delegated through
+    assert activity.total == 1  # the Sigenergy read was recorded
+    s = activity.summary(now=activity.last_ts)
+    assert ((3, addr, 2), 1) in s["blocks"]
+
+
+def test_build_context_activity_optional():
+    target = load_registers("config/registers.json").dtsu_target
+    plain = build_context(target, slave_id=1)
+    assert not isinstance(plain[1], RecordingSlaveContext)
+    rec = build_context(target, slave_id=1, activity=RtuActivity())
+    assert isinstance(rec[1], RecordingSlaveContext)
