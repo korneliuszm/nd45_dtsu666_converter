@@ -1,6 +1,6 @@
 import asyncio
 
-from nd45_dtsu666.app import build_on_update, build_pipeline, connect_with_retry
+from nd45_dtsu666.app import FaultReporter, build_on_update, build_pipeline, connect_with_retry
 from nd45_dtsu666.canonical import CanonicalStore
 from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import load_config, load_registers
@@ -85,3 +85,53 @@ async def test_connect_with_retry_stops_between_attempts():
         connect_with_retry(client, stop, delay=0.005, max_delay=0.01), _stopper()
     )
     assert ok is False  # gives up cleanly once stop is set, never hangs
+
+
+class _FakeLog:
+    def __init__(self):
+        self.warnings = []
+        self.infos = []
+
+    def warning(self, msg, *args):
+        self.warnings.append(msg % args if args else msg)
+
+    def info(self, msg, *args):
+        self.infos.append(msg % args if args else msg)
+
+
+def test_fault_reporter_logs_first_failure_then_mutes():
+    log = _FakeLog()
+    r = FaultReporter(logger=log, summary_interval=60.0, clock=lambda: 0.0)
+    for _ in range(5):
+        r.failure(Exception("boom"))
+    assert len(log.warnings) == 1  # only the first of a burst is logged
+
+
+def test_fault_reporter_periodic_summary():
+    log = _FakeLog()
+    t = {"v": 0.0}
+    r = FaultReporter(logger=log, summary_interval=60.0, clock=lambda: t["v"])
+    r.failure(Exception("boom"))  # t=0 -> first warning
+    t["v"] = 30.0
+    r.failure(Exception("boom"))  # muted (<60s)
+    assert len(log.warnings) == 1
+    t["v"] = 61.0
+    r.failure(Exception("boom"))  # summary warning
+    assert len(log.warnings) == 2
+
+
+def test_fault_reporter_logs_recovery_and_resets():
+    log = _FakeLog()
+    r = FaultReporter(logger=log, clock=lambda: 0.0)
+    r.failure(Exception("boom"))
+    r.failure(Exception("boom"))
+    r.success()
+    assert len(log.infos) == 1  # recovery logged once
+    r.failure(Exception("boom"))
+    assert len(log.warnings) == 2  # state reset -> new fault logs again
+
+
+def test_fault_reporter_success_without_failure_is_silent():
+    log = _FakeLog()
+    FaultReporter(logger=log, clock=lambda: 0.0).success()
+    assert log.warnings == [] and log.infos == []

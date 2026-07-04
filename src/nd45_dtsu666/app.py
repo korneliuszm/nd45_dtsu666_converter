@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -35,8 +36,37 @@ def build_on_update(store, context, slave_id, target) -> Callable[[dict, float],
     return on_update
 
 
-def _on_error(exc: Exception) -> None:
-    log.warning("poll failed: %s", exc)
+class FaultReporter:
+    """Logs ND45 poll faults on state transitions, not once per failed poll.
+
+    A sustained outage would otherwise emit a warning every poll interval
+    (~200/min). This logs the first failure, a periodic summary, and recovery.
+    """
+
+    def __init__(self, logger=log, summary_interval: float = 60.0, clock=time.monotonic) -> None:
+        self._log = logger
+        self._summary_interval = summary_interval
+        self._clock = clock
+        self._failing = False
+        self._count = 0
+        self._last_summary = 0.0
+
+    def failure(self, exc: Exception) -> None:
+        now = self._clock()
+        self._count += 1
+        if not self._failing:
+            self._failing = True
+            self._last_summary = now
+            self._log.warning("ND45 polling failed: %s (retrying; repeats muted)", exc)
+        elif now - self._last_summary >= self._summary_interval:
+            self._last_summary = now
+            self._log.warning("ND45 still failing: %d polls failed so far", self._count)
+
+    def success(self) -> None:
+        if self._failing:
+            self._log.info("ND45 polling recovered after %d failed poll(s)", self._count)
+        self._failing = False
+        self._count = 0
 
 
 async def connect_with_retry(
@@ -73,14 +103,19 @@ def build_pipeline(
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
     context = build_context(registers.dtsu_target, config.dtsu.slave_id, activity=activity)
-    on_update = build_on_update(store, context, config.dtsu.slave_id, registers.dtsu_target)
+    base_on_update = build_on_update(store, context, config.dtsu.slave_id, registers.dtsu_target)
+    reporter = FaultReporter()
+
+    def on_update(values: dict[str, float], ts: float) -> None:
+        reporter.success()  # a good poll clears any active fault state
+        base_on_update(values, ts)
 
     client = client or AsyncModbusTcpClient(
         config.nd45.host, port=config.nd45.port, timeout=config.nd45.timeout_s
     )
     poller = run_poller(
         client, registers.nd45_source, config.nd45.unit_id,
-        config.nd45.poll_interval_s, on_update, _on_error, stop_event,
+        config.nd45.poll_interval_s, on_update, reporter.failure, stop_event,
     )
     supervisor = supervise_server(
         config.dtsu, context, store, gate,
