@@ -1,8 +1,11 @@
+import asyncio
+
 import pytest
 
+from nd45_dtsu666.canonical import CanonicalStore, HealthGate
 from nd45_dtsu666.codec import registers_to_float
-from nd45_dtsu666.config import load_registers
-from nd45_dtsu666.dtsu_server import build_context, update_datastore
+from nd45_dtsu666.config import DtsuConf, load_registers
+from nd45_dtsu666.dtsu_server import build_context, supervise_server, update_datastore
 
 
 def _read_point(context, slave_id, pt, target):
@@ -42,3 +45,49 @@ def test_missing_canonical_key_is_skipped():
     update_datastore(context, 1, {}, target)  # no values -> no crash
     regs = context[1].getValues(3, target.points["u_l1"].addr, count=2)
     assert regs == [0, 0]
+
+
+class FakeServer:
+    def __init__(self):
+        self.running = False
+        self.serve_calls = 0
+        self.shutdown_calls = 0
+
+    async def serve_forever(self):
+        self.running = True
+        self.serve_calls += 1
+        while self.running:
+            await asyncio.sleep(0.01)
+
+    async def shutdown(self):
+        self.running = False
+        self.shutdown_calls += 1
+
+
+async def test_supervisor_starts_when_fresh_and_stops_when_stale():
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(port="/dev/null", slave_id=1)
+    fake = FakeServer()
+    stop = asyncio.Event()
+    clock = {"t": 100.0}
+
+    def now():
+        return clock["t"]
+
+    store.update({"p_total": 1.0}, ts=now())  # fresh
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=lambda: fake, now=now)
+    )
+    await asyncio.sleep(0.1)
+    assert fake.running is True  # serving while fresh
+
+    clock["t"] = 200.0  # data now stale (age 100s > 3s)
+    await asyncio.sleep(0.1)
+    assert fake.running is False  # stopped -> Sigenergy sees timeout
+
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert fake.serve_calls >= 1 and fake.shutdown_calls >= 1
