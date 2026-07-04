@@ -870,14 +870,16 @@ git commit -m "feat: ND45 async poller with grouped reads and decode"
 ```python
 import pytest
 
-from nd45_dtsu666.codec import decode_point
+from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import load_registers
 from nd45_dtsu666.dtsu_server import build_context, update_datastore
 
 
 def _read_point(context, slave_id, pt, target):
+    # True inverse of encode_point (register_float = SI*sign*scale + offset).
     regs = context[slave_id].getValues(3, pt.addr, count=2)
-    return decode_point(regs, pt.scale, pt.sign, pt.offset, target.word_order, target.byte_order)
+    raw = registers_to_float(regs, target.word_order, target.byte_order)
+    return (raw - pt.offset) / (pt.scale * pt.sign)
 
 
 def test_update_datastore_encodes_voltage_and_power():
