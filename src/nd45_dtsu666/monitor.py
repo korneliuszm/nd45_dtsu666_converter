@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from .app import build_pipeline
+from .app import build_pipeline, connect_with_retry
 from .config import AppConfig, RegisterMap
 from .dtsu_server import RtuActivity
 
@@ -83,7 +83,14 @@ async def run_monitor(
     """Run the live bridge with a commissioning dashboard refreshed every `refresh` s."""
     activity = RtuActivity()
     pipe = build_pipeline(config, registers, stop_event, activity=activity)
-    await pipe.client.connect()
+    if not await connect_with_retry(
+        pipe.client, stop_event,
+        config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
+    ):
+        for coro in pipe.coros:
+            coro.close()
+        pipe.client.close()
+        return
 
     async def _display() -> None:
         loop = asyncio.get_running_loop()

@@ -1,6 +1,6 @@
 import asyncio
 
-from nd45_dtsu666.app import build_on_update, build_pipeline
+from nd45_dtsu666.app import build_on_update, build_pipeline, connect_with_retry
 from nd45_dtsu666.canonical import CanonicalStore
 from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import load_config, load_registers
@@ -45,3 +45,43 @@ def test_build_pipeline_default_context_not_recording():
     assert not isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
     for coro in pipe.coros:
         coro.close()
+
+
+class _FlakyClient:
+    def __init__(self, fail_times):
+        self.calls = 0
+        self._fail_times = fail_times
+
+    async def connect(self):
+        self.calls += 1
+        return self.calls > self._fail_times
+
+
+async def test_connect_with_retry_succeeds_after_failures():
+    client = _FlakyClient(fail_times=2)
+    ok = await connect_with_retry(client, asyncio.Event(), delay=0.001, max_delay=0.01)
+    assert ok is True
+    assert client.calls == 3  # failed twice, connected on the third attempt
+
+
+async def test_connect_with_retry_returns_false_when_stopped():
+    client = _FlakyClient(fail_times=999)
+    stop = asyncio.Event()
+    stop.set()  # asked to stop before ever connecting
+    ok = await connect_with_retry(client, stop, delay=0.001, max_delay=0.01)
+    assert ok is False
+    assert client.calls == 0  # never even attempted
+
+
+async def test_connect_with_retry_stops_between_attempts():
+    client = _FlakyClient(fail_times=999)  # never connects
+    stop = asyncio.Event()
+
+    async def _stopper():
+        await asyncio.sleep(0.01)
+        stop.set()
+
+    ok, _ = await asyncio.gather(
+        connect_with_retry(client, stop, delay=0.005, max_delay=0.01), _stopper()
+    )
+    assert ok is False  # gives up cleanly once stop is set, never hangs

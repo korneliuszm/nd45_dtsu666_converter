@@ -39,6 +39,29 @@ def _on_error(exc: Exception) -> None:
     log.warning("poll failed: %s", exc)
 
 
+async def connect_with_retry(
+    client, stop_event: asyncio.Event, delay: float = 1.0, max_delay: float = 30.0
+) -> bool:
+    """Keep attempting the initial ND45 connect (backoff) until success or stop.
+
+    pymodbus auto-reconnects a link that was up and dropped, but NOT an initial
+    connect that never succeeded (e.g. the service starting before ND45 is
+    reachable). This retry loop covers that startup race. Returns True once
+    connected, or False if `stop_event` is set before any connection is made.
+    """
+    current = delay
+    while not stop_event.is_set():
+        if await client.connect():
+            return True
+        log.warning("ND45 not reachable; retrying connect in %.1fs", current)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=current)
+        except asyncio.TimeoutError:
+            pass
+        current = min(current * 2, max_delay)
+    return False
+
+
 def build_pipeline(
     config: AppConfig,
     registers: RegisterMap,
@@ -73,7 +96,15 @@ async def run_app(
     client=None,
 ) -> None:
     pipe = build_pipeline(config, registers, stop_event, client=client)
-    await pipe.client.connect()
+    connected = await connect_with_retry(
+        pipe.client, stop_event,
+        config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
+    )
+    if not connected:  # stopped before we ever connected
+        for coro in pipe.coros:
+            coro.close()
+        pipe.client.close()
+        return
     try:
         await asyncio.gather(*pipe.coros)
     finally:
