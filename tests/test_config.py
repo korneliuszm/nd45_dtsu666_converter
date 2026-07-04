@@ -24,3 +24,10 @@ def test_target_point_defaults(tmp_path):
     pf = reg.dtsu_target.points["pf_total"]
     assert pf.sign == 1
     assert pf.offset == 0
+
+
+def test_reliability_defaults():
+    cfg = load_config("config/config.json")
+    assert cfg.nd45.reconnect_delay_s == 1.0
+    assert cfg.nd45.reconnect_delay_max_s == 30.0
+    assert cfg.safety.min_restart_interval_s == 5.0

@@ -49,6 +49,8 @@ class Nd45Conf(BaseModel):
     unit_id: int = 1
     poll_interval_s: float = 0.3
     timeout_s: float = 1.0
+    reconnect_delay_s: float = 1.0  # initial backoff for startup connect retry
+    reconnect_delay_max_s: float = 30.0  # max backoff for startup connect retry
 
 
 class DtsuConf(BaseModel):
@@ -62,6 +64,7 @@ class DtsuConf(BaseModel):
 class SafetyConf(BaseModel):
     max_data_age_s: float = 3.0
     check_interval_s: float = 0.5
+    min_restart_interval_s: float = 5.0  # min gap between RTU server (re)starts (anti-flap)
 
 
 class AppConfig(BaseModel):
