@@ -56,7 +56,7 @@ def _run_selftest(config, registers) -> int:
 
         async def _feeder() -> None:
             while not stop.is_set():
-                store.update(values, asyncio.get_event_loop().time())
+                store.update(values, asyncio.get_running_loop().time())
                 update_datastore(context, config.dtsu.slave_id, values, registers.dtsu_target)
                 await asyncio.sleep(0.5)
 

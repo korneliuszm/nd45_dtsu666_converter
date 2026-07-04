@@ -74,6 +74,13 @@ async def supervise_server(
     try:
         while not stop_event.is_set():
             age = store.age(clock())
+            if server is not None and serve_task is not None and serve_task.done():
+                exc = serve_task.exception()
+                if exc is not None:
+                    log.error("RTU server task failed: %r; will retry", exc)
+                else:
+                    log.warning("RTU server task ended unexpectedly; will retry")
+                server, serve_task = None, None
             if gate.should_serve(age) and server is None:
                 server = factory()
                 serve_task = asyncio.create_task(server.serve_forever())

@@ -33,8 +33,6 @@ def test_datastore_raw_scaling_matches_dtsu_spec():
     context = build_context(target, slave_id=1)
     update_datastore(context, 1, {"u_l1": 230.0}, target)
     # DTSU voltage is x10 -> raw register float must be 2300.0
-    from nd45_dtsu666.codec import registers_to_float
-
     regs = context[1].getValues(3, target.points["u_l1"].addr, count=2)
     assert registers_to_float(regs, target.word_order, target.byte_order) == pytest.approx(2300.0)
 
@@ -91,3 +89,39 @@ async def test_supervisor_starts_when_fresh_and_stops_when_stale():
     stop.set()
     await asyncio.wait_for(task, timeout=1.0)
     assert fake.serve_calls >= 1 and fake.shutdown_calls >= 1
+
+
+class FailingServer:
+    def __init__(self):
+        self.serve_calls = 0
+
+    async def serve_forever(self):
+        self.serve_calls += 1
+        raise RuntimeError("port busy")
+
+    async def shutdown(self):
+        pass
+
+
+async def test_supervisor_retries_when_serve_fails():
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(port="/dev/null", slave_id=1)
+    created = []
+
+    def factory():
+        s = FailingServer()
+        created.append(s)
+        return s
+
+    stop = asyncio.Event()
+    store.update({"p_total": 1.0}, ts=100.0)
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=factory, now=lambda: 100.0)
+    )
+    await asyncio.sleep(0.15)  # several check intervals while data stays fresh
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert len(created) >= 2  # recreated after failure => it retried

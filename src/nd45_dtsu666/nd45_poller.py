@@ -61,7 +61,7 @@ async def run_poller(
     on_error: Callable[[Exception], None],
     stop_event: asyncio.Event,
 ) -> None:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     while not stop_event.is_set():
         try:
             values = await poll_once(client, source, slave)
