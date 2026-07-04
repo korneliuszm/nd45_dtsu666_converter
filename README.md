@@ -29,6 +29,17 @@ mbpoll -m rtu -a 1 -b 9600 -P none -t 4:float -r 8193 -c 4 /dev/ttyUSB0
 python -m nd45_dtsu666 diag   # live table: canonical SI, DTSU addr/raw, age, status
 ```
 
+## Interactive monitor (commissioning)
+Runs the live bridge (poller + RTU server + fail-safe) **and** shows a live dashboard:
+the ND45 values per phase (with IMPORT/EXPORT power direction — the key sign-convention
+check) plus the Modbus RTU read requests coming from Sigenergy (count, rate, which register
+blocks it reads). Use this instead of `run` while bringing the system up.
+```bash
+python -m nd45_dtsu666 monitor   # Ctrl-C to quit
+```
+Requires the real RS-485 port (like `run`); for a bench test without Sigenergy use `selftest`.
+During fail-safe (stale ND45) the RTU panel shows `FAIL-SAFE SILENT` — that is expected.
+
 ## Run as a service
 ```bash
 sudo cp systemd/nd45-dtsu666.service /etc/systemd/system/
