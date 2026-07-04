@@ -8,6 +8,7 @@ from nd45_dtsu666.config import DtsuConf, load_registers
 from nd45_dtsu666.dtsu_server import (
     RecordingSlaveContext,
     RtuActivity,
+    _server_action,
     build_context,
     supervise_server,
     update_datastore,
@@ -175,3 +176,49 @@ def test_build_context_activity_optional():
     assert not isinstance(plain[1], RecordingSlaveContext)
     rec = build_context(target, slave_id=1, activity=RtuActivity())
     assert isinstance(rec[1], RecordingSlaveContext)
+
+
+def test_server_action_decisions():
+    # fresh + idle + never started -> start immediately
+    assert _server_action(True, False, now=100.0, last_start=None, min_restart_interval=5.0) == "start"
+    # fresh + idle but a restart would be too soon after the last start -> wait (anti-flap)
+    assert _server_action(True, False, now=102.0, last_start=100.0, min_restart_interval=5.0) == "wait"
+    # fresh + idle and enough time has passed -> start
+    assert _server_action(True, False, now=106.0, last_start=100.0, min_restart_interval=5.0) == "start"
+    # stale + running -> stop (fail-safe)
+    assert _server_action(False, True, now=100.0, last_start=100.0, min_restart_interval=5.0) == "stop"
+    # steady states -> no action
+    assert _server_action(True, True, now=100.0, last_start=100.0, min_restart_interval=5.0) == "none"
+    assert _server_action(False, False, now=100.0, last_start=100.0, min_restart_interval=5.0) == "none"
+
+
+async def test_supervisor_throttles_restart_within_interval():
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(port="/dev/null", slave_id=1)
+    created = []
+
+    class FailingServer:
+        async def serve_forever(self):
+            raise RuntimeError("port busy")
+
+        async def shutdown(self):
+            pass
+
+    def factory():
+        s = FailingServer()
+        created.append(s)
+        return s
+
+    stop = asyncio.Event()
+    store.update({"p_total": 1.0}, ts=100.0)
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=factory, now=lambda: 100.0,
+                         min_restart_interval=5.0)
+    )
+    await asyncio.sleep(0.15)  # many check intervals, clock frozen at 100.0
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert len(created) == 1  # first server failed; retry throttled inside the interval

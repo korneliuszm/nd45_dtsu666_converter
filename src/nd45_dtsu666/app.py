@@ -85,6 +85,7 @@ def build_pipeline(
     supervisor = supervise_server(
         config.dtsu, context, store, gate,
         config.safety.check_interval_s, stop_event,
+        min_restart_interval=config.safety.min_restart_interval_s,
     )
     return Pipeline(store=store, context=context, client=client, coros=[poller, supervisor])
 

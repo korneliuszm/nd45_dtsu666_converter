@@ -107,6 +107,21 @@ def make_serial_server(cfg, context) -> ModbusSerialServer:
     )
 
 
+def _server_action(
+    fresh: bool, running: bool, now: float, last_start: float | None, min_restart_interval: float
+) -> str:
+    """Decide the RTU server transition. Restarts are throttled by
+    `min_restart_interval` to avoid flapping the serial port when ND45 data
+    oscillates around the freshness threshold."""
+    if fresh and not running:
+        if last_start is None or now - last_start >= min_restart_interval:
+            return "start"
+        return "wait"
+    if not fresh and running:
+        return "stop"
+    return "none"
+
+
 async def supervise_server(
     cfg,
     context,
@@ -116,16 +131,19 @@ async def supervise_server(
     stop_event: asyncio.Event,
     server_factory: Callable | None = None,
     now: Callable[[], float] | None = None,
+    min_restart_interval: float = 0.0,
 ) -> None:
     """Start the RTU server while data is fresh; stop it (silence) while stale."""
     factory = server_factory or (lambda: make_serial_server(cfg, context))
     clock = now or time.monotonic
     server = None
     serve_task: asyncio.Task | None = None
+    last_start: float | None = None
 
     try:
         while not stop_event.is_set():
-            age = store.age(clock())
+            t = clock()
+            age = store.age(t)
             if server is not None and serve_task is not None and serve_task.done():
                 exc = serve_task.exception()
                 if exc is not None:
@@ -133,11 +151,15 @@ async def supervise_server(
                 else:
                     log.warning("RTU server task ended unexpectedly; will retry")
                 server, serve_task = None, None
-            if gate.should_serve(age) and server is None:
+            action = _server_action(
+                gate.should_serve(age), server is not None, t, last_start, min_restart_interval
+            )
+            if action == "start":
                 server = factory()
                 serve_task = asyncio.create_task(server.serve_forever())
+                last_start = t
                 log.info("RTU server started (data fresh, age=%.2fs)", age)
-            elif not gate.should_serve(age) and server is not None:
+            elif action == "stop":
                 await server.shutdown()
                 if serve_task:
                     serve_task.cancel()
