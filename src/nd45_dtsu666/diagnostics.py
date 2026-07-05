@@ -50,7 +50,7 @@ def _run_selftest(config, registers) -> int:
     async def _main() -> None:
         store = CanonicalStore()
         gate = HealthGate(config.safety.max_data_age_s)
-        context = build_context(registers.dtsu_target, config.dtsu.slave_id)
+        context = build_context(registers.dtsu_target, config.dtsu.slave_id, dtsu_cfg=config.dtsu)
         values = _synthetic_values(registers)
         stop = asyncio.Event()
 
