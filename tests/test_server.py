@@ -52,6 +52,32 @@ def test_missing_canonical_key_is_skipped():
     assert regs == [0, 0]
 
 
+def test_static_registers_absent_without_dtsu_cfg():
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    assert context[1].getValues(3, 0x0006, count=1) == [0]
+
+
+def test_static_registers_seeded_from_dtsu_cfg():
+    target = load_registers("config/registers.json").dtsu_target
+    cfg = DtsuConf(port="/dev/null", baudrate=9600, slave_id=7)
+    context = build_context(target, slave_id=7, dtsu_cfg=cfg)
+    slave = context[7]
+    assert slave.getValues(3, 0x0000, count=1) == [100]  # REV.
+    assert slave.getValues(3, 0x0003, count=1) == [0]  # net = 3P4W
+    assert slave.getValues(3, 0x0006, count=1) == [10]  # IrAt = ratio 1.0
+    assert slave.getValues(3, 0x0007, count=1) == [10]  # UrAt = ratio 1.0
+    assert slave.getValues(3, 0x002D, count=1) == [3]  # bAud = 9600
+    assert slave.getValues(3, 0x002E, count=1) == [7]  # Addr = slave_id
+
+
+def test_static_registers_unknown_baudrate_defaults_to_9600_code():
+    target = load_registers("config/registers.json").dtsu_target
+    cfg = DtsuConf(port="/dev/null", baudrate=115200, slave_id=1)
+    context = build_context(target, slave_id=1, dtsu_cfg=cfg)
+    assert context[1].getValues(3, 0x002D, count=1) == [3]
+
+
 class FakeServer:
     def __init__(self):
         self.running = False

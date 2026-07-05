@@ -59,3 +59,7 @@ journalctl -u nd45-dtsu666 -f
    (`journalctl` shows "fail-safe") and Sigenergy enters its safe mode.
 7. **RS-485 direction** — verify the reComputer transceiver auto-toggles direction, or
    configure pyserial RS-485 mode if the master sees no/garbled replies.
+8. **Identity/config registers (0x0000-0x002E)** — served as a direct-connect 3P4W meter
+   with CT/PT ratio 1:1 (`net=0`, `IrAt=UrAt=10`); see `_STATIC_INT16_REGISTERS` in
+   `dtsu_server.py`. If Sigenergy rejects the meter or misapplies scaling, check these
+   against the DTSU666 manual — this hasn't been confirmed against real Sigenergy behavior.

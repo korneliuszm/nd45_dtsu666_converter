@@ -17,11 +17,43 @@ from pymodbus.framer.rtu_framer import ModbusRtuFramer
 from pymodbus.server import ModbusSerialServer
 
 from .codec import encode_point
-from .config import TargetSide
+from .config import DtsuConf, TargetSide
 
 log = logging.getLogger(__name__)
 
 _HOLDING_FC = 3
+
+# DTSU666 identity/config registers with no ND45 measurement equivalent (signed
+# int16, 1 word each -- NOT the float32 2-word format used for measurement data).
+# Values below assume this bridge always presents as a direct-connect (no CT/PT)
+# 3-phase-4-wire meter, since ND45 already supplies true engineering-unit values.
+_STATIC_INT16_REGISTERS: dict[int, int] = {
+    0x0000: 100,  # REV.     - firmware version (arbitrary; not validated by masters)
+    0x0001: 0,    # UCode    - programming code
+    0x0002: 0,    # CLr.E    - energy clear command
+    0x0003: 0,    # net      - network mode: 0 = 3P4W, 1 = 3P3W
+    0x0006: 10,   # IrAt     - current transformer ratio, x0.1 -> 10 = ratio 1.0
+    0x0007: 10,   # UrAt     - voltage transformer ratio, x0.1 -> 10 = ratio 1.0
+    0x000A: 0,    # Disp     - display rotation time
+    0x000B: 0,    # B.LCD    - backlight time
+    0x000C: 0,    # Endian   - reserved
+    0x002C: 0,    # Protocol - protocol/parity selection
+}
+
+# bAud (0x002DH): meter-reported serial speed code, per DTSU666 manual.
+_BAUD_CODES: dict[int, int] = {1200: 0, 2400: 1, 4800: 2, 9600: 3}
+
+
+def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: DtsuConf) -> None:
+    """Seed the DTSU666 identity/config registers (0x0000-0x002E block) once."""
+    for addr, value in _STATIC_INT16_REGISTERS.items():
+        slave.setValues(_HOLDING_FC, addr, [value])
+    baud_code = _BAUD_CODES.get(dtsu_cfg.baudrate)
+    if baud_code is None:
+        log.warning("No bAud code for baudrate=%d; defaulting to 9600 code", dtsu_cfg.baudrate)
+        baud_code = _BAUD_CODES[9600]
+    slave.setValues(_HOLDING_FC, 0x002D, [baud_code])  # bAud
+    slave.setValues(_HOLDING_FC, 0x002E, [slave_id])  # Addr
 
 
 class RtuActivity:
@@ -71,7 +103,10 @@ class RecordingSlaveContext(ModbusSlaveContext):
 
 
 def build_context(
-    target: TargetSide, slave_id: int, activity: RtuActivity | None = None
+    target: TargetSide,
+    slave_id: int,
+    activity: RtuActivity | None = None,
+    dtsu_cfg: DtsuConf | None = None,
 ) -> ModbusServerContext:
     max_addr = max(pt.addr for pt in target.points.values())
     block = ModbusSequentialDataBlock(0, [0] * (max_addr + 2))
@@ -79,6 +114,8 @@ def build_context(
         slave = RecordingSlaveContext(activity, hr=block, zero_mode=True)
     else:
         slave = ModbusSlaveContext(hr=block, zero_mode=True)
+    if dtsu_cfg is not None:
+        write_static_registers(slave, slave_id, dtsu_cfg)
     return ModbusServerContext(slaves={slave_id: slave}, single=False)
 
 

@@ -102,7 +102,9 @@ def build_pipeline(
     """Wire poller + RTU server + fail-safe. Pass `activity` to record RTU reads."""
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
-    context = build_context(registers.dtsu_target, config.dtsu.slave_id, activity=activity)
+    context = build_context(
+        registers.dtsu_target, config.dtsu.slave_id, activity=activity, dtsu_cfg=config.dtsu
+    )
     base_on_update = build_on_update(store, context, config.dtsu.slave_id, registers.dtsu_target)
     reporter = FaultReporter()
 
