@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 16mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: #1a2027; font-size: 10.5pt; line-height: 1.5; margin: 0;
+  }
+  h1 { font-size: 21pt; margin: 0 0 2mm 0; color: #0b3d5c; letter-spacing: -0.2px; }
+  h2 {
+    font-size: 13pt; color: #0b3d5c; margin: 7mm 0 2.5mm 0;
+    padding-bottom: 1.5mm; border-bottom: 2px solid #d7e3ec;
+  }
+  h3 { font-size: 11pt; margin: 4mm 0 1.5mm 0; color: #14567a; }
+  p { margin: 0 0 2.5mm 0; }
+  .lead { color: #47535e; font-size: 10.5pt; margin-bottom: 1mm; }
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 3px solid #0b3d5c; padding-bottom: 4mm; margin-bottom: 2mm;
+  }
+  .badge {
+    background: #0b3d5c; color: #fff; font-size: 8pt; font-weight: 600;
+    padding: 2mm 3mm; border-radius: 2mm; text-align: right; line-height: 1.35;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm 0; font-size: 9.8pt; }
+  th, td { border: 1px solid #cdd8e0; padding: 2mm 2.5mm; text-align: left; vertical-align: top; }
+  th { background: #eef4f8; color: #0b3d5c; font-weight: 600; }
+  td.port { font-family: "Consolas", monospace; font-weight: 600; white-space: nowrap; }
+  .callout {
+    border-left: 4px solid; padding: 2.5mm 3mm; margin: 3mm 0; border-radius: 0 2mm 2mm 0;
+    font-size: 9.8pt;
+  }
+  .warn { background: #fff6ec; border-color: #e08a1e; }
+  .info { background: #eef6fb; border-color: #2b82c0; }
+  .ok   { background: #eef8f0; border-color: #35a35a; }
+  .callout strong { color: #1a2027; }
+  ol, ul { margin: 1mm 0 3mm 0; padding-left: 6mm; }
+  li { margin-bottom: 1.5mm; }
+  code {
+    font-family: "Consolas", monospace; background: #f0f3f6;
+    padding: 0.3mm 1.2mm; border-radius: 1mm; font-size: 9.3pt;
+  }
+  .diagram { width: 100%; margin: 2mm 0 3mm 0; }
+  .foot {
+    margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #d7e3ec;
+    font-size: 8.5pt; color: #7a8791; display: flex; justify-content: space-between;
+  }
+  .pill {
+    display: inline-block; background: #0b3d5c; color: #fff; font-size: 8pt;
+    font-weight: 600; padding: 0.8mm 2mm; border-radius: 10mm; margin-right: 1mm;
+  }
+  .avoid-break { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>Konwerter ND45&nbsp;&rarr;&nbsp;DTSU666</h1>
+      <p class="lead">Instrukcja instalacji &mdash; podłączenie i uruchomienie</p>
+      <p class="lead">Czujnik mocy (Power Sensor) dla magazynu energii Sigenergy</p>
+    </div>
+    <div class="badge">
+      DOKUMENT INSTALATORA<br>
+      Wyd. 1 &middot; 2026<br>
+      reComputer R1000
+    </div>
+  </div>
+
+  <div class="callout info">
+    <strong>Co robi to urządzenie.</strong> Komputer przemysłowy odczytuje pomiary z licznika
+    <strong>Lumel ND45</strong> (przez sieć Ethernet / Modbus TCP) i udostępnia je magazynowi
+    <strong>Sigenergy</strong> jako licznik <strong>CHINT DTSU666</strong> (przez magistralę RS&#8209;485 / Modbus RTU).
+    Dla magazynu wygląda to jak podłączony fabryczny licznik &bdquo;Power Sensor&rdquo;.
+  </div>
+
+  <h2>1. Trzy połączenia, które trzeba wykonać</h2>
+
+  <svg class="diagram" viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+    <!-- central converter -->
+    <rect x="290" y="90" width="180" height="70" rx="8" fill="#0b3d5c"/>
+    <text x="380" y="118" fill="#ffffff" font-size="14" font-weight="700" text-anchor="middle">KONWERTER</text>
+    <text x="380" y="138" fill="#bcd4e4" font-size="11" text-anchor="middle">reComputer R1000</text>
+
+    <!-- Left: network + meter -->
+    <rect x="20" y="30" width="200" height="72" rx="8" fill="#eef6fb" stroke="#2b82c0" stroke-width="2"/>
+    <text x="120" y="55" fill="#0b3d5c" font-size="12" font-weight="700" text-anchor="middle">Sieć LAN + Internet</text>
+    <text x="120" y="74" fill="#14567a" font-size="10.5" text-anchor="middle">Licznik Lumel ND45</text>
+    <text x="120" y="90" fill="#14567a" font-size="10.5" text-anchor="middle">(Modbus TCP)</text>
+    <!-- line to eth0 -->
+    <line x1="220" y1="66" x2="290" y2="105" stroke="#2b82c0" stroke-width="3"/>
+    <rect x="228" y="80" width="54" height="18" rx="4" fill="#2b82c0"/>
+    <text x="255" y="93" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">eth0</text>
+
+    <!-- Right: Sigenergy -->
+    <rect x="540" y="30" width="200" height="72" rx="8" fill="#eef8f0" stroke="#35a35a" stroke-width="2"/>
+    <text x="640" y="55" fill="#1c6b38" font-size="12" font-weight="700" text-anchor="middle">Magazyn Sigenergy</text>
+    <text x="640" y="74" fill="#1c6b38" font-size="10.5" text-anchor="middle">RS-485 / Modbus RTU</text>
+    <text x="640" y="90" fill="#1c6b38" font-size="10.5" text-anchor="middle">Modbus 1 &middot; adres 1</text>
+    <!-- line to CH1 -->
+    <line x1="470" y1="105" x2="540" y2="66" stroke="#35a35a" stroke-width="3"/>
+    <rect x="478" y="80" width="86" height="18" rx="4" fill="#35a35a"/>
+    <text x="521" y="93" fill="#ffffff" font-size="9.5" font-weight="700" text-anchor="middle">CH1A / CH1B</text>
+
+    <!-- Bottom: power -->
+    <rect x="300" y="200" width="160" height="40" rx="8" fill="#fff6ec" stroke="#e08a1e" stroke-width="2"/>
+    <text x="380" y="218" fill="#8a5411" font-size="11.5" font-weight="700" text-anchor="middle">Zasilanie 24&nbsp;V DC</text>
+    <text x="380" y="233" fill="#8a5411" font-size="10" text-anchor="middle">V+ / V- (0&nbsp;V)</text>
+    <line x1="380" y1="160" x2="380" y2="200" stroke="#e08a1e" stroke-width="3"/>
+  </svg>
+
+  <table class="avoid-break">
+    <thead>
+      <tr><th style="width:22%">Gniazdo w konwerterze</th><th style="width:30%">Podłączyć do</th><th>Uwagi</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="port">eth0<br>(RJ-45)</td>
+        <td>Sieć LAN z dostępem do Internetu, w której <strong>dostępny jest licznik ND45</strong></td>
+        <td>Licznik ND45 i konwerter muszą być w tej samej sieci. Ta sama sieć zapewnia zdalny dostęp serwisowy (Internet).</td>
+      </tr>
+      <tr>
+        <td class="port">CH1A / CH1B<br>(Modbus&nbsp;1)</td>
+        <td>Port komunikacji <strong>RS-485 magazynu Sigenergy</strong></td>
+        <td><strong>CH1A &rarr; A&nbsp;(D+)</strong>, <strong>CH1B &rarr; B&nbsp;(D&minus;)</strong>. Zachować polaryzację. Ekran kabla uziemić jednostronnie.</td>
+      </tr>
+      <tr>
+        <td class="port">V+ / V&minus;</td>
+        <td>Zasilacz <strong>24&nbsp;V DC</strong></td>
+        <td>V+ na plus, V&minus; (0&nbsp;V) na minus. Wspólna masa z magistralą RS-485, jeśli wymagana.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. Kolejność podłączania</h2>
+  <ol>
+    <li>Przy <strong>odłączonym zasilaniu</strong> podłącz kabel Ethernet do gniazda <code>eth0</code> (sieć z licznikiem ND45 i Internetem).</li>
+    <li>Podłącz magistralę RS-485 magazynu Sigenergy do zacisków <code>CH1A</code> / <code>CH1B</code> &mdash; zwróć uwagę na polaryzację A/B.</li>
+    <li>Na końcu podłącz zasilanie <strong>24&nbsp;V DC</strong> (<code>V+</code> / <code>V&minus;</code>) i włącz je.</li>
+    <li>Urządzenie startuje automatycznie &mdash; usługa mostka uruchamia się samoczynnie po włączeniu zasilania.</li>
+  </ol>
+
+  <h2>3. Parametry komunikacji (informacyjnie)</h2>
+  <table class="avoid-break">
+    <tbody>
+      <tr><th style="width:34%">Strona licznika ND45 (eth0)</th><td>Modbus TCP, port 502, adres (unit) 1</td></tr>
+      <tr><th>Strona magazynu Sigenergy (CH1)</th><td>Modbus RTU (RS-485), 9600 bit/s, 8&nbsp;N&nbsp;1, adres slave <strong>1</strong></td></tr>
+      <tr><th>Model licznika widziany przez Sigenergy</th><td>CHINT DTSU666 (Power Sensor)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout info">
+    <strong>W konfiguracji magazynu Sigenergy</strong> wybierz licznik <strong>DTSU666</strong> na porcie
+    <strong>Modbus 1</strong>, prędkość <strong>9600</strong>, adres <strong>1</strong>. Parametry muszą być zgodne z tabelą powyżej.
+  </div>
+
+  <h2>4. Sprawdzenie po uruchomieniu</h2>
+  <ul>
+    <li>Po ok. 30&nbsp;s od włączenia magazyn Sigenergy powinien pokazywać odczyty mocy z sieci (P, U, I).</li>
+    <li>Sprawdź <strong>kierunek mocy</strong>: pobór z sieci vs. oddawanie powinny zgadzać się z rzeczywistością.</li>
+    <li>Wartości napięć (~230&nbsp;V) i prądów muszą być wiarygodne &mdash; nie &bdquo;śmieciowe&rdquo;.</li>
+  </ul>
+
+  <div class="callout warn avoid-break">
+    <strong>Zabezpieczenie (fail-safe).</strong> Jeśli konwerter straci łączność z licznikiem ND45
+    (np. odłączony kabel <code>eth0</code>), po kilku sekundach <strong>przestaje odpowiadać</strong> na magistrali RS-485.
+    Magazyn Sigenergy wykryje brak licznika i przejdzie w swój tryb bezpieczny &mdash; to zachowanie zamierzone,
+    a nie usterka. Po przywróceniu łączności komunikacja wznawia się samoczynnie.
+  </div>
+
+  <div class="callout ok avoid-break">
+    <strong>Gotowe.</strong> Poprawnie: kabel sieciowy w <code>eth0</code> (z licznikiem ND45 i Internetem),
+    magazyn Sigenergy na <code>CH1A</code>/<code>CH1B</code> (Modbus&nbsp;1, adres&nbsp;1), zasilanie <strong>24&nbsp;V DC</strong>,
+    a magazyn odczytuje moc jako licznik DTSU666.
+  </div>
+
+  <h2>5. Szybka diagnostyka</h2>
+  <table class="avoid-break">
+    <thead><tr><th style="width:40%">Objaw</th><th>Sprawdź</th></tr></thead>
+    <tbody>
+      <tr><td>Magazyn nie widzi licznika w ogóle</td><td>Zasilanie 24&nbsp;V; polaryzacja A/B na CH1A/CH1B; adres&nbsp;1 i prędkość&nbsp;9600 w konfiguracji Sigenergy.</td></tr>
+      <tr><td>Licznik znika co kilka sekund</td><td>Łączność <code>eth0</code> z licznikiem ND45 (to fail-safe) &mdash; sprawdź kabel i sieć.</td></tr>
+      <tr><td>Odczyty &bdquo;śmieciowe&rdquo; / błędny kierunek mocy</td><td>Wymaga korekty konfiguracji na miejscu &mdash; skontaktuj się z serwisem.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    <span><span class="pill">i</span> Rozwiązanie tymczasowe &mdash; do czasu montażu fizycznego licznika DTSU666.</span>
+    <span>Konwerter ND45&rarr;DTSU666 &middot; instrukcja instalatora</span>
+  </div>
+
+</body>
+</html>
