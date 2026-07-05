@@ -58,13 +58,27 @@ async def test_poll_once_decodes_points():
     src = load_registers("config/registers.json").nd45_source
     image = _image_for({
         50: 230.1, 128: 1500.0, 818: 50.02,
-        912: 2.0, 914: 345.0,   # imp energy -> 2345 kWh
-        928: 0.0, 930: 12.0,    # exp energy -> 12 kWh
+        900: 0.0, 902: 100.0,   # imp energy L1 -> 100 kWh
+        904: 0.0, 906: 200.0,   # imp energy L2 -> 200 kWh
+        908: 0.0, 910: 300.0,   # imp energy L3 -> 300 kWh
+        912: 2.0, 914: 345.0,   # imp energy total -> 2345 kWh
+        916: 0.0, 918: 3.0,     # exp energy L1 -> 3 kWh
+        920: 0.0, 922: 4.0,     # exp energy L2 -> 4 kWh
+        924: 0.0, 926: 5.0,     # exp energy L3 -> 5 kWh
+        928: 0.0, 930: 12.0,    # exp energy total -> 12 kWh
     })
     client = FakeClient(image)
     values = await poll_once(client, src, slave=1)
     assert values["u_l1"] == pytest.approx(230.1, rel=1e-5)
     assert values["p_total"] == pytest.approx(1500.0, rel=1e-5)
     assert values["freq"] == pytest.approx(50.02, rel=1e-5)
+    assert values["imp_energy_l1"] == pytest.approx(100.0, rel=1e-5)
+    assert values["imp_energy_l2"] == pytest.approx(200.0, rel=1e-5)
+    assert values["imp_energy_l3"] == pytest.approx(300.0, rel=1e-5)
     assert values["imp_energy_total"] == pytest.approx(2345.0, rel=1e-5)
+    assert values["exp_energy_l1"] == pytest.approx(3.0, rel=1e-5)
+    assert values["exp_energy_l2"] == pytest.approx(4.0, rel=1e-5)
+    assert values["exp_energy_l3"] == pytest.approx(5.0, rel=1e-5)
     assert values["exp_energy_total"] == pytest.approx(12.0, rel=1e-5)
+    assert values["net_imp_energy_total"] == pytest.approx(2333.0, rel=1e-5)
+    assert values["net_exp_energy_total"] == pytest.approx(0.0, abs=1e-9)

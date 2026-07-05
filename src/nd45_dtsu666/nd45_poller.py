@@ -12,8 +12,8 @@ from .config import SourceSide
 log = logging.getLogger(__name__)
 
 # Fixed read blocks (base_addr, register_count) covering every mapped ND45 point.
-# Group 1: 200 ms measurements 50..145; Group 2: frequency 818..819; Group 3: energy 912..931.
-READ_GROUPS: list[tuple[int, int]] = [(50, 96), (818, 2), (912, 20)]
+# Group 1: 200 ms measurements 50..145; Group 2: frequency 818..819; Group 3: energy 900..931.
+READ_GROUPS: list[tuple[int, int]] = [(50, 96), (818, 2), (900, 32)]
 
 
 class PollError(RuntimeError):
@@ -49,6 +49,11 @@ async def poll_once(client, source: SourceSide, slave: int) -> dict[str, float]:
             log.warning("ND45 %s over range, using 0.0", key)
             si = 0.0
         values[key] = si
+
+    imp_total = values.get("imp_energy_total", 0.0)
+    exp_total = values.get("exp_energy_total", 0.0)
+    values["net_imp_energy_total"] = max(imp_total - exp_total, 0.0)
+    values["net_exp_energy_total"] = max(exp_total - imp_total, 0.0)
     return values
 
 

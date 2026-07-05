@@ -126,11 +126,22 @@ Adresy DTSU podane dziesiętnie (z heksadecymalnych z manuala).
 | `pf_l2`  | 88  | 8238 / 0x202E | PFb  | ×1000 |
 | `pf_l3`  | 112 | 8240 / 0x2030 | PFc  | ×1000 |
 | `freq`   | 818 | 8260 / 0x2044 | Freq | ×100 (0.01Hz) |
-| `imp_energy_total` | compose(912,914)×(1000,1) | 4128 / 0x1020 | ImpEp (forward active energy) | ×1 (kWh) |
-| `exp_energy_total` | compose(928,930)×(1000,1) | 4130 / 0x1022 | ExpEp (reverse active energy) | ×1 (kWh) |
+| `imp_energy_total` | compose(912,914)×(1000,1) | 4126 / 0x101E | ImpEp — total forward active energy | ×1 (kWh) |
+| `imp_energy_l1` | compose(900,902)×(1000,1) | 4128 / 0x1020 | ImpEpA — L1 forward active energy | ×1 (kWh) |
+| `imp_energy_l2` | compose(904,906)×(1000,1) | 4130 / 0x1022 | ImpEpB — L2 forward active energy | ×1 (kWh) |
+| `imp_energy_l3` | compose(908,910)×(1000,1) | 4132 / 0x1024 | ImpEpC — L3 forward active energy | ×1 (kWh) |
+| `net_imp_energy_total` | max(imp_total − exp_total, 0), obliczane w pollerze | 4134 / 0x1026 | NetImpEp — net forward active energy | ×1 (kWh) |
+| `exp_energy_total` | compose(928,930)×(1000,1) | 4136 / 0x1028 | ExpEp — total reverse active energy | ×1 (kWh) |
+| `exp_energy_l1` | compose(916,918)×(1000,1) | 4138 / 0x102A | ExpEpA — L1 reverse active energy | ×1 (kWh) |
+| `exp_energy_l2` | compose(920,922)×(1000,1) | 4140 / 0x102C | ExpEpB — L2 reverse active energy | ×1 (kWh) |
+| `exp_energy_l3` | compose(924,926)×(1000,1) | 4142 / 0x102E | ExpEpC — L3 reverse active energy | ×1 (kWh) |
+| `net_exp_energy_total` | max(exp_total − imp_total, 0), obliczane w pollerze | 4144 / 0x1030 | NetExpEp — net reverse active energy | ×1 (kWh) |
 
 **Kompozyt energii ND45:** energia jest w dwóch rejestrach (MWh + kWh):
-`kWh = reg_high × 1000 + reg_low`. Suma import = (912,914), suma eksport = (928,930).
+`kWh = reg_high × 1000 + reg_low`. Suma import = (912,914), L1/L2/L3 import = (900,902)/(904,906)/(908,910);
+suma eksport = (928,930), L1/L2/L3 eksport = (916,918)/(920,922)/(924,926).
+`net_imp_energy_total`/`net_exp_energy_total` nie mają bezpośredniego odpowiednika w ND45 (ND45 trzyma
+import/export osobno) — liczone jako netto po odjęciu w `nd45_poller.poll_once`, obcięte do zera od dołu.
 
 ## 7. Format JSON konfiguracji
 
