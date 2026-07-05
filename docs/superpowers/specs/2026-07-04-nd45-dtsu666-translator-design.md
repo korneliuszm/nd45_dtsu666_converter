@@ -126,8 +126,8 @@ Adresy DTSU podane dziesiętnie (z heksadecymalnych z manuala).
 | `pf_l2`  | 88  | 8238 / 0x202E | PFb  | ×1000 |
 | `pf_l3`  | 112 | 8240 / 0x2030 | PFc  | ×1000 |
 | `freq`   | 818 | 8260 / 0x2044 | Freq | ×100 (0.01Hz) |
-| `imp_energy_total` | compose(912,914)×(1000,1) | 4126 / 0x101E | ImpEp | ×1 (kWh) |
-| `exp_energy_total` | compose(928,930)×(1000,1) | 4136 / 0x1028 | ExpEp | ×1 (kWh) |
+| `imp_energy_total` | compose(912,914)×(1000,1) | 4128 / 0x1020 | ImpEp (forward active energy) | ×1 (kWh) |
+| `exp_energy_total` | compose(928,930)×(1000,1) | 4130 / 0x1022 | ExpEp (reverse active energy) | ×1 (kWh) |
 
 **Kompozyt energii ND45:** energia jest w dwóch rejestrach (MWh + kWh):
 `kWh = reg_high × 1000 + reg_low`. Suma import = (912,914), suma eksport = (928,930).

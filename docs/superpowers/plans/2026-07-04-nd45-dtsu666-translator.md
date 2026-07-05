@@ -433,8 +433,8 @@ Expected: FAIL (`ModuleNotFoundError` / files missing).
       "pf_l2":  {"addr": 8238, "from": "pf_l2", "scale": 1000},
       "pf_l3":  {"addr": 8240, "from": "pf_l3", "scale": 1000},
       "freq":   {"addr": 8260, "from": "freq", "scale": 100},
-      "imp_ep": {"addr": 4126, "from": "imp_energy_total", "scale": 1},
-      "exp_ep": {"addr": 4136, "from": "exp_energy_total", "scale": 1}
+      "imp_ep": {"addr": 4128, "from": "imp_energy_total", "scale": 1},
+      "exp_ep": {"addr": 4130, "from": "exp_energy_total", "scale": 1}
     }
   }
 }
