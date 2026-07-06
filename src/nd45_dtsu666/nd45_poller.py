@@ -72,7 +72,10 @@ async def run_poller(
             values = await poll_once(client, source, slave)
             on_update(values, loop.time())
         except Exception as exc:  # noqa: BLE001 - poller must never die
-            on_error(exc)
+            try:
+                on_error(exc)
+            except Exception:  # noqa: BLE001 - the error handler must never kill the poller either
+                log.exception("on_error callback raised; original poll failure was: %r", exc)
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:

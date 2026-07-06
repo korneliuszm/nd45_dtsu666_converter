@@ -1,8 +1,10 @@
+import asyncio
+
 import pytest
 
 from nd45_dtsu666.codec import float_to_registers
 from nd45_dtsu666.config import load_registers
-from nd45_dtsu666.nd45_poller import READ_GROUPS, extract_registers, poll_once
+from nd45_dtsu666.nd45_poller import READ_GROUPS, extract_registers, poll_once, run_poller
 
 
 class FakeResponse:
@@ -82,3 +84,35 @@ async def test_poll_once_decodes_points():
     assert values["exp_energy_total"] == pytest.approx(12.0, rel=1e-5)
     assert values["net_imp_energy_total"] == pytest.approx(2333.0, rel=1e-5)
     assert values["net_exp_energy_total"] == pytest.approx(0.0, abs=1e-9)
+
+
+class _BrokenClient:
+    """Every read fails, so run_poller's except-branch calls on_error every cycle."""
+
+    async def read_holding_registers(self, address, count, slave=0):
+        raise RuntimeError("nd45 unreachable")
+
+
+async def test_run_poller_survives_on_error_callback_raising():
+    src = load_registers("config/registers.json").nd45_source
+    stop = asyncio.Event()
+
+    def on_error(exc):
+        raise ValueError("logging backend down") from exc
+
+    async def _stopper():
+        await asyncio.sleep(0.05)
+        stop.set()
+
+    # A bug in the error-handling callback itself must not kill the poller
+    # loop -- "poller must never die" has to hold even when on_error raises.
+    await asyncio.wait_for(
+        asyncio.gather(
+            run_poller(
+                _BrokenClient(), src, slave=1, interval=0.01,
+                on_update=lambda values, ts: None, on_error=on_error, stop_event=stop,
+            ),
+            _stopper(),
+        ),
+        timeout=1.0,
+    )
