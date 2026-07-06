@@ -1,10 +1,12 @@
 import asyncio
+import time
 
 from nd45_dtsu666.app import FaultReporter, build_on_update, build_pipeline, connect_with_retry
 from nd45_dtsu666.canonical import CanonicalStore
 from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import load_config, load_registers
 from nd45_dtsu666.dtsu_server import RecordingSlaveContext, RtuActivity, build_context
+from nd45_dtsu666.watchdog import Heartbeat
 
 
 def test_on_update_writes_store_and_datastore():
@@ -21,7 +23,8 @@ def test_on_update_writes_store_and_datastore():
     assert registers_to_float(regs, target.word_order, target.byte_order) == 2300.0
 
 
-def test_build_pipeline_wires_components_and_threads_activity():
+def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
     stop = asyncio.Event()
@@ -38,11 +41,32 @@ def test_build_pipeline_wires_components_and_threads_activity():
         coro.close()
 
 
-def test_build_pipeline_default_context_not_recording():
+def test_build_pipeline_default_context_not_recording(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
     pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
     assert not isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_build_pipeline_adds_watchdog_loop_when_configured(monkeypatch):
+    monkeypatch.setenv("WATCHDOG_USEC", "90000000")
+    config = load_config("config/config.json")
+    registers = load_registers("config/registers.json")
+    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
+    assert len(pipe.coros) == 3  # poller + supervisor + watchdog_loop
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_build_pipeline_omits_watchdog_loop_when_not_configured(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = load_config("config/config.json")
+    registers = load_registers("config/registers.json")
+    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
+    assert len(pipe.coros) == 2  # poller + supervisor only
     for coro in pipe.coros:
         coro.close()
 
@@ -62,6 +86,40 @@ async def test_connect_with_retry_succeeds_after_failures():
     ok = await connect_with_retry(client, asyncio.Event(), delay=0.001, max_delay=0.01)
     assert ok is True
     assert client.calls == 3  # failed twice, connected on the third attempt
+
+
+async def test_connect_with_retry_touches_heartbeat_each_attempt():
+    client = _FlakyClient(fail_times=2)
+    hb = Heartbeat()
+    ok = await connect_with_retry(client, asyncio.Event(), delay=0.001, max_delay=0.01, heartbeat=hb)
+    assert ok is True
+    assert hb.age(time.monotonic()) < 1.0  # touched on the connect loop's most recent attempt
+
+
+async def test_build_pipeline_poller_touches_heartbeat_on_success(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = load_config("config/config.json")
+    registers = load_registers("config/registers.json")
+
+    class _FakeClient:
+        async def read_holding_registers(self, address, count, slave=0):
+            class _Resp:
+                registers = [0] * count
+
+                def isError(self):
+                    return False
+
+            return _Resp()
+
+    stop = asyncio.Event()
+    pipe = build_pipeline(config, registers, stop, client=_FakeClient())
+    poller_task = asyncio.create_task(pipe.coros[0])
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(poller_task, timeout=1.0)
+    for coro in pipe.coros[1:]:
+        coro.close()
+    assert pipe.heartbeat.age(time.monotonic()) < 1.0
 
 
 async def test_connect_with_retry_returns_false_when_stopped():

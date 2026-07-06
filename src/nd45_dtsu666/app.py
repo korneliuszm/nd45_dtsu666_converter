@@ -14,6 +14,7 @@ from .canonical import CanonicalStore, HealthGate
 from .config import AppConfig, RegisterMap
 from .dtsu_server import RtuActivity, build_context, supervise_server, update_datastore
 from .nd45_poller import run_poller
+from .watchdog import Heartbeat, notify_ready, watchdog_loop, watchdog_seconds
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class Pipeline:
     context: object
     client: object
     coros: list
+    heartbeat: Heartbeat
 
 
 def build_on_update(store, context, slave_id, target) -> Callable[[dict, float], None]:
@@ -70,7 +72,8 @@ class FaultReporter:
 
 
 async def connect_with_retry(
-    client, stop_event: asyncio.Event, delay: float = 1.0, max_delay: float = 30.0
+    client, stop_event: asyncio.Event, delay: float = 1.0, max_delay: float = 30.0,
+    heartbeat: Heartbeat | None = None,
 ) -> bool:
     """Keep attempting the initial ND45 connect (backoff) until success or stop.
 
@@ -81,6 +84,8 @@ async def connect_with_retry(
     """
     current = delay
     while not stop_event.is_set():
+        if heartbeat is not None:
+            heartbeat.touch(time.monotonic())
         if await client.connect():
             return True
         log.warning("ND45 not reachable; retrying connect in %.1fs", current)
@@ -107,24 +112,34 @@ def build_pipeline(
     )
     base_on_update = build_on_update(store, context, config.dtsu.slave_id, registers.dtsu_target)
     reporter = FaultReporter()
+    heartbeat = Heartbeat()
 
     def on_update(values: dict[str, float], ts: float) -> None:
+        heartbeat.touch(time.monotonic())
         reporter.success()  # a good poll clears any active fault state
         base_on_update(values, ts)
+
+    def on_error(exc: Exception) -> None:
+        heartbeat.touch(time.monotonic())
+        reporter.failure(exc)
 
     client = client or AsyncModbusTcpClient(
         config.nd45.host, port=config.nd45.port, timeout=config.nd45.timeout_s
     )
     poller = run_poller(
         client, registers.nd45_source, config.nd45.unit_id,
-        config.nd45.poll_interval_s, on_update, reporter.failure, stop_event,
+        config.nd45.poll_interval_s, on_update, on_error, stop_event,
     )
     supervisor = supervise_server(
         config.dtsu, context, store, gate,
         config.safety.check_interval_s, stop_event,
         min_restart_interval=config.safety.min_restart_interval_s,
     )
-    return Pipeline(store=store, context=context, client=client, coros=[poller, supervisor])
+    coros = [poller, supervisor]
+    watchdog_sec = watchdog_seconds()
+    if watchdog_sec is not None:
+        coros.append(watchdog_loop(heartbeat, watchdog_sec, stop_event))
+    return Pipeline(store=store, context=context, client=client, coros=coros, heartbeat=heartbeat)
 
 
 async def run_app(
@@ -134,9 +149,11 @@ async def run_app(
     client=None,
 ) -> None:
     pipe = build_pipeline(config, registers, stop_event, client=client)
+    notify_ready()
     connected = await connect_with_retry(
         pipe.client, stop_event,
         config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
+        heartbeat=pipe.heartbeat,
     )
     if not connected:  # stopped before we ever connected
         for coro in pipe.coros:
