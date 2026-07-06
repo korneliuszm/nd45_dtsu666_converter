@@ -1,7 +1,8 @@
 import asyncio
+import socket
 import time
 
-from nd45_dtsu666.app import FaultReporter, build_on_update, build_pipeline, connect_with_retry
+from nd45_dtsu666.app import FaultReporter, build_on_update, build_pipeline, connect_with_retry, run_app
 from nd45_dtsu666.canonical import CanonicalStore
 from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import load_config, load_registers
@@ -51,24 +52,45 @@ def test_build_pipeline_default_context_not_recording(monkeypatch):
         coro.close()
 
 
-def test_build_pipeline_adds_watchdog_loop_when_configured(monkeypatch):
-    monkeypatch.setenv("WATCHDOG_USEC", "90000000")
+async def test_run_app_pings_watchdog_during_initial_connect_retry(tmp_path, monkeypatch):
+    sock_path = str(tmp_path / "notify.sock")
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    server.bind(sock_path)
+    server.setblocking(False)
+    monkeypatch.setenv("NOTIFY_SOCKET", sock_path)
+    monkeypatch.setenv("WATCHDOG_USEC", "200000")  # 0.2s -> pings every 0.1s
+
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
-    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
-    assert len(pipe.coros) == 3  # poller + supervisor + watchdog_loop
-    for coro in pipe.coros:
-        coro.close()
+    stop = asyncio.Event()
 
+    class _NeverConnectingClient:
+        def close(self):
+            pass
 
-def test_build_pipeline_omits_watchdog_loop_when_not_configured(monkeypatch):
-    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
-    config = load_config("config/config.json")
-    registers = load_registers("config/registers.json")
-    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
-    assert len(pipe.coros) == 2  # poller + supervisor only
-    for coro in pipe.coros:
-        coro.close()
+        async def connect(self):
+            return False  # ND45 unreachable -- keeps connect_with_retry looping
+
+    task = asyncio.create_task(run_app(config, registers, stop, client=_NeverConnectingClient()))
+    await asyncio.sleep(0.15)  # still inside connect_with_retry's backoff wait
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+
+    # a WATCHDOG=1 ping must have arrived WHILE still stuck in the initial
+    # connect retry -- proving the watchdog task runs concurrently with
+    # connect_with_retry, not only after it succeeds. Drain the queue rather
+    # than reading a single datagram: notify_ready() unconditionally sends
+    # READY=1 first (correct ordering -- readiness precedes pings), so the
+    # ping we care about is not necessarily the first datagram queued.
+    pings = []
+    while True:
+        try:
+            data, _ = server.recvfrom(1024)
+            pings.append(data)
+        except BlockingIOError:
+            break
+    assert b"WATCHDOG=1" in pings
+    server.close()
 
 
 class _FlakyClient:

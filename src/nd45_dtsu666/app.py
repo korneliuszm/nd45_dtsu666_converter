@@ -135,11 +135,9 @@ def build_pipeline(
         config.safety.check_interval_s, stop_event,
         min_restart_interval=config.safety.min_restart_interval_s,
     )
-    coros = [poller, supervisor]
-    watchdog_sec = watchdog_seconds()
-    if watchdog_sec is not None:
-        coros.append(watchdog_loop(heartbeat, watchdog_sec, stop_event))
-    return Pipeline(store=store, context=context, client=client, coros=coros, heartbeat=heartbeat)
+    return Pipeline(
+        store=store, context=context, client=client, coros=[poller, supervisor], heartbeat=heartbeat
+    )
 
 
 async def run_app(
@@ -150,6 +148,18 @@ async def run_app(
 ) -> None:
     pipe = build_pipeline(config, registers, stop_event, client=client)
     notify_ready()
+
+    # Started here (not inside build_pipeline/pipe.coros) so it pings
+    # throughout connect_with_retry's retry loop below, not only after it
+    # succeeds -- otherwise a prolonged ND45-unreachable-at-startup would
+    # starve the watchdog and trigger a spurious restart.
+    watchdog_sec = watchdog_seconds()
+    watchdog_task = (
+        asyncio.create_task(watchdog_loop(pipe.heartbeat, watchdog_sec, stop_event))
+        if watchdog_sec is not None
+        else None
+    )
+
     connected = await connect_with_retry(
         pipe.client, stop_event,
         config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
@@ -158,9 +168,16 @@ async def run_app(
     if not connected:  # stopped before we ever connected
         for coro in pipe.coros:
             coro.close()
+        if watchdog_task is not None:
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
         pipe.client.close()
         return
     try:
-        await asyncio.gather(*pipe.coros)
+        coros = [*pipe.coros, watchdog_task] if watchdog_task is not None else pipe.coros
+        await asyncio.gather(*coros)
     finally:
         pipe.client.close()
