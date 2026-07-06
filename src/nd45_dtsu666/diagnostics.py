@@ -60,7 +60,10 @@ def _run_selftest(config, registers) -> int:
                 update_datastore(context, config.dtsu.slave_id, values, registers.dtsu_target)
                 await asyncio.sleep(0.5)
 
-        print("selftest: serving synthetic DTSU data; point mbpoll at the RTU port. Ctrl-C to stop.")
+        print(
+            f"selftest: serving synthetic DTSU data over {config.dtsu.transport} "
+            "(see config/config.json); bench with mbpoll. Ctrl-C to stop."
+        )
         await asyncio.gather(
             _feeder(),
             supervise_server(config.dtsu, context, store, gate,

@@ -1,4 +1,4 @@
-"""Orchestration: wire poller + RTU server + fail-safe under one asyncio loop."""
+"""Orchestration: wire poller + DTSU output server + fail-safe under one asyncio loop."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def build_pipeline(
     activity: RtuActivity | None = None,
     client=None,
 ) -> Pipeline:
-    """Wire poller + RTU server + fail-safe. Pass `activity` to record RTU reads."""
+    """Wire poller + DTSU output server + fail-safe. Pass `activity` to record read requests."""
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
     context = build_context(
