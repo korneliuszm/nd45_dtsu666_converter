@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nd45_dtsu666"
 version = "0.2.0"
-description = "Modbus bridge: Lumel ND45 (TCP) -> DTSU666 (RTU) for Sigenergy"
+description = "Modbus bridge: Lumel ND45 (TCP) -> DTSU666 (RTU or TCP, config-selectable) for Sigenergy"
 requires-python = ">=3.10"
 dependencies = [
     "pymodbus>=3.6,<3.7",
