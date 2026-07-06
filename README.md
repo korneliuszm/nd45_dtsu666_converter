@@ -76,7 +76,7 @@ journalctl -u nd45-dtsu666 -f
 4. **Word/byte order** — if values look garbled, flip `word_order`/`byte_order` in the map.
 5. **Slave ID / transport params** — match what Sigenergy polls: slave/unit id always;
    baud/parity/stopbits for RTU, or host/port for TCP.
-6. **Fail-safe** — pull the ND45 network cable; confirm the RTU side goes silent
+6. **Fail-safe** — pull the ND45 network cable; confirm the output server goes silent
    (`journalctl` shows "fail-safe") and Sigenergy enters its safe mode.
 7. **RS-485 direction** (RTU transport only) — verify the reComputer transceiver
    auto-toggles direction, or configure pyserial RS-485 mode if the master sees
