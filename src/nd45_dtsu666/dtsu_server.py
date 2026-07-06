@@ -197,6 +197,19 @@ async def supervise_server(
     serve_task: asyncio.Task | None = None
     last_start: float | None = None
 
+    async def _cancel_and_await(task: asyncio.Task) -> None:
+        """Cancel a server task and retrieve its outcome ourselves, so a
+        non-CancelledError raised during shutdown is logged through our own
+        logger instead of asyncio's generic "exception was never retrieved"
+        handler."""
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort shutdown logging
+            log.warning("DTSU server task raised while shutting down: %r", exc)
+
     try:
         while not stop_event.is_set():
             t = clock()
@@ -207,6 +220,16 @@ async def supervise_server(
                     log.error("DTSU server task failed: %r; will retry", exc)
                 else:
                     log.warning("DTSU server task ended unexpectedly; will retry")
+                # Best-effort close: the task ended on its own, so the
+                # transport may still hold an open socket -- discarding the
+                # reference without closing it would leak a fd on every such
+                # failure over a long-running deployment.
+                try:
+                    await server.shutdown()
+                except Exception as shutdown_exc:  # noqa: BLE001 - cleanup of an already-failed server
+                    log.warning(
+                        "Error closing failed DTSU server (best-effort): %r", shutdown_exc
+                    )
                 server, serve_task = None, None
             action = _server_action(
                 gate.should_serve(age), server is not None, t, last_start, min_restart_interval
@@ -222,7 +245,7 @@ async def supervise_server(
             elif action == "stop":
                 await server.shutdown()
                 if serve_task:
-                    serve_task.cancel()
+                    await _cancel_and_await(serve_task)
                 server, serve_task = None, None
                 log.warning(
                     "DTSU server stopped (transport=%s, data stale, age=%.2fs) -> fail-safe",
@@ -236,4 +259,4 @@ async def supervise_server(
         if server is not None:
             await server.shutdown()
             if serve_task:
-                serve_task.cancel()
+                await _cancel_and_await(serve_task)

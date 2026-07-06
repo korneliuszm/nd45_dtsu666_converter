@@ -292,3 +292,98 @@ def test_static_registers_tcp_transport_uses_fixed_baud_code():
     cfg = DtsuConf(transport="tcp", slave_id=1, tcp=DtsuTcpConf())
     context = build_context(target, slave_id=1, dtsu_cfg=cfg)
     assert context[1].getValues(3, 0x002D, count=1) == [3]  # bAud = fixed 9600 code
+
+
+class TrackedFailingServer:
+    def __init__(self):
+        self.serve_calls = 0
+        self.shutdown_calls = 0
+
+    async def serve_forever(self):
+        self.serve_calls += 1
+        raise RuntimeError("port busy")
+
+    async def shutdown(self):
+        self.shutdown_calls += 1
+
+
+async def test_supervisor_closes_server_after_unexpected_task_failure():
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    created = []
+
+    def factory():
+        s = TrackedFailingServer()
+        created.append(s)
+        return s
+
+    stop = asyncio.Event()
+    store.update({"p_total": 1.0}, ts=100.0)
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=factory, now=lambda: 100.0)
+    )
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    # the crashed server must be closed (freeing its socket/fd) before being
+    # discarded, not just dropped on the floor -- otherwise repeated failures
+    # over a long-running deployment leak one fd each time.
+    assert created[0].shutdown_calls >= 1
+
+
+class CancelRaisesServer:
+    def __init__(self):
+        self.running = False
+        self.shutdown_calls = 0
+
+    async def serve_forever(self):
+        self.running = True
+        try:
+            while self.running:
+                await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            raise RuntimeError("cleanup failed") from None
+
+    async def shutdown(self):
+        self.running = False
+        self.shutdown_calls += 1
+
+
+async def test_supervisor_logs_exception_from_cancelled_server_task(caplog):
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    fake = CancelRaisesServer()
+    stop = asyncio.Event()
+    clock = {"t": 100.0}
+
+    def now():
+        return clock["t"]
+
+    store.update({"p_total": 1.0}, ts=now())  # fresh -> server starts
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=lambda: fake, now=now)
+    )
+    await asyncio.sleep(0.05)
+    assert fake.running is True
+
+    clock["t"] = 200.0  # data now stale -> triggers the "stop" (cancel) path
+    with caplog.at_level("WARNING"):
+        await asyncio.sleep(0.1)
+
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    # cancelling the server task raised RuntimeError("cleanup failed") instead
+    # of a clean CancelledError. The app must await and log that itself
+    # (attributed to our own logger) rather than leaving it to asyncio's
+    # generic, unattributed "Task exception was never retrieved" handler.
+    app_records = [r for r in caplog.records if r.name == "nd45_dtsu666.dtsu_server"]
+    assert any("cleanup failed" in r.getMessage() for r in app_records)
+    assert not any(
+        r.name == "asyncio" and "never retrieved" in r.getMessage() for r in caplog.records
+    )
