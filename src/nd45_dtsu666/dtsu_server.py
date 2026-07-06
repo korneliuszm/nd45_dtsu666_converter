@@ -1,4 +1,4 @@
-"""DTSU666 RTU server: datastore build/update + fail-safe supervisor."""
+"""DTSU666 output server (RTU or TCP): datastore build/update + fail-safe supervisor."""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from pymodbus.datastore import (
     ModbusSlaveContext,
 )
 from pymodbus.framer.rtu_framer import ModbusRtuFramer
-from pymodbus.server import ModbusSerialServer
+from pymodbus.framer.socket_framer import ModbusSocketFramer
+from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from .codec import encode_point
 from .config import DtsuConf, TargetSide
@@ -48,9 +49,13 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
     """Seed the DTSU666 identity/config registers (0x0000-0x002E block) once."""
     for addr, value in _STATIC_INT16_REGISTERS.items():
         slave.setValues(_HOLDING_FC, addr, [value])
-    baud_code = _BAUD_CODES.get(dtsu_cfg.baudrate)
+    # bAud reflects a physical baudrate only in RTU mode; TCP has none, so it
+    # reports a fixed 9600 code -- the register stays in the map either way
+    # since the DTSU666 format must not change.
+    baudrate = dtsu_cfg.rtu.baudrate if dtsu_cfg.transport == "rtu" else 9600
+    baud_code = _BAUD_CODES.get(baudrate)
     if baud_code is None:
-        log.warning("No bAud code for baudrate=%d; defaulting to 9600 code", dtsu_cfg.baudrate)
+        log.warning("No bAud code for baudrate=%d; defaulting to 9600 code", baudrate)
         baud_code = _BAUD_CODES[9600]
     slave.setValues(_HOLDING_FC, 0x002D, [baud_code])  # bAud
     slave.setValues(_HOLDING_FC, 0x002E, [slave_id])  # Addr
@@ -132,16 +137,30 @@ def update_datastore(
         slave.setValues(_HOLDING_FC, pt.addr, regs)
 
 
-def make_serial_server(cfg, context) -> ModbusSerialServer:
+def make_serial_server(cfg: DtsuConf, context) -> ModbusSerialServer:
     return ModbusSerialServer(
         context=context,
         framer=ModbusRtuFramer,
-        port=cfg.port,
-        baudrate=cfg.baudrate,
-        parity=cfg.parity,
-        stopbits=cfg.stopbits,
+        port=cfg.rtu.port,
+        baudrate=cfg.rtu.baudrate,
+        parity=cfg.rtu.parity,
+        stopbits=cfg.rtu.stopbits,
         bytesize=8,
     )
+
+
+def make_tcp_server(cfg: DtsuConf, context) -> ModbusTcpServer:
+    return ModbusTcpServer(
+        context=context,
+        framer=ModbusSocketFramer,
+        address=(cfg.tcp.host, cfg.tcp.port),
+    )
+
+
+def make_server(cfg: DtsuConf, context) -> ModbusSerialServer | ModbusTcpServer:
+    if cfg.transport == "tcp":
+        return make_tcp_server(cfg, context)
+    return make_serial_server(cfg, context)
 
 
 def _server_action(
@@ -170,8 +189,9 @@ async def supervise_server(
     now: Callable[[], float] | None = None,
     min_restart_interval: float = 0.0,
 ) -> None:
-    """Start the RTU server while data is fresh; stop it (silence) while stale."""
-    factory = server_factory or (lambda: make_serial_server(cfg, context))
+    """Start the DTSU output server (RTU or TCP, per cfg.transport) while data is
+    fresh; stop it (silence) while stale."""
+    factory = server_factory or (lambda: make_server(cfg, context))
     clock = now or time.monotonic
     server = None
     serve_task: asyncio.Task | None = None
@@ -184,9 +204,9 @@ async def supervise_server(
             if server is not None and serve_task is not None and serve_task.done():
                 exc = serve_task.exception()
                 if exc is not None:
-                    log.error("RTU server task failed: %r; will retry", exc)
+                    log.error("DTSU server task failed: %r; will retry", exc)
                 else:
-                    log.warning("RTU server task ended unexpectedly; will retry")
+                    log.warning("DTSU server task ended unexpectedly; will retry")
                 server, serve_task = None, None
             action = _server_action(
                 gate.should_serve(age), server is not None, t, last_start, min_restart_interval
@@ -195,13 +215,16 @@ async def supervise_server(
                 server = factory()
                 serve_task = asyncio.create_task(server.serve_forever())
                 last_start = t
-                log.info("RTU server started (data fresh, age=%.2fs)", age)
+                log.info("DTSU server started (transport=%s, data fresh, age=%.2fs)", cfg.transport, age)
             elif action == "stop":
                 await server.shutdown()
                 if serve_task:
                     serve_task.cancel()
                 server, serve_task = None, None
-                log.warning("RTU server stopped (data stale, age=%.2fs) -> fail-safe", age)
+                log.warning(
+                    "DTSU server stopped (transport=%s, data stale, age=%.2fs) -> fail-safe",
+                    cfg.transport, age,
+                )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=check_interval)
             except asyncio.TimeoutError:

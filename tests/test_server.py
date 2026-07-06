@@ -1,15 +1,19 @@
 import asyncio
 
 import pytest
+from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from nd45_dtsu666.canonical import CanonicalStore, HealthGate
 from nd45_dtsu666.codec import registers_to_float
-from nd45_dtsu666.config import DtsuConf, load_registers
+from nd45_dtsu666.config import DtsuConf, DtsuRtuConf, DtsuTcpConf, load_registers
 from nd45_dtsu666.dtsu_server import (
     RecordingSlaveContext,
     RtuActivity,
     _server_action,
     build_context,
+    make_serial_server,
+    make_server,
+    make_tcp_server,
     supervise_server,
     update_datastore,
 )
@@ -60,7 +64,7 @@ def test_static_registers_absent_without_dtsu_cfg():
 
 def test_static_registers_seeded_from_dtsu_cfg():
     target = load_registers("config/registers.json").dtsu_target
-    cfg = DtsuConf(port="/dev/null", baudrate=9600, slave_id=7)
+    cfg = DtsuConf(transport="rtu", slave_id=7, rtu=DtsuRtuConf(port="/dev/null", baudrate=9600))
     context = build_context(target, slave_id=7, dtsu_cfg=cfg)
     slave = context[7]
     assert slave.getValues(3, 0x0000, count=1) == [100]  # REV.
@@ -73,7 +77,7 @@ def test_static_registers_seeded_from_dtsu_cfg():
 
 def test_static_registers_unknown_baudrate_defaults_to_9600_code():
     target = load_registers("config/registers.json").dtsu_target
-    cfg = DtsuConf(port="/dev/null", baudrate=115200, slave_id=1)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null", baudrate=115200))
     context = build_context(target, slave_id=1, dtsu_cfg=cfg)
     assert context[1].getValues(3, 0x002D, count=1) == [3]
 
@@ -98,7 +102,7 @@ class FakeServer:
 async def test_supervisor_starts_when_fresh_and_stops_when_stale():
     store = CanonicalStore()
     gate = HealthGate(max_age=3.0)
-    cfg = DtsuConf(port="/dev/null", slave_id=1)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
     fake = FakeServer()
     stop = asyncio.Event()
     clock = {"t": 100.0}
@@ -139,7 +143,7 @@ class FailingServer:
 async def test_supervisor_retries_when_serve_fails():
     store = CanonicalStore()
     gate = HealthGate(max_age=3.0)
-    cfg = DtsuConf(port="/dev/null", slave_id=1)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
     created = []
 
     def factory():
@@ -221,7 +225,7 @@ def test_server_action_decisions():
 async def test_supervisor_throttles_restart_within_interval():
     store = CanonicalStore()
     gate = HealthGate(max_age=3.0)
-    cfg = DtsuConf(port="/dev/null", slave_id=1)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
     created = []
 
     class FailingServer:
@@ -248,3 +252,43 @@ async def test_supervisor_throttles_restart_within_interval():
     stop.set()
     await asyncio.wait_for(task, timeout=1.0)
     assert len(created) == 1  # first server failed; retry throttled inside the interval
+
+
+async def test_make_tcp_server_uses_tcp_config():
+    # async def (not def): pymodbus 3.6.9's ModbusTcpServer.__init__ calls
+    # asyncio.get_running_loop() directly, so construction requires a running
+    # loop -- pytest-asyncio (asyncio_mode=auto) supplies one for async tests.
+    cfg = DtsuConf(transport="tcp", slave_id=1, tcp=DtsuTcpConf(host="127.0.0.1", port=1502))
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    server = make_tcp_server(cfg, context)
+    assert isinstance(server, ModbusTcpServer)
+    assert server.comm_params.source_address == ("127.0.0.1", 1502)
+
+
+async def test_make_serial_server_uses_rtu_config():
+    # async def: see note in test_make_tcp_server_uses_tcp_config above --
+    # ModbusSerialServer construction likewise needs a running event loop.
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/ttyUSB9", baudrate=19200))
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    server = make_serial_server(cfg, context)
+    assert isinstance(server, ModbusSerialServer)
+    assert server.comm_params.baudrate == 19200
+
+
+async def test_make_server_dispatches_by_transport():
+    # async def: see note above -- both server types need a running event loop.
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    tcp_cfg = DtsuConf(transport="tcp", slave_id=1, tcp=DtsuTcpConf(port=1502))
+    rtu_cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    assert isinstance(make_server(tcp_cfg, context), ModbusTcpServer)
+    assert isinstance(make_server(rtu_cfg, context), ModbusSerialServer)
+
+
+def test_static_registers_tcp_transport_uses_fixed_baud_code():
+    target = load_registers("config/registers.json").dtsu_target
+    cfg = DtsuConf(transport="tcp", slave_id=1, tcp=DtsuTcpConf())
+    context = build_context(target, slave_id=1, dtsu_cfg=cfg)
+    assert context[1].getValues(3, 0x002D, count=1) == [3]  # bAud = fixed 9600 code
