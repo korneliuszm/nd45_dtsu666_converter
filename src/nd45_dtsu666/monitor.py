@@ -1,4 +1,4 @@
-"""Interactive commissioning dashboard: live ND45 table + RTU request activity."""
+"""Interactive commissioning dashboard: live ND45 table + output read activity."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _direction(p_total: float | None) -> str:
 
 
 def render_dashboard(canonical, age, healthy, activity, slave_id, now) -> str:
-    """Render the two-panel dashboard (ND45 values + Sigenergy RTU activity)."""
+    """Render the two-panel dashboard (ND45 values + Sigenergy read activity)."""
     state = "SERVING" if healthy else "FAIL-SAFE SILENT"
     poll = "OK" if healthy else "STALE"
     lines = [
@@ -60,7 +60,7 @@ def render_dashboard(canonical, age, healthy, activity, slave_id, now) -> str:
 
     s = activity.summary(now)
     last = "never" if s["last_seen_age"] is None else f"{s['last_seen_age']:.1f}s ago"
-    lines.append(f" Sigenergy RTU  (slave {slave_id})                 state: {state}")
+    lines.append(f" Sigenergy  (slave {slave_id})                     state: {state}")
     lines.append(f"   requests: {s['total']}    rate: {s['rate']:.1f}/s    last seen: {last}")
     if s["blocks"]:
         blocks = "   ".join(

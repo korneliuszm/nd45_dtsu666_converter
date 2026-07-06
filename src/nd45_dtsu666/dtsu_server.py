@@ -62,7 +62,7 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
 
 
 class RtuActivity:
-    """Records Modbus RTU read requests received from the storage (Sigenergy)."""
+    """Records Modbus read requests received from the storage (Sigenergy)."""
 
     def __init__(self, recent_maxlen: int = 8, rate_window: float = 5.0) -> None:
         self.total = 0
@@ -93,7 +93,7 @@ class RtuActivity:
 
 
 class RecordingSlaveContext(ModbusSlaveContext):
-    """Slave context that logs every getValues (an RTU read) into an RtuActivity."""
+    """Slave context that logs every getValues (a read request) into an RtuActivity."""
 
     def __init__(
         self, activity: RtuActivity, *args, clock: Callable[[], float] = time.monotonic, **kwargs
@@ -166,9 +166,9 @@ def make_server(cfg: DtsuConf, context) -> ModbusSerialServer | ModbusTcpServer:
 def _server_action(
     fresh: bool, running: bool, now: float, last_start: float | None, min_restart_interval: float
 ) -> str:
-    """Decide the RTU server transition. Restarts are throttled by
-    `min_restart_interval` to avoid flapping the serial port when ND45 data
-    oscillates around the freshness threshold."""
+    """Decide the DTSU output server transition. Restarts are throttled by
+    `min_restart_interval` to avoid flapping the transport (serial port or TCP
+    listener) when ND45 data oscillates around the freshness threshold."""
     if fresh and not running:
         if last_start is None or now - last_start >= min_restart_interval:
             return "start"
@@ -215,7 +215,10 @@ async def supervise_server(
                 server = factory()
                 serve_task = asyncio.create_task(server.serve_forever())
                 last_start = t
-                log.info("DTSU server started (transport=%s, data fresh, age=%.2fs)", cfg.transport, age)
+                log.info(
+                    "DTSU server started (transport=%s, data fresh, age=%.2fs)",
+                    cfg.transport, age,
+                )
             elif action == "stop":
                 await server.shutdown()
                 if serve_task:
