@@ -91,7 +91,9 @@ async def test_connect_with_retry_succeeds_after_failures():
 async def test_connect_with_retry_touches_heartbeat_each_attempt():
     client = _FlakyClient(fail_times=2)
     hb = Heartbeat()
-    ok = await connect_with_retry(client, asyncio.Event(), delay=0.001, max_delay=0.01, heartbeat=hb)
+    ok = await connect_with_retry(
+        client, asyncio.Event(), delay=0.001, max_delay=0.01, heartbeat=hb
+    )
     assert ok is True
     assert hb.age(time.monotonic()) < 1.0  # touched on the connect loop's most recent attempt
 
