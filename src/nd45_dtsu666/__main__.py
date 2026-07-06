@@ -28,7 +28,10 @@ def _cmd_run(args) -> int:
         _install_signal_handlers(asyncio.get_running_loop(), stop_event)
         await run_app(config, registers, stop_event)
 
-    asyncio.run(_main())
+    try:
+        asyncio.run(_main())
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
