@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class SourcePoint(BaseModel):
@@ -53,12 +55,31 @@ class Nd45Conf(BaseModel):
     reconnect_delay_max_s: float = 30.0  # max backoff for startup connect retry
 
 
-class DtsuConf(BaseModel):
+class DtsuRtuConf(BaseModel):
     port: str
     baudrate: int = 9600
     parity: str = "N"
     stopbits: int = 1
+
+
+class DtsuTcpConf(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 502
+
+
+class DtsuConf(BaseModel):
+    transport: Literal["rtu", "tcp"] = "rtu"
     slave_id: int = 1
+    rtu: DtsuRtuConf | None = None
+    tcp: DtsuTcpConf | None = None
+
+    @model_validator(mode="after")
+    def _check_transport_config(self) -> "DtsuConf":
+        if self.transport == "rtu" and self.rtu is None:
+            raise ValueError("dtsu.rtu config required when transport='rtu'")
+        if self.transport == "tcp" and self.tcp is None:
+            raise ValueError("dtsu.tcp config required when transport='tcp'")
+        return self
 
 
 class SafetyConf(BaseModel):
