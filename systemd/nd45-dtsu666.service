@@ -4,7 +4,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
+WatchdogSec=90
 WorkingDirectory=/opt/nd45_dtsu666
 ExecStart=/opt/nd45_dtsu666/.venv/bin/python -m nd45_dtsu666 \
   --config /opt/nd45_dtsu666/config/config.json \

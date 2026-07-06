@@ -68,6 +68,14 @@ sudo systemctl enable --now nd45-dtsu666
 journalctl -u nd45-dtsu666 -f
 ```
 
+The unit uses systemd's watchdog (`WatchdogSec=90`): the app pings systemd every
+~45s as long as the ND45 poller is making progress (connecting, polling
+successfully, or handling a poll failure — a real ND45 outage is a normal,
+expected state, not a hang). If the poller genuinely freezes for 90s, systemd
+stops seeing pings and restarts the service automatically (`Restart=always`
+already covers this the same as a crash). No config changes needed to enable
+or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
+
 ## On-site verification checklist (before leaving unattended)
 1. **Sign convention** — with known import/export, confirm Sigenergy sees correct grid
    direction. If reversed, set `sign: -1` on the `p_*` target points in `registers.json`.
