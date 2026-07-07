@@ -59,6 +59,15 @@ def test_notify_is_noop_without_notify_socket(monkeypatch):
     notify_watchdog()  # must not raise
 
 
+def test_notify_swallows_oserror_from_dead_socket(tmp_path, monkeypatch):
+    # NOTIFY_SOCKET set but nothing bound there (stale/removed socket):
+    # a transient sd_notify failure must never crash the app it is
+    # supposed to keep alive.
+    monkeypatch.setenv("NOTIFY_SOCKET", str(tmp_path / "never-bound.sock"))
+    notify_ready()  # must not raise
+    notify_watchdog()  # must not raise
+
+
 def test_watchdog_seconds_parses_watchdog_usec(monkeypatch):
     monkeypatch.setenv("WATCHDOG_USEC", "90000000")  # 90s in microseconds
     assert watchdog_seconds() == pytest.approx(90.0)

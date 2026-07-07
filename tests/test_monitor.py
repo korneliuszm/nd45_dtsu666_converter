@@ -1,3 +1,7 @@
+import asyncio
+
+import nd45_dtsu666.monitor as monitor_mod
+from nd45_dtsu666.config import load_config, load_registers
 from nd45_dtsu666.dtsu_server import RtuActivity
 from nd45_dtsu666.monitor import render_dashboard
 
@@ -44,3 +48,18 @@ def test_dashboard_handles_missing_values_without_crashing():
     out = render_dashboard({}, age=1.0, healthy=True, activity=RtuActivity(), slave_id=1, now=1.0)
     assert "requests: 0" in out
     assert "L1" in out  # phase rows still render with placeholders
+
+
+async def test_run_monitor_returns_cleanly_when_never_connected(monkeypatch):
+    # Locks the not-connected early-return wiring: coros closed (no
+    # "coroutine never awaited" warnings), client closed, prompt return --
+    # a regression here breaks commissioning startup in a hard-to-spot way.
+    async def _never_connect(client, stop_event, *args, **kwargs):
+        return False
+
+    monkeypatch.setattr(monitor_mod, "connect_with_retry", _never_connect)
+    config = load_config("config/config.json")
+    registers = load_registers("config/registers.json")
+    await asyncio.wait_for(
+        monitor_mod.run_monitor(config, registers, asyncio.Event()), timeout=1.0
+    )
