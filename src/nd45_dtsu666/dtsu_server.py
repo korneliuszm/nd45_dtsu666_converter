@@ -64,10 +64,13 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
 class RtuActivity:
     """Records Modbus read requests received from the storage (Sigenergy)."""
 
-    def __init__(self, recent_maxlen: int = 8, rate_window: float = 5.0) -> None:
+    def __init__(
+        self, recent_maxlen: int = 8, rate_window: float = 5.0, max_blocks: int = 64
+    ) -> None:
         self.total = 0
         self.last_ts: float | None = None
         self._blocks: Counter[tuple[int, int, int]] = Counter()
+        self._max_blocks = max_blocks
         self._recent: deque[tuple[float, int, int, int]] = deque(maxlen=recent_maxlen)
         self._times: deque[float] = deque()
         self._rate_window = rate_window
@@ -75,7 +78,12 @@ class RtuActivity:
     def record(self, fc: int, address: int, count: int, ts: float) -> None:
         self.total += 1
         self.last_ts = ts
-        self._blocks[(fc, address, count)] += 1
+        # cap DISTINCT tracked blocks so a scanning/misbehaving client can't
+        # grow this Counter unboundedly over a long-running monitor session;
+        # already-tracked blocks keep counting
+        key = (fc, address, count)
+        if key in self._blocks or len(self._blocks) < self._max_blocks:
+            self._blocks[key] += 1
         self._recent.append((ts, fc, address, count))
         self._times.append(ts)
         while self._times and ts - self._times[0] > self._rate_window:
@@ -178,6 +186,15 @@ def _server_action(
     return "none"
 
 
+def _listen_never_opened(server) -> bool:
+    """True when the server's transport never opened (pymodbus 3.6.9's
+    listen() swallows OSError -- bad serial port, busy TCP port -- and
+    serve_forever() then hangs without raising, so the task never looks
+    failed). Duck-typed: fakes without is_active() are never flagged."""
+    is_active = getattr(server, "is_active", None)
+    return is_active is not None and not is_active()
+
+
 async def supervise_server(
     cfg,
     context,
@@ -188,6 +205,7 @@ async def supervise_server(
     server_factory: Callable | None = None,
     now: Callable[[], float] | None = None,
     min_restart_interval: float = 0.0,
+    dead_start_grace: float = 5.0,
 ) -> None:
     """Start the DTSU output server (RTU or TCP, per cfg.transport) while data is
     fresh; stop it (silence) while stale."""
@@ -210,6 +228,16 @@ async def supervise_server(
         except Exception as exc:  # noqa: BLE001 - best-effort shutdown logging
             log.warning("DTSU server task raised while shutting down: %r", exc)
 
+    async def _shutdown_quietly(srv) -> None:
+        """Best-effort close. shutdown() can itself raise (e.g. pyserial
+        OSError after the RS-485 adapter is unplugged); that must degrade
+        to a log line, never crash the supervisor -- the fail-safe would
+        die with it."""
+        try:
+            await srv.shutdown()
+        except Exception as exc:  # noqa: BLE001 - cleanup must not kill the fail-safe
+            log.warning("Error closing DTSU server (best-effort): %r", exc)
+
     try:
         while not stop_event.is_set():
             t = clock()
@@ -224,12 +252,20 @@ async def supervise_server(
                 # transport may still hold an open socket -- discarding the
                 # reference without closing it would leak a fd on every such
                 # failure over a long-running deployment.
-                try:
-                    await server.shutdown()
-                except Exception as shutdown_exc:  # noqa: BLE001 - cleanup of an already-failed server
-                    log.warning(
-                        "Error closing failed DTSU server (best-effort): %r", shutdown_exc
-                    )
+                await _shutdown_quietly(server)
+                server, serve_task = None, None
+            elif (
+                server is not None
+                and serve_task is not None
+                and _listen_never_opened(server)
+                and last_start is not None
+                and t - last_start >= dead_start_grace
+            ):
+                log.error(
+                    "DTSU server never opened its transport (port missing/busy?); will retry"
+                )
+                await _shutdown_quietly(server)
+                await _cancel_and_await(serve_task)
                 server, serve_task = None, None
             action = _server_action(
                 gate.should_serve(age), server is not None, t, last_start, min_restart_interval
@@ -243,7 +279,7 @@ async def supervise_server(
                     cfg.transport, age,
                 )
             elif action == "stop":
-                await server.shutdown()
+                await _shutdown_quietly(server)
                 if serve_task:
                     await _cancel_and_await(serve_task)
                 server, serve_task = None, None
@@ -257,6 +293,6 @@ async def supervise_server(
                 pass
     finally:
         if server is not None:
-            await server.shutdown()
+            await _shutdown_quietly(server)
             if serve_task:
                 await _cancel_and_await(serve_task)

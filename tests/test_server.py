@@ -294,6 +294,148 @@ def test_static_registers_tcp_transport_uses_fixed_baud_code():
     assert context[1].getValues(3, 0x002D, count=1) == [3]  # bAud = fixed 9600 code
 
 
+class DeadStartServer:
+    """Mimics pymodbus 3.6.9 when listen() swallows an OSError (bad serial
+    port, busy TCP port): serve_forever() hangs on `await self.serving`
+    without raising, and the transport never opens (is_active() stays False).
+    """
+
+    def __init__(self):
+        self.shutdown_calls = 0
+        self._serving = asyncio.Event()
+
+    async def serve_forever(self):
+        await self._serving.wait()
+
+    async def shutdown(self):
+        self.shutdown_calls += 1
+        self._serving.set()
+
+    def is_active(self):
+        return False
+
+
+async def test_supervisor_detects_silent_listen_failure_and_retries():
+    store = CanonicalStore()
+    gate = HealthGate(max_age=1e9)  # data always fresh; isolate the dead-start logic
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    created = []
+
+    def factory():
+        s = DeadStartServer()
+        created.append(s)
+        return s
+
+    stop = asyncio.Event()
+    clock = {"t": 100.0}
+    store.update({"p_total": 1.0}, ts=100.0)
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=factory, now=lambda: clock["t"],
+                         dead_start_grace=1.0)
+    )
+    await asyncio.sleep(0.05)  # server started; grace not yet elapsed
+    assert len(created) == 1 and created[0].shutdown_calls == 0
+
+    clock["t"] = 102.0  # past the grace period with is_active() still False
+    await asyncio.sleep(0.1)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    # the dead start was reaped (socket-less server closed) and retried
+    assert created[0].shutdown_calls >= 1
+    assert len(created) >= 2
+
+
+class StopShutdownRaisesServer:
+    def __init__(self):
+        self.running = False
+        self.shutdown_calls = 0
+
+    async def serve_forever(self):
+        self.running = True
+        while self.running:
+            await asyncio.sleep(0.01)
+
+    async def shutdown(self):
+        self.shutdown_calls += 1
+        self.running = False
+        raise OSError("serial device vanished")
+
+
+async def test_supervisor_survives_shutdown_raising_on_stale_stop(caplog):
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    fake = StopShutdownRaisesServer()
+    stop = asyncio.Event()
+    clock = {"t": 100.0}
+
+    store.update({"p_total": 1.0}, ts=100.0)  # fresh -> server starts
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=lambda: fake, now=lambda: clock["t"])
+    )
+    await asyncio.sleep(0.05)
+    assert fake.running is True
+
+    clock["t"] = 200.0  # stale -> "stop" path; shutdown() raises OSError
+    with caplog.at_level("WARNING", logger="nd45_dtsu666.dtsu_server"):
+        await asyncio.sleep(0.1)
+
+    # an unplugged serial adapter during fail-safe must not crash the bridge
+    assert fake.shutdown_calls == 1
+    assert not task.done()  # supervisor survived the OSError
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)  # exits cleanly, no exception
+
+
+class CrashAndShutdownRaisesServer:
+    async def serve_forever(self):
+        raise RuntimeError("boom")
+
+    async def shutdown(self):
+        raise OSError("also broken")
+
+
+async def test_supervisor_survives_shutdown_raising_after_crash():
+    store = CanonicalStore()
+    gate = HealthGate(max_age=3.0)
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    created = []
+
+    def factory():
+        s = CrashAndShutdownRaisesServer()
+        created.append(s)
+        return s
+
+    stop = asyncio.Event()
+    store.update({"p_total": 1.0}, ts=100.0)
+    task = asyncio.create_task(
+        supervise_server(cfg, context=None, store=store, gate=gate,
+                         check_interval=0.02, stop_event=stop,
+                         server_factory=factory, now=lambda: 100.0)
+    )
+    await asyncio.sleep(0.1)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert len(created) >= 2  # kept retrying despite shutdown() also failing
+
+
+def test_rtu_activity_blocks_tracking_is_bounded():
+    a = RtuActivity(max_blocks=4)
+    for addr in range(100):  # a scanning client hitting distinct addresses
+        a.record(3, addr, 2, ts=float(addr))
+    s = a.summary(now=200.0)
+    assert s["total"] == 100  # total still counts everything
+    assert len(s["blocks"]) <= 4  # per-block tally must not grow unbounded
+
+    a.record(3, 0, 2, ts=150.0)  # an already-tracked block keeps counting
+    blocks = dict(a.summary(now=200.0)["blocks"])
+    assert blocks[(3, 0, 2)] == 2
+
+
 class TrackedFailingServer:
     def __init__(self):
         self.serve_calls = 0
