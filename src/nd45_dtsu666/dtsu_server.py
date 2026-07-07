@@ -26,19 +26,20 @@ _HOLDING_FC = 3
 
 # DTSU666 identity/config registers with no ND45 measurement equivalent (signed
 # int16, 1 word each -- NOT the float32 2-word format used for measurement data).
-# Values below assume this bridge always presents as a direct-connect (no CT/PT)
-# 3-phase-4-wire meter, since ND45 already supplies true engineering-unit values.
-_STATIC_INT16_REGISTERS: dict[int, int] = {
-    0x0000: 100,  # REV.     - firmware version (arbitrary; not validated by masters)
-    0x0001: 0,    # UCode    - programming code
-    0x0002: 0,    # CLr.E    - energy clear command
-    0x0003: 0,    # net      - network mode: 0 = 3P4W, 1 = 3P3W
-    0x0006: 10,   # IrAt     - current transformer ratio, x0.1 -> 10 = ratio 1.0
-    0x0007: 10,   # UrAt     - voltage transformer ratio, x0.1 -> 10 = ratio 1.0
-    0x000A: 0,    # Disp     - display rotation time
-    0x000B: 0,    # B.LCD    - backlight time
-    0x000C: 0,    # Endian   - reserved
-    0x002C: 0,    # Protocol - protocol/parity selection
+# Addresses are fixed by the DTSU666 protocol; values come from DtsuConf.identity
+# (config/config.json `dtsu.identity`) so a specific real meter's identity/CT/PT
+# ratios can be entered by hand without touching code.
+_IDENTITY_REGISTER_ADDRS: dict[str, int] = {
+    "rev": 0x0000,  # REV.     - firmware version (arbitrary; not validated by masters)
+    "ucode": 0x0001,  # UCode    - programming code
+    "clr_e": 0x0002,  # CLr.E    - energy clear command
+    "net": 0x0003,  # net      - network mode: 0 = 3P4W, 1 = 3P3W
+    "ir_at": 0x0006,  # IrAt     - current transformer ratio, x0.1 -> 10 = ratio 1.0
+    "ur_at": 0x0007,  # UrAt     - voltage transformer ratio, x0.1 -> 10 = ratio 1.0
+    "disp": 0x000A,  # Disp     - display rotation time
+    "b_lcd": 0x000B,  # B.LCD    - backlight time
+    "endian": 0x000C,  # Endian   - reserved
+    "protocol": 0x002C,  # Protocol - protocol/parity selection
 }
 
 # bAud (0x002DH): meter-reported serial speed code, per DTSU666 manual.
@@ -47,7 +48,8 @@ _BAUD_CODES: dict[int, int] = {1200: 0, 2400: 1, 4800: 2, 9600: 3}
 
 def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: DtsuConf) -> None:
     """Seed the DTSU666 identity/config registers (0x0000-0x002E block) once."""
-    for addr, value in _STATIC_INT16_REGISTERS.items():
+    for field, addr in _IDENTITY_REGISTER_ADDRS.items():
+        value = getattr(dtsu_cfg.identity, field)
         slave.setValues(_HOLDING_FC, addr, [value])
     # bAud reflects a physical baudrate only in RTU mode; TCP has none, so it
     # reports a fixed 9600 code -- the register stays in the map either way

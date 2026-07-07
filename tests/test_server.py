@@ -5,7 +5,7 @@ from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from nd45_dtsu666.canonical import CanonicalStore, HealthGate
 from nd45_dtsu666.codec import registers_to_float
-from nd45_dtsu666.config import DtsuConf, DtsuRtuConf, DtsuTcpConf, load_registers
+from nd45_dtsu666.config import DtsuConf, DtsuIdentityConf, DtsuRtuConf, DtsuTcpConf, load_registers
 from nd45_dtsu666.dtsu_server import (
     RecordingSlaveContext,
     RtuActivity,
@@ -73,6 +73,23 @@ def test_static_registers_seeded_from_dtsu_cfg():
     assert slave.getValues(3, 0x0007, count=1) == [10]  # UrAt = ratio 1.0
     assert slave.getValues(3, 0x002D, count=1) == [3]  # bAud = 9600
     assert slave.getValues(3, 0x002E, count=1) == [7]  # Addr = slave_id
+
+
+def test_static_registers_use_custom_identity_from_config():
+    target = load_registers("config/registers.json").dtsu_target
+    cfg = DtsuConf(
+        transport="rtu",
+        slave_id=1,
+        rtu=DtsuRtuConf(port="/dev/null", baudrate=9600),
+        identity=DtsuIdentityConf(rev=103, ucode=701, ir_at=200, ur_at=10),
+    )
+    context = build_context(target, slave_id=1, dtsu_cfg=cfg)
+    slave = context[1]
+    assert slave.getValues(3, 0x0000, count=1) == [103]  # REV. overridden
+    assert slave.getValues(3, 0x0001, count=1) == [701]  # UCode overridden
+    assert slave.getValues(3, 0x0006, count=1) == [200]  # IrAt overridden
+    assert slave.getValues(3, 0x0007, count=1) == [10]  # UrAt unchanged (default)
+    assert slave.getValues(3, 0x0003, count=1) == [0]  # net untouched -> still default
 
 
 def test_static_registers_unknown_baudrate_defaults_to_9600_code():
