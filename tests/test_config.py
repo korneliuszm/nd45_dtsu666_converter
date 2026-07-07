@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from nd45_dtsu666.config import DtsuConf, DtsuRtuConf, DtsuTcpConf, load_config, load_registers
+from nd45_dtsu666.config import DtsuConf, DtsuIdentityConf, DtsuRtuConf, DtsuTcpConf, load_config, load_registers
 
 
 def test_load_registers_reads_seed(tmp_path):
@@ -59,3 +59,36 @@ def test_dtsu_conf_tcp_builds_with_tcp_block():
     cfg = DtsuConf(transport="tcp", slave_id=1, tcp=DtsuTcpConf())
     assert cfg.tcp.host == "0.0.0.0"
     assert cfg.tcp.port == 502
+
+
+def test_dtsu_identity_conf_defaults_match_legacy_static_registers():
+    identity = DtsuIdentityConf()
+    assert identity.rev == 100
+    assert identity.ucode == 0
+    assert identity.clr_e == 0
+    assert identity.net == 0
+    assert identity.ir_at == 10
+    assert identity.ur_at == 10
+    assert identity.disp == 0
+    assert identity.b_lcd == 0
+    assert identity.endian == 0
+    assert identity.protocol == 0
+
+
+def test_dtsu_conf_identity_defaults_when_omitted():
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/ttyAMA2"))
+    assert cfg.identity.ir_at == 10
+    assert cfg.identity.ur_at == 10
+
+
+def test_dtsu_conf_identity_accepts_overrides():
+    cfg = DtsuConf(
+        transport="rtu",
+        slave_id=1,
+        rtu=DtsuRtuConf(port="/dev/ttyAMA2"),
+        identity=DtsuIdentityConf(rev=103, ucode=701, ir_at=200, ur_at=10),
+    )
+    assert cfg.identity.rev == 103
+    assert cfg.identity.ucode == 701
+    assert cfg.identity.ir_at == 200
+    assert cfg.identity.net == 0  # untouched fields keep their default

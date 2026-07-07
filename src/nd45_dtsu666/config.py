@@ -67,9 +67,23 @@ class DtsuTcpConf(BaseModel):
     port: int = 502
 
 
+class DtsuIdentityConf(BaseModel):
+    rev: int = 100
+    ucode: int = 0
+    clr_e: int = 0
+    net: int = 0
+    ir_at: int = 10
+    ur_at: int = 10
+    disp: int = 0
+    b_lcd: int = 0
+    endian: int = 0
+    protocol: int = 0
+
+
 class DtsuConf(BaseModel):
     transport: Literal["rtu", "tcp"] = "rtu"
     slave_id: int = 1
+    identity: DtsuIdentityConf = DtsuIdentityConf()
     rtu: DtsuRtuConf | None = None
     tcp: DtsuTcpConf | None = None
 
