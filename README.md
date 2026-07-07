@@ -89,7 +89,13 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
 7. **RS-485 direction** (RTU transport only) — verify the reComputer transceiver
    auto-toggles direction, or configure pyserial RS-485 mode if the master sees
    no/garbled replies. Not applicable when `dtsu.transport` is `"tcp"`.
-8. **Identity/config registers (0x0000-0x002E)** — served as a direct-connect 3P4W meter
-   with CT/PT ratio 1:1 (`net=0`, `IrAt=UrAt=10`); see `_STATIC_INT16_REGISTERS` in
-   `dtsu_server.py`. If Sigenergy rejects the meter or misapplies scaling, check these
-   against the DTSU666 manual — this hasn't been confirmed against real Sigenergy behavior.
+8. **Identity/config registers (0x0000-0x002E)** — values are set from `dtsu.identity` in
+   `config/config.json` (defaults: direct-connect 3P4W meter, CT/PT ratio 1:1 — `net=0`,
+   `ir_at=ur_at=10`). To match a specific real meter, edit `dtsu.identity` by hand, e.g.:
+   ```json
+   "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10}
+   ```
+   Fields omitted keep their default. See `DtsuIdentityConf` in `config.py` for the full
+   field list and `_IDENTITY_REGISTER_ADDRS` in `dtsu_server.py` for the register mapping.
+   If Sigenergy rejects the meter or misapplies scaling, check these against the DTSU666
+   manual — this hasn't been confirmed against real Sigenergy behavior.

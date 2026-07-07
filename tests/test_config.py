@@ -18,11 +18,15 @@ def test_load_registers_reads_seed(tmp_path):
 def test_load_config_reads_seed():
     cfg = load_config("config/config.json")
     assert cfg.nd45.port == 502
-    assert cfg.dtsu.slave_id == 1
+    assert cfg.dtsu.slave_id == 10
     assert cfg.dtsu.transport == "rtu"
     assert cfg.dtsu.rtu.port == "/dev/ttyAMA2"
     assert cfg.dtsu.tcp.port == 502
     assert cfg.safety.max_data_age_s == 3.0
+    assert cfg.dtsu.identity.rev == 103
+    assert cfg.dtsu.identity.ucode == 701
+    assert cfg.dtsu.identity.ir_at == 200
+    assert cfg.dtsu.identity.ur_at == 10
 
 
 def test_target_point_defaults(tmp_path):
