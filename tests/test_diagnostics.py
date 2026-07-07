@@ -1,5 +1,7 @@
+import pytest
+
 from nd45_dtsu666.config import load_registers
-from nd45_dtsu666.diagnostics import render_table
+from nd45_dtsu666.diagnostics import _synthetic_values, render_table
 
 
 def test_render_table_contains_key_columns_and_values():
@@ -23,3 +25,16 @@ def test_render_table_shows_stale_status():
     reg = load_registers("config/registers.json")
     table = render_table(reg.nd45_source, reg.dtsu_target, canonical={}, age=99.0, healthy=False)
     assert "STALE" in table.upper() or "FAIL" in table.upper()
+
+
+def test_synthetic_values_cover_every_dtsu_target_source():
+    # selftest is the operator's mbpoll bench tool: every register in the DTSU
+    # map must serve a value, including the net_* energies that poll_once
+    # normally derives -- otherwise the bench shows them stuck at 0 and the
+    # installer wrongly concludes those registers are broken.
+    reg = load_registers("config/registers.json")
+    values = _synthetic_values(reg)
+    for key, pt in reg.dtsu_target.points.items():
+        assert pt.from_ in values, f"selftest serves nothing for {key} (from {pt.from_})"
+    assert values["net_imp_energy_total"] == pytest.approx(1234.5 - 67.8)
+    assert values["net_exp_energy_total"] == 0.0

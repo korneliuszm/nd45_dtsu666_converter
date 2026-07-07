@@ -41,7 +41,14 @@ def _synthetic_values(registers: RegisterMap) -> dict[str, float]:
     demo = {"u_l1": 230.0, "u_l2": 231.0, "u_l3": 229.0, "i_l1": 5.0, "i_l2": 5.1, "i_l3": 4.9,
             "p_total": 1500.0, "q_total": 200.0, "pf_total": 0.95, "freq": 50.0,
             "imp_energy_total": 1234.5, "exp_energy_total": 67.8}
-    return {k: demo.get(k, 0.0) for k in registers.nd45_source.points}
+    values = {k: demo.get(k, 0.0) for k in registers.nd45_source.points}
+    # derived keys normally computed by nd45_poller.poll_once -- without them
+    # the mbpoll bench shows the net_* DTSU registers stuck at 0
+    imp = values.get("imp_energy_total", 0.0)
+    exp = values.get("exp_energy_total", 0.0)
+    values["net_imp_energy_total"] = max(imp - exp, 0.0)
+    values["net_exp_energy_total"] = max(exp - imp, 0.0)
+    return values
 
 
 def _run_selftest(config, registers) -> int:
