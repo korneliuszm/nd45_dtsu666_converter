@@ -86,6 +86,58 @@ async def test_poll_once_decodes_points():
     assert values["net_exp_energy_total"] == pytest.approx(0.0, abs=1e-9)
 
 
+def test_extract_registers_raises_for_uncovered_address():
+    groups = [(50, [0x1111, 0x2222, 0x3333, 0x4444])]
+    with pytest.raises(KeyError):
+        extract_registers(999, groups)
+
+
+async def test_poll_once_substitutes_zero_for_nan():
+    # NaN fails every >= comparison, so a plain abs(si) >= OVERRANGE guard
+    # would let it through to Sigenergy -- it must be masked to 0.0 like
+    # any other invalid reading (e.g. PF undefined at ~0 A phase current).
+    src = load_registers("config/registers.json").nd45_source
+    image = _image_for({50: float("nan")})
+    values = await poll_once(FakeClient(image), src, slave=1)
+    assert values["u_l1"] == 0.0
+
+
+async def test_poll_once_substitutes_zero_for_inf():
+    src = load_registers("config/registers.json").nd45_source
+    image = _image_for({50: float("inf")})
+    values = await poll_once(FakeClient(image), src, slave=1)
+    assert values["u_l1"] == 0.0
+
+
+async def test_poll_once_overrange_warning_logged_once_per_episode(caplog):
+    src = load_registers("config/registers.json").nd45_source
+    over = _image_for({50: 3e20})  # ND45 writes 2e20 when out of range
+    seen: set[str] = set()
+    with caplog.at_level("WARNING", logger="nd45_dtsu666.nd45_poller"):
+        await poll_once(FakeClient(over), src, slave=1, overrange_seen=seen)
+        await poll_once(FakeClient(over), src, slave=1, overrange_seen=seen)
+    warnings = [r for r in caplog.records if "u_l1" in r.getMessage()]
+    assert len(warnings) == 1  # sustained overrange must not flood the journal
+
+    caplog.clear()
+    normal = _image_for({50: 230.0})
+    with caplog.at_level("INFO", logger="nd45_dtsu666.nd45_poller"):
+        values = await poll_once(FakeClient(normal), src, slave=1, overrange_seen=seen)
+    assert values["u_l1"] == pytest.approx(230.0, rel=1e-5)
+    assert "u_l1" not in seen  # recovered -> a future episode logs again
+
+
+async def test_poll_once_compose_applies_sign_scale_offset():
+    from nd45_dtsu666.config import SourcePoint, SourceSide
+
+    src = SourceSide(points={
+        "energy": SourcePoint(compose=[900, 902], factors=[1000, 1], sign=-1),
+    })
+    image = _image_for({900: 2.0, 902: 345.0})  # composed: 2*1000 + 345 = 2345
+    values = await poll_once(FakeClient(image), src, slave=1)
+    assert values["energy"] == pytest.approx(-2345.0, rel=1e-5)
+
+
 class _BrokenClient:
     """Every read fails, so run_poller's except-branch calls on_error every cycle."""
 
@@ -116,3 +168,31 @@ async def test_run_poller_survives_on_error_callback_raising():
         ),
         timeout=1.0,
     )
+
+
+async def test_run_poller_reports_on_update_exception_to_on_error():
+    # Locks down current semantics: a bug in the SUCCESS callback (on_update)
+    # is routed to on_error and the loop survives -- the poll itself worked,
+    # only the datastore write broke, but the poller must keep cycling.
+    src = load_registers("config/registers.json").nd45_source
+    stop = asyncio.Event()
+    errors: list[Exception] = []
+
+    def on_update(values, ts):
+        raise RuntimeError("datastore write failed")
+
+    async def _stopper():
+        await asyncio.sleep(0.05)
+        stop.set()
+
+    await asyncio.wait_for(
+        asyncio.gather(
+            run_poller(
+                FakeClient({}), src, slave=1, interval=0.01,
+                on_update=on_update, on_error=errors.append, stop_event=stop,
+            ),
+            _stopper(),
+        ),
+        timeout=1.0,
+    )
+    assert errors and isinstance(errors[0], RuntimeError)

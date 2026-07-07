@@ -49,3 +49,14 @@ def test_encode_decode_sign_inversion_for_power():
 def test_compose_energy_high_low():
     # MWh part=2, kWh part=345 -> 2*1000 + 345 = 2345 kWh
     assert compose([2.0, 345.0], [1000.0, 1.0]) == pytest.approx(2345.0)
+
+
+def test_roundtrip_nan_and_inf():
+    import math
+
+    # the codec itself must carry IEEE-754 specials faithfully (masking
+    # them is the poller's job, not the codec's)
+    for wo in ("big", "little"):
+        for bo in ("big", "little"):
+            assert math.isnan(registers_to_float(float_to_registers(float("nan"), wo, bo), wo, bo))
+            assert registers_to_float(float_to_registers(float("inf"), wo, bo), wo, bo) == math.inf

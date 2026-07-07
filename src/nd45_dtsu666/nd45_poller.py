@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Callable
 
 from .codec import OVERRANGE, compose, decode_point, registers_to_float
@@ -28,7 +29,15 @@ def extract_registers(addr: int, groups: list[tuple[int, list[int]]]) -> list[in
     raise KeyError(addr)
 
 
-async def poll_once(client, source: SourceSide, slave: int) -> dict[str, float]:
+async def poll_once(
+    client, source: SourceSide, slave: int, overrange_seen: set[str] | None = None
+) -> dict[str, float]:
+    """Read all groups and decode into canonical SI values.
+
+    `overrange_seen` (owned by the caller, e.g. run_poller) mutes repeated
+    over-range warnings: a sustained bad channel logs once per episode, not
+    once per 0.3s poll (~288k journal lines/day otherwise).
+    """
     groups: list[tuple[int, list[int]]] = []
     for base, count in READ_GROUPS:
         rr = await client.read_holding_registers(base, count, slave=slave)
@@ -41,13 +50,22 @@ async def poll_once(client, source: SourceSide, slave: int) -> dict[str, float]:
     for key, pt in source.points.items():
         if pt.compose:
             parts = [registers_to_float(extract_registers(a, groups), wo, bo) for a in pt.compose]
-            si = compose(parts, pt.factors or [1.0] * len(parts))
+            raw = compose(parts, pt.factors or [1.0] * len(parts))
+            si = raw * pt.scale * pt.sign + pt.offset
         else:
             regs = extract_registers(pt.addr, groups)
             si = decode_point(regs, pt.scale, pt.sign, pt.offset, wo, bo)
-        if abs(si) >= OVERRANGE:
-            log.warning("ND45 %s over range, using 0.0", key)
+        # NaN fails every comparison, so check finiteness explicitly -- a NaN
+        # reading (e.g. PF undefined at ~0 A) must not reach Sigenergy.
+        if not math.isfinite(si) or abs(si) >= OVERRANGE:
+            if overrange_seen is None or key not in overrange_seen:
+                log.warning("ND45 %s over range/invalid (%r), using 0.0", key, si)
+                if overrange_seen is not None:
+                    overrange_seen.add(key)
             si = 0.0
+        elif overrange_seen is not None and key in overrange_seen:
+            overrange_seen.discard(key)
+            log.info("ND45 %s back in range", key)
         values[key] = si
 
     imp_total = values.get("imp_energy_total", 0.0)
@@ -67,9 +85,10 @@ async def run_poller(
     stop_event: asyncio.Event,
 ) -> None:
     loop = asyncio.get_running_loop()
+    overrange_seen: set[str] = set()
     while not stop_event.is_set():
         try:
-            values = await poll_once(client, source, slave)
+            values = await poll_once(client, source, slave, overrange_seen=overrange_seen)
             on_update(values, loop.time())
         except Exception as exc:  # noqa: BLE001 - poller must never die
             try:
