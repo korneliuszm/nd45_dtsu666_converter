@@ -22,6 +22,7 @@ python -m pytest tests/test_codec.py::test_roundtrip_all_orders -v   # single te
 python -m ruff check .                             # lint (line-length 100)
 python -m nd45_dtsu666 run                         # run the bridge
 python -m nd45_dtsu666 monitor                     # bridge + live commissioning dashboard
+python -m nd45_dtsu666 rtudebug                     # bridge + log every register block Sigenergy reads (debug)
 python -m nd45_dtsu666 diag                        # standalone ND45 poll table (no output serving)
 python -m nd45_dtsu666 selftest                    # serve synthetic DTSU data for mbpoll bench test
 ```

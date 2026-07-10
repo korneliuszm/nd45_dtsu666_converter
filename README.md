@@ -60,6 +60,17 @@ a free TCP port for `"tcp"`) — same requirement as `run`; for a bench test wit
 Sigenergy use `selftest`.
 During fail-safe (stale ND45) the panel shows `FAIL-SAFE SILENT` — that is expected.
 
+## Debug: which registers does Sigenergy read?
+For raw protocol debugging (no dashboard), `rtudebug` runs the same live bridge but
+logs one line per read request from Sigenergy — function code, address (decimal + hex),
+word count, and the DTSU register name(s) that block touches — after printing the full
+`addr → name` map once at startup. It reuses the same non-invasive read hook as
+`monitor`, so it does not affect the standard `run` service. Redirect to a file to keep a
+capture:
+```bash
+python -m nd45_dtsu666 rtudebug > rtu_debug.log 2>&1   # Ctrl-C to quit
+```
+
 ## Run as a service
 ```bash
 sudo cp systemd/nd45-dtsu666.service /etc/systemd/system/
