@@ -16,6 +16,10 @@ log = logging.getLogger(__name__)
 # Group 1: 200 ms measurements 50..145; Group 2: frequency 818..819; Group 3: energy 900..931.
 READ_GROUPS: list[tuple[int, int]] = [(50, 96), (818, 2), (900, 32)]
 
+OPTIONAL_INVALID_ZERO_POINTS = frozenset(
+    {"pf_l1", "pf_l2", "pf_l3", "pf_total"}
+)
+
 
 class PollError(RuntimeError):
     pass
@@ -98,6 +102,7 @@ async def poll_once(
 
     wo, bo = source.word_order, source.byte_order
     values: dict[str, float] = {}
+    invalid_critical: list[str] = []
     for key, pt in source.points.items():
         if pt.compose:
             parts = [registers_to_float(extract_registers(a, groups), wo, bo) for a in pt.compose]
@@ -106,18 +111,29 @@ async def poll_once(
         else:
             regs = extract_registers(pt.addr, groups)
             si = decode_point(regs, pt.scale, pt.sign, pt.offset, wo, bo)
-        # NaN fails every comparison, so check finiteness explicitly -- a NaN
-        # reading (e.g. PF undefined at ~0 A) must not reach Sigenergy.
-        if not math.isfinite(si) or abs(si) >= OVERRANGE:
+        invalid = not math.isfinite(si) or abs(si) >= OVERRANGE
+        if invalid:
+            optional = key in OPTIONAL_INVALID_ZERO_POINTS
             if overrange_seen is None or key not in overrange_seen:
-                log.warning("ND45 %s over range/invalid (%r), using 0.0", key, si)
+                action = "using 0.0" if optional else "rejecting sample"
+                log.warning(
+                    "ND45 %s over range/invalid (%r), %s", key, si, action
+                )
                 if overrange_seen is not None:
                     overrange_seen.add(key)
-            si = 0.0
+            if optional:
+                si = 0.0
+            else:
+                invalid_critical.append(key)
         elif overrange_seen is not None and key in overrange_seen:
             overrange_seen.discard(key)
             log.info("ND45 %s back in range", key)
         values[key] = si
+
+    if invalid_critical:
+        raise PollError(
+            "ND45 invalid critical value(s): " + ", ".join(invalid_critical)
+        )
 
     compute_derived(values)
     return values

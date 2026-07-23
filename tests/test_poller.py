@@ -1,10 +1,12 @@
 import asyncio
+import struct
 
 import pytest
 
 from nd45_dtsu666.codec import float_to_registers
 from nd45_dtsu666.config import SourcePoint, SourceSide, load_registers
 from nd45_dtsu666.nd45_poller import (
+    PollError,
     READ_GROUPS,
     extract_registers,
     poll_once,
@@ -61,6 +63,11 @@ class FakeClient:
 
 def _image_for(values: dict[int, float]) -> dict[int, list[int]]:
     return {addr: float_to_registers(v, "big", "big") for addr, v in values.items()}
+
+
+def _raw_float_registers(value: float) -> list[int]:
+    """Build a raw ND45 float, including specials rejected by the output codec."""
+    return list(struct.unpack(">HH", struct.pack(">f", value)))
 
 
 def test_extract_registers_finds_pair():
@@ -129,39 +136,91 @@ async def test_poll_once_raises_clear_error_on_short_read():
         await poll_once(_ShortReadClient(), src, slave=1)
 
 
-async def test_poll_once_substitutes_zero_for_nan():
-    # NaN fails every >= comparison, so a plain abs(si) >= OVERRANGE guard
-    # would let it through to Sigenergy -- it must be masked to 0.0 like
-    # any other invalid reading (e.g. PF undefined at ~0 A phase current).
+async def test_poll_once_substitutes_zero_only_for_invalid_power_factor():
     src = load_registers("config/registers.json").nd45_source
-    image = _image_for({50: float("nan")})
+    image = {64: _raw_float_registers(float("nan"))}
+
     values = await poll_once(FakeClient(image), src, slave=1)
-    assert values["u_l1"] == 0.0
+
+    assert values["pf_l1"] == 0.0
 
 
-async def test_poll_once_substitutes_zero_for_inf():
+@pytest.mark.parametrize(
+    ("address", "value", "point"),
+    [
+        (50, float("nan"), "u_l1"),
+        (52, float("inf"), "i_l1"),
+        (128, 3e20, "p_total"),
+        (912, 3e20, "imp_energy_total"),
+    ],
+)
+async def test_poll_once_rejects_invalid_critical_value(address, value, point):
     src = load_registers("config/registers.json").nd45_source
-    image = _image_for({50: float("inf")})
-    values = await poll_once(FakeClient(image), src, slave=1)
-    assert values["u_l1"] == 0.0
+    image = {address: _raw_float_registers(value)}
+
+    with pytest.raises(PollError, match=point):
+        await poll_once(FakeClient(image), src, slave=1)
 
 
-async def test_poll_once_overrange_warning_logged_once_per_episode(caplog):
+async def test_poll_once_reports_all_invalid_critical_points():
     src = load_registers("config/registers.json").nd45_source
-    over = _image_for({50: 3e20})  # ND45 writes 2e20 when out of range
+    image = {
+        50: _raw_float_registers(float("nan")),
+        52: _raw_float_registers(float("inf")),
+    }
+
+    with pytest.raises(PollError, match=r"u_l1.*i_l1"):
+        await poll_once(FakeClient(image), src, slave=1)
+
+
+async def test_poll_once_invalid_warning_logged_once_per_episode(caplog):
+    src = load_registers("config/registers.json").nd45_source
+    invalid = {50: _raw_float_registers(3e20)}
     seen: set[str] = set()
     with caplog.at_level("WARNING", logger="nd45_dtsu666.nd45_poller"):
-        await poll_once(FakeClient(over), src, slave=1, overrange_seen=seen)
-        await poll_once(FakeClient(over), src, slave=1, overrange_seen=seen)
+        for _ in range(2):
+            with pytest.raises(PollError):
+                await poll_once(
+                    FakeClient(invalid), src, slave=1, overrange_seen=seen
+                )
     warnings = [r for r in caplog.records if "u_l1" in r.getMessage()]
-    assert len(warnings) == 1  # sustained overrange must not flood the journal
+    assert len(warnings) == 1
 
-    caplog.clear()
     normal = _image_for({50: 230.0})
-    with caplog.at_level("INFO", logger="nd45_dtsu666.nd45_poller"):
-        values = await poll_once(FakeClient(normal), src, slave=1, overrange_seen=seen)
-    assert values["u_l1"] == pytest.approx(230.0, rel=1e-5)
-    assert "u_l1" not in seen  # recovered -> a future episode logs again
+    values = await poll_once(FakeClient(normal), src, slave=1, overrange_seen=seen)
+    assert values["u_l1"] == pytest.approx(230.0)
+    assert "u_l1" not in seen
+
+
+async def test_run_poller_does_not_publish_invalid_critical_sample():
+    src = load_registers("config/registers.json").nd45_source
+    client = FakeClient({50: _raw_float_registers(float("nan"))})
+    stop = asyncio.Event()
+    updates: list[tuple[dict[str, float], float]] = []
+    errors: list[Exception] = []
+
+    async def _stopper():
+        await asyncio.sleep(0.04)
+        stop.set()
+
+    await asyncio.wait_for(
+        asyncio.gather(
+            run_poller(
+                client,
+                src,
+                slave=1,
+                interval=0.01,
+                on_update=lambda values, ts: updates.append((values, ts)),
+                on_error=errors.append,
+                stop_event=stop,
+            ),
+            _stopper(),
+        ),
+        timeout=1.0,
+    )
+
+    assert updates == []
+    assert errors and all(isinstance(exc, PollError) for exc in errors)
 
 
 async def test_poll_once_reads_apparent_power_from_nd45():
