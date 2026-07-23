@@ -13,6 +13,7 @@ from nd45_dtsu666.config import (
     SafetyConf,
     SourcePoint,
     StaticDebugConf,
+    TargetPoint,
     load_config,
     load_registers,
 )
@@ -189,6 +190,8 @@ def test_target_point_defaults(tmp_path):
     assert pf.sign == 1
     assert pf.offset == 0
     assert pf.divide_by_ct is False
+    assert pf.zero_low_word is False
+    assert TargetPoint(addr=1, **{"from": "x"}).zero_low_word is False
 
 
 def test_dtsu_identity_conf_rejects_non_positive_ir_at():

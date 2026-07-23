@@ -88,3 +88,36 @@ def test_encode_point_rejects_overflow_created_by_scaling():
             word_order="big",
             byte_order="big",
         )
+
+
+@pytest.mark.parametrize(
+    ("word_order", "low_index"),
+    [("big", 1), ("little", 0)],
+)
+@pytest.mark.parametrize("byte_order", ["big", "little"])
+def test_encode_point_can_zero_logical_low_word(
+    word_order, low_index, byte_order
+):
+    regs = encode_point(
+        12.345,
+        scale=1.0,
+        sign=1,
+        offset=0.0,
+        word_order=word_order,
+        byte_order=byte_order,
+        zero_low_word=True,
+    )
+
+    assert regs[low_index] == 0
+    assert regs[1 - low_index] != 0
+
+
+def test_encode_point_preserves_low_word_by_default():
+    assert encode_point(
+        12.345,
+        scale=1.0,
+        sign=1,
+        offset=0.0,
+        word_order="big",
+        byte_order="big",
+    ) == float_to_registers(12.345, "big", "big")

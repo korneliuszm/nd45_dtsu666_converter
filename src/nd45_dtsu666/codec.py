@@ -46,10 +46,20 @@ def decode_point(
 
 
 def encode_point(
-    si: float, scale: float, sign: int, offset: float, word_order: str, byte_order: str
+    si: float,
+    scale: float,
+    sign: int,
+    offset: float,
+    word_order: str,
+    byte_order: str,
+    zero_low_word: bool = False,
 ) -> list[int]:
     register_float = si * sign * scale + offset
-    return float_to_registers(register_float, word_order, byte_order)
+    registers = float_to_registers(register_float, word_order, byte_order)
+    if zero_low_word:
+        low_index = 1 if word_order == "big" else 0
+        registers[low_index] = 0
+    return registers
 
 
 def compose(values: list[float], factors: list[float]) -> float:

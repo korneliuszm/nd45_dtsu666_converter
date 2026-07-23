@@ -215,7 +215,15 @@ def update_datastore(
                 continue
             if pt.divide_by_ct:
                 si = si / ct_ratio
-            regs = encode_point(si, pt.scale, pt.sign, pt.offset, wo, bo)
+            regs = encode_point(
+                si,
+                pt.scale,
+                pt.sign,
+                pt.offset,
+                wo,
+                bo,
+                zero_low_word=pt.zero_low_word,
+            )
             pending.append((side.function_code, pt.addr, regs))
 
     for function_code, address, registers in pending:

@@ -88,6 +88,8 @@ class TargetPoint(BaseModel):
     # update_datastore. Sigen OEM points read primary-side values directly and
     # leave this False.
     divide_by_ct: bool = False
+    # Physical TPX-CH coarse energy aliases expose only the IEEE754 high word.
+    zero_low_word: bool = False
 
     model_config = {"populate_by_name": True}
 
