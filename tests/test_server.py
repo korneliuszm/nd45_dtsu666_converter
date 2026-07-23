@@ -67,6 +67,38 @@ def test_update_datastore_default_ct_ratio_is_a_no_op():
     assert registers_to_float(regs, "big", "big") == pytest.approx(15000.0)  # x10 scale only
 
 
+def test_update_datastore_validation_failure_preserves_previous_image():
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    update_datastore(
+        context,
+        1,
+        {"u_l1": 111.0, "p_total": 222.0},
+        target,
+    )
+    before_u = context[1].getValues(
+        3, target.points["u_l1"].addr, count=2
+    )
+    before_p = context[1].getValues(
+        3, target.points["p_total"].addr, count=2
+    )
+
+    with pytest.raises(ValueError, match="finite float32"):
+        update_datastore(
+            context,
+            1,
+            {"u_l1": 230.0, "p_total": 1e38},
+            target,
+        )
+
+    assert context[1].getValues(
+        3, target.points["u_l1"].addr, count=2
+    ) == before_u
+    assert context[1].getValues(
+        3, target.points["p_total"].addr, count=2
+    ) == before_p
+
+
 def test_sigen_ext_target_reports_primary_power_in_kw():
     registers = load_registers("config/registers.json")
     targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]

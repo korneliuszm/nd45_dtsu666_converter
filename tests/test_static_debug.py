@@ -91,3 +91,14 @@ def test_static_pipeline_contains_no_nd45_client_or_poller():
     assert len(pipe.coros) == 2  # static feeder + output server supervisor
     for coro in pipe.coros:
         coro.close()
+
+
+def test_static_pipeline_rejects_unencodable_value_during_build():
+    config = load_config("config/config.json")
+    config.static_debug.values["u_l1"] = 1e38
+    registers = load_registers("config/registers.json")
+
+    with pytest.raises(ValueError, match="finite float32"):
+        build_static_pipeline(
+            config, registers, asyncio.Event(), RtuActivity()
+        )

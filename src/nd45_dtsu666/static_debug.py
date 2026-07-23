@@ -77,6 +77,15 @@ def build_static_pipeline(
         sigen_identity=registers.dtsu_sigen_identity,
     )
     values = expand_static_values(registers, config.static_debug.values)
+    # Encode once before creating any coroutines. This both seeds the context
+    # and makes an invalid scaled/debug value fail synchronously at startup.
+    update_datastore(
+        context,
+        config.dtsu.slave_id,
+        values,
+        targets,
+        ct_ratio=config.dtsu.identity.ir_at,
+    )
 
     async def feeder() -> None:
         loop = asyncio.get_running_loop()

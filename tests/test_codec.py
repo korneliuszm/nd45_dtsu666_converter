@@ -1,5 +1,7 @@
 import pytest
 
+import nd45_dtsu666.codec as codec
+
 from nd45_dtsu666.codec import (
     compose,
     decode_point,
@@ -51,22 +53,34 @@ def test_compose_energy_high_low():
     assert compose([2.0, 345.0], [1000.0, 1.0]) == pytest.approx(2345.0)
 
 
-def test_roundtrip_nan_and_inf():
-    import math
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("word_order", ["big", "little"])
+@pytest.mark.parametrize("byte_order", ["big", "little"])
+def test_float_to_registers_rejects_non_finite(
+    value, word_order, byte_order
+):
+    with pytest.raises(ValueError, match="finite float32"):
+        float_to_registers(value, word_order, byte_order)
 
-    # the codec itself must carry IEEE-754 specials faithfully (masking
-    # them is the poller's job, not the codec's)
-    for wo in ("big", "little"):
-        for bo in ("big", "little"):
-            assert math.isnan(registers_to_float(float_to_registers(float("nan"), wo, bo), wo, bo))
-            assert registers_to_float(float_to_registers(float("inf"), wo, bo), wo, bo) == math.inf
+
+@pytest.mark.parametrize("value", [1e39, -1e39])
+def test_float_to_registers_rejects_finite_float32_overflow(value):
+    with pytest.raises(ValueError, match="finite float32"):
+        float_to_registers(value)
 
 
-def test_float_to_registers_saturates_out_of_range_instead_of_raising():
-    import math
+def test_float_to_registers_accepts_float32_max():
+    regs = float_to_registers(codec.FLOAT32_MAX)
+    assert registers_to_float(regs) == codec.FLOAT32_MAX
 
-    # struct.pack(">f", 1e39) raises OverflowError; encoding must never raise
-    # (it would abort a datastore update mid-write), so it saturates to a
-    # same-signed infinity rather than crashing.
-    assert registers_to_float(float_to_registers(1e39), "big", "big") == math.inf
-    assert registers_to_float(float_to_registers(-1e39), "big", "big") == -math.inf
+
+def test_encode_point_rejects_overflow_created_by_scaling():
+    with pytest.raises(ValueError, match="finite float32"):
+        encode_point(
+            1e38,
+            scale=10.0,
+            sign=1,
+            offset=0.0,
+            word_order="big",
+            byte_order="big",
+        )

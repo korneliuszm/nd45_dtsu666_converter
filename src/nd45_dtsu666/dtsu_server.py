@@ -196,6 +196,9 @@ def update_datastore(
 ) -> None:
     """Encode canonical SI values into every target's registers.
 
+    Every point is encoded before the first datastore write, so a validation
+    failure preserves the complete previous register image.
+
     `ct_ratio` is the configured CT ratio (`dtsu.identity.ir_at`): points with
     `divide_by_ct` (the classic DTSU666 map's secondary-side current, power,
     and energy points) are divided by it before scaling, since the ND45
@@ -203,6 +206,7 @@ def update_datastore(
     primary-side values. See docs/superpowers/specs for the CT-ratio design.
     """
     slave = context[slave_id]
+    pending: list[tuple[int, int, list[int]]] = []
     for side in _targets(target):
         wo, bo = side.word_order, side.byte_order
         for pt in side.points.values():
@@ -212,7 +216,10 @@ def update_datastore(
             if pt.divide_by_ct:
                 si = si / ct_ratio
             regs = encode_point(si, pt.scale, pt.sign, pt.offset, wo, bo)
-            slave.setValues(side.function_code, pt.addr, regs)
+            pending.append((side.function_code, pt.addr, regs))
+
+    for function_code, address, registers in pending:
+        slave.setValues(function_code, address, registers)
 
 
 def make_serial_server(cfg: DtsuConf, context) -> ModbusSerialServer:
