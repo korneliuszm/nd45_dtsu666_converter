@@ -42,12 +42,12 @@ def _synthetic_values(registers: RegisterMap) -> dict[str, float]:
             "p_total": 1500.0, "q_total": 200.0, "pf_total": 0.95, "freq": 50.0,
             "imp_energy_total": 1234.5, "exp_energy_total": 67.8}
     values = {k: demo.get(k, 0.0) for k in registers.nd45_source.points}
-    # derived keys normally computed by nd45_poller.poll_once -- without them
-    # the mbpoll bench shows the net_* DTSU registers stuck at 0
-    imp = values.get("imp_energy_total", 0.0)
-    exp = values.get("exp_energy_total", 0.0)
-    values["net_imp_energy_total"] = max(imp - exp, 0.0)
-    values["net_exp_energy_total"] = max(exp - imp, 0.0)
+    # derived keys (net energy, apparent power) normally computed by
+    # nd45_poller.poll_once -- without them the mbpoll bench shows the net_*
+    # and S DTSU registers stuck at 0
+    from .nd45_poller import compute_derived
+
+    compute_derived(values)
     return values
 
 

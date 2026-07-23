@@ -1,6 +1,6 @@
 {
   "nd45":   {"host": "192.168.1.10", "port": 502, "unit_id": 1, "poll_interval_s": 0.3, "timeout_s": 1.0, "reconnect_delay_s": 1.0, "reconnect_delay_max_s": 30.0},
-  "dtsu":   {"transport": "rtu", "slave_id": 10, "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10, "protocol": 0}, "rtu": {"port": "/dev/ttyAMA2", "baudrate": 9600, "parity": "N", "stopbits": 1}, "tcp": {"host": "0.0.0.0", "port": 502}},
+  "dtsu":   {"transport": "rtu", "slave_id": 10, "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10, "disp": 10, "b_lcd": 1, "endian": 4, "protocol": 0}, "rtu": {"port": "/dev/ttyAMA2", "baudrate": 9600, "parity": "N", "stopbits": 1}, "tcp": {"host": "0.0.0.0", "port": 502}},
   "safety": {"max_data_age_s": 3.0, "check_interval_s": 0.5, "min_restart_interval_s": 5.0},
   "static_debug": {
     "feed_interval_s": 0.5,

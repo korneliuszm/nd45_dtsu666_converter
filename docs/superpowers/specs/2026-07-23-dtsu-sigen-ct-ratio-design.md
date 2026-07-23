@@ -65,6 +65,25 @@ README checklist.
   polled by Sigenergy every ~5.4s alongside the config block.
 - `DtsuIdentityConf.ir_at` gets a `> 0` validator since it is now a divisor.
 
+## Apparent power and config registers (from live-meter scan)
+
+A full holding-register scan of the real TPX-CH meter (slave 10) confirmed the
+maps above bit-for-bit and surfaced additions:
+
+- **Apparent power S** (St/Sa/Sb/Sc) at classic `0x2022`–`0x2028` and Sigen
+  FC04 `0x152C`–`0x1532`. Sigenergy reads these in its `0x1528`/qty14 block, so
+  the converter must serve them instead of zeros. `S = |U·I|` per phase,
+  `s_total = Σ phases` (arithmetic apparent power, matching the meter), computed
+  in `nd45_poller.compute_derived()` alongside net energy and served on both
+  maps (classic ×10 /CT, Sigen ×0.001 kVA).
+- **Config registers** `0x0004 = 1` and `0x0008 = 4` observed on the real
+  meter (0x0004 is inside Sigenergy's `0x0003`/qty5 config read) are seeded as
+  fixed constants in `write_static_registers`; `disp`/`b_lcd`/`endian`
+  (`0x000A`–`0x000C` = 10/1/4) are set via `dtsu.identity` in config.
+
+The full verified layout with addresses, descriptions and multipliers lives in
+`docs/register-map.md`.
+
 ## Non-goals
 
 - Changing the ND45 source register map or canonical model.

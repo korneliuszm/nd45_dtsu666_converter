@@ -63,6 +63,12 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
     slave.setValues(_HOLDING_FC, 0x002E, [slave_id])  # Addr
     # Observed on a live meter read by Sigenergy every ~5.4s; always 0.
     slave.setValues(_HOLDING_FC, 0x0046, [0])
+    # Fixed non-zero config registers observed on the real TPX-CH meter but of
+    # undocumented meaning. 0x0004 falls inside Sigenergy's 0x0003/qty5 config
+    # read, so it is served to match the genuine meter exactly; 0x0008 is
+    # outside any Sigenergy read but seeded for full-scan fidelity.
+    slave.setValues(_HOLDING_FC, 0x0004, [1])
+    slave.setValues(_HOLDING_FC, 0x0008, [4])
 
 
 def write_sigen_identity(

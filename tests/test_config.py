@@ -58,9 +58,13 @@ def test_load_registers_reads_sigen_measurement_map():
     assert sigen.function_code == 4
     assert sigen.word_order == "big"
     assert sigen.byte_order == "big"
-    # power/reactive power are reported in kW/kvar (x0.001) on the Sigen OEM
-    # map, unlike every other quantity which is direct SI (x1).
-    power_names = {"p_total", "p_l1", "p_l2", "p_l3", "q_total", "q_l1", "q_l2", "q_l3"}
+    # power/reactive/apparent power are reported in kW/kvar/kVA (x0.001) on the
+    # Sigen OEM map, unlike every other quantity which is direct SI (x1).
+    power_names = {
+        "p_total", "p_l1", "p_l2", "p_l3",
+        "q_total", "q_l1", "q_l2", "q_l3",
+        "s_total", "s_l1", "s_l2", "s_l3",
+    }
     for name, point in sigen.points.items():
         classic = reg.dtsu_target.points[name]
         assert point.addr == classic.addr - 2806
@@ -77,6 +81,7 @@ def test_load_registers_classic_secondary_side_points_divide_by_ct():
         "i_l1", "i_l2", "i_l3",
         "p_total", "p_l1", "p_l2", "p_l3",
         "q_total", "q_l1", "q_l2", "q_l3",
+        "s_total", "s_l1", "s_l2", "s_l3",
         "imp_ep", "imp_ep_l1", "imp_ep_l2", "imp_ep_l3", "net_imp_ep",
         "exp_ep", "exp_ep_l1", "exp_ep_l2", "exp_ep_l3", "net_exp_ep",
     }
