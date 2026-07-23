@@ -48,8 +48,10 @@ class FakeClient:
     def __init__(self, image: dict[int, list[int]]):
         # image maps absolute addr -> 2 registers (a float32)
         self.image = image
+        self.requests: list[tuple[int, int, int]] = []
 
     async def read_holding_registers(self, address, count, slave=0):
+        self.requests.append((address, count, slave))
         regs = []
         for a in range(address, address + count):
             pair = self.image.get(a)
@@ -86,6 +88,19 @@ def test_read_groups_cover_all_addresses():
         addrs = pt.compose if pt.compose else [pt.addr]
         for a in addrs:
             assert a in covered and (a + 1) in covered, f"addr {a} not covered"
+
+
+def test_read_groups_keep_energy_in_one_contiguous_request():
+    assert READ_GROUPS == [(50, 96), (818, 2), (900, 96)]
+
+
+async def test_poll_once_requests_the_complete_energy_block_once():
+    source = load_registers("config/registers.json").nd45_source
+    client = FakeClient({})
+
+    await poll_once(client, source, slave=1)
+
+    assert client.requests == [(50, 96, 1), (818, 2, 1), (900, 96, 1)]
 
 
 async def test_poll_once_decodes_points():
@@ -178,7 +193,13 @@ async def test_poll_once_substitutes_zero_only_for_invalid_power_factor():
         (128, 3e20, "p_total"),
         (912, 3e20, "imp_energy_total"),
         (944, 3e20, "reactive_imp_energy_total"),
+        (946, 3e20, "reactive_imp_energy_total"),
         (960, 3e20, "reactive_exp_energy_total"),
+        (962, 3e20, "reactive_exp_energy_total"),
+        (976, 3e20, "reactive_imp_energy_total"),
+        (978, 3e20, "reactive_imp_energy_total"),
+        (992, 3e20, "reactive_exp_energy_total"),
+        (994, 3e20, "reactive_exp_energy_total"),
     ],
 )
 async def test_poll_once_rejects_invalid_critical_value(address, value, point):

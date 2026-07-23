@@ -246,16 +246,17 @@ skanowane były kilka minut od siebie w trakcie 10-min skanu):
 | FC03 Freq (0x2044, ×100) | 4982.7 | 5000.6 | ✓ (dryf) |
 | blok konfig. + tożsamość | co do bitu | co do bitu | ✓ |
 
-### Reverse-flow scan evidence
+### Latest reverse-flow scan evidence
 
 | Field | Value |
 |---|---:|
-| FC04 Pt (`0x151C`) | -3.058557 kW |
-| FC04 reactive coarse (`0x180A`) | 2.796875 kvarh |
-| FC04 ImpEp (`0x181E`) | 7.0078125 kWh |
-| FC04 ExpEp (`0x1828`) | 0.19921875 kWh |
-| FC04 export alias (`0x1830`) | 0.19921875 kWh |
-| FC04 phase export (`0x182A`-`0x182E`) | 0 |
+| FC04 combined active coarse (`0x1800`) | 10.0 kWh |
+| FC04 exported reactive coarse, Q- (`0x180A`) | 2.796875 kvarh |
+| FC04 imported reactive coarse, Q+ (`0x1814`) | 1.1953125 kvarh |
+| FC04 ImpEp (`0x181E`) | 7.0 kWh |
+| FC04 ExpEp (`0x1828`) | 3.0 kWh |
+| FC04 export alias (`0x1830`) | 3.0 kWh |
+| FC04 L1/L2/L3 export (`0x182A`/`0x182C`/`0x182E`) | 0.796875 / 1.0 / 1.0 kWh |
 
 ## Znane luki (do domknięcia w terenie)
 

@@ -15,12 +15,13 @@ registers `60`/`84`/`108` (L1/L2/L3) and `132` (L123 sum), then served on both m
 (classic `0x2022`, Sigen FC04 `0x152C`).
 
 The Sigen FC04 energy map reproduces the physical TPX-CH behavior rather than
-assuming a uniform `+0x800` copy of the generic DTSU666 map. `0x180A` is the
-coarse total reactive-energy accumulator built from all four ND45 reactive
-quadrants; `0x181E` is precise active import; `0x1828` is precise active
-export. The classic FC03 energy aliases are CT-side values. Confirmed
-phase-export fields remain zero, while the directional `net_*` fields repeat
-their corresponding import/export totals as on the physical meter.
+assuming a uniform `+0x800` copy of the generic DTSU666 map. `0x1800` is
+combined active energy, `0x180A` is exported reactive energy (Q-), and
+`0x1814` is imported reactive energy (Q+). `0x181E` is precise active import;
+`0x1828` is precise total active export, with L1/L2/L3 export at
+`0x182A`/`0x182C`/`0x182E`. The classic FC03 energy aliases are CT-side values,
+while the directional `net_*` fields repeat their corresponding import/export
+totals as on the physical meter.
 
 The full verified register layout — every address, description and multiplier, checked
 against a live-meter scan — is in [`docs/register-map.md`](docs/register-map.md).
@@ -192,7 +193,7 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
 9. **Sigen OEM registers** — confirm the storage reads FC04 `0x151C` for total active
    power (in kW, not W) and periodically reads FC03 `0xF114` for the identity handshake.
    The configured FC04 current and per-phase power positions follow the confirmed
-   `-0x0AF6` block offset, and the energy block follows the confirmed `+0x800` offset from
-   the classic energy registers, but both still require an on-site capture under load —
-   in particular whether `exp_ep` (export energy) behaves correctly, since it was never
-   observed non-zero in the source capture (no generation source on the test bench).
+   `-0x0AF6` block offset. The reverse-flow scan also confirms the physical energy image:
+   combined active energy, distinct Q+/Q- counters, and non-zero total and per-phase
+   export energy. Continue to capture the installation under load to verify its sign,
+   phase order, and scaling against the connected ND45.
