@@ -4,6 +4,10 @@ Temporary Modbus bridge: Lumel ND45 (Modbus TCP) → DTSU666 register map, serve
 either Modbus RTU or Modbus TCP (config-selectable) so a Sigenergy storage system can
 read it as a "Power Sensor".
 
+The output exposes both the standard DTSU666 holding-register map over FC03 and the
+Sigenergy OEM map over FC04. It also serves the FC03 identity string
+`Sigen Sensor TPX-CH` at `0xF100` and the observed `0x00001500` handshake at `0xF114`.
+
 ## Install (reComputer R1000, Ubuntu)
 ```bash
 sudo mkdir -p /opt/nd45_dtsu666 && sudo chown $USER /opt/nd45_dtsu666
@@ -110,3 +114,7 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
    field list and `_IDENTITY_REGISTER_ADDRS` in `dtsu_server.py` for the register mapping.
    If Sigenergy rejects the meter or misapplies scaling, check these against the DTSU666
    manual — this hasn't been confirmed against real Sigenergy behavior.
+9. **Sigen OEM registers** — confirm the storage reads FC04 `0x151C` for total active
+   power and periodically reads FC03 `0xF114` for the identity handshake. The configured
+   FC04 current and per-phase power positions follow the confirmed `-0x0AF6` block offset
+   but still require an on-site capture under load.

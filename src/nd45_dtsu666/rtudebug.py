@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterable
 
 from .app import build_pipeline, connect_with_retry
-from .config import AppConfig, RegisterMap, TargetSide
+from .config import AppConfig, RegisterMap, StaticIdentitySide, TargetSide
 from .dtsu_server import _IDENTITY_REGISTER_ADDRS, RtuActivity
 
 log = logging.getLogger("nd45_dtsu666.rtudebug")
@@ -32,35 +33,51 @@ _EXTRA_IDENTITY_ADDRS: dict[str, int] = {"baud": 0x002D, "addr": 0x002E}
 class RegisterNameIndex:
     """Maps a queried Modbus block (address, count) to overlapping register names."""
 
-    def __init__(self, spans: list[tuple[int, int, str]]) -> None:
-        # spans: (start_addr, word_len, name), kept sorted by start address.
-        self._spans = sorted(spans, key=lambda s: s[0])
+    def __init__(self, spans: list[tuple[int, int, int, str]]) -> None:
+        # spans: (function_code, start_addr, word_len, name).
+        self._spans = sorted(spans, key=lambda span: (span[0], span[1]))
 
     @classmethod
-    def build(cls, target: TargetSide) -> "RegisterNameIndex":
-        spans: list[tuple[int, int, str]] = []
-        for name, pt in target.points.items():
-            spans.append((pt.addr, _MEASUREMENT_WORDS, name))
+    def build(
+        cls,
+        target: TargetSide | Iterable[TargetSide],
+        sigen_identity: StaticIdentitySide | None = None,
+    ) -> "RegisterNameIndex":
+        targets = [target] if isinstance(target, TargetSide) else list(target)
+        spans: list[tuple[int, int, int, str]] = []
+        for side in targets:
+            for name, pt in side.points.items():
+                spans.append((side.function_code, pt.addr, _MEASUREMENT_WORDS, name))
         for name, addr in _IDENTITY_REGISTER_ADDRS.items():
-            spans.append((addr, _IDENTITY_WORDS, name))
+            spans.append((3, addr, _IDENTITY_WORDS, name))
         for name, addr in _EXTRA_IDENTITY_ADDRS.items():
-            spans.append((addr, _IDENTITY_WORDS, name))
+            spans.append((3, addr, _IDENTITY_WORDS, name))
+        if sigen_identity is not None:
+            for name, point in sigen_identity.points.items():
+                spans.append(
+                    (
+                        sigen_identity.function_code,
+                        point.addr,
+                        point.register_count,
+                        name,
+                    )
+                )
         return cls(spans)
 
-    def lookup(self, address: int, count: int) -> list[str]:
+    def lookup(self, address: int, count: int, function_code: int = 3) -> list[str]:
         """Names whose register range overlaps the block [address, address+count)."""
         end = address + count
         return [
             name
-            for start, words, name in self._spans
-            if start < end and address < start + words
+            for fc, start, words, name in self._spans
+            if fc == function_code and start < end and address < start + words
         ]
 
     def reference_lines(self) -> list[str]:
-        """One `addr (0xHHHH) name` line per known register, for a startup banner."""
+        """One function-code/address line per known register for a startup banner."""
         return [
-            f"  {start:>5} (0x{start:04X}) x{words}  {name}"
-            for start, words, name in self._spans
+            f"  FC{fc:02d} {start:>5} (0x{start:04X}) x{words}  {name}"
+            for fc, start, words, name in self._spans
         ]
 
 
@@ -78,7 +95,7 @@ class LoggingRtuActivity(RtuActivity):
 
     def record(self, fc: int, address: int, count: int, ts: float) -> None:
         super().record(fc, address, count, ts)
-        names = self._index.lookup(address, count)
+        names = self._index.lookup(address, count, function_code=fc)
         self._log.info(
             "READ FC%02d addr=%d (0x%04X) count=%d -> %s",
             fc,
@@ -93,7 +110,10 @@ async def run_rtudebug(
     config: AppConfig, registers: RegisterMap, stop_event: asyncio.Event
 ) -> None:
     """Run the bridge and log every DTSU register block read by Sigenergy."""
-    index = RegisterNameIndex.build(registers.dtsu_target)
+    index = RegisterNameIndex.build(
+        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        registers.dtsu_sigen_identity,
+    )
     activity = LoggingRtuActivity(index)
     pipe = build_pipeline(config, registers, stop_event, activity=activity)
 
@@ -105,7 +125,7 @@ async def run_rtudebug(
         dtsu.transport,
         where,
     )
-    log.info("DTSU register map (addr / words / name):")
+    log.info("DTSU/Sigen register map (function / addr / words / name):")
     for line in index.reference_lines():
         log.info("%s", line)
 

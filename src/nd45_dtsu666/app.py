@@ -107,10 +107,15 @@ def build_pipeline(
     """Wire poller + DTSU output server + fail-safe. Pass `activity` to record read requests."""
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
+    targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
     context = build_context(
-        registers.dtsu_target, config.dtsu.slave_id, activity=activity, dtsu_cfg=config.dtsu
+        targets,
+        config.dtsu.slave_id,
+        activity=activity,
+        dtsu_cfg=config.dtsu,
+        sigen_identity=registers.dtsu_sigen_identity,
     )
-    base_on_update = build_on_update(store, context, config.dtsu.slave_id, registers.dtsu_target)
+    base_on_update = build_on_update(store, context, config.dtsu.slave_id, targets)
     reporter = FaultReporter()
     heartbeat = Heartbeat()
 

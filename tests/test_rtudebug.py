@@ -8,7 +8,10 @@ from nd45_dtsu666.rtudebug import LoggingRtuActivity, RegisterNameIndex
 
 def _index():
     registers = load_registers("config/registers.json")
-    return RegisterNameIndex.build(registers.dtsu_target)
+    return RegisterNameIndex.build(
+        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        registers.dtsu_sigen_identity,
+    )
 
 
 def test_lookup_single_measurement_point():
@@ -34,6 +37,20 @@ def test_lookup_identity_register():
     idx = _index()
     # rev is the single-word identity register at 0x0000.
     assert idx.lookup(0x0000, 1) == ["rev"]
+
+
+def test_lookup_sigen_fc04_point_is_function_code_aware():
+    idx = _index()
+
+    assert idx.lookup(0x151C, 2, function_code=4) == ["p_total"]
+    assert idx.lookup(0x151C, 2, function_code=3) == []
+
+
+def test_lookup_sigen_identity_field():
+    idx = _index()
+
+    assert idx.lookup(0xF100, 20, function_code=3) == ["model_string"]
+    assert idx.lookup(0xF114, 2, function_code=3) == ["handshake_magic"]
 
 
 def test_lookup_unmapped_block_returns_empty():

@@ -36,7 +36,11 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
     assert pipe.store is not None
     assert len(pipe.coros) == 2  # poller + supervisor
     # activity was threaded into a recording datastore context
-    assert isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
+    slave = pipe.context[config.dtsu.slave_id]
+    assert isinstance(slave, RecordingSlaveContext)
+    assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
+    sigen_u_l1 = registers.dtsu_sigen_ext_target.points["u_l1"]
+    assert slave.getValues(4, sigen_u_l1.addr, count=2) == [0, 0]
 
     for coro in pipe.coros:  # never awaited in this test; close to keep output pristine
         coro.close()
