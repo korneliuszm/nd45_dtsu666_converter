@@ -15,7 +15,11 @@ def test_expand_static_values_preserves_configured_and_zero_fills_missing():
 
     required = {
         point.from_
-        for target in (registers.dtsu_target, registers.dtsu_sigen_ext_target)
+        for target in (
+            registers.dtsu_target,
+            registers.dtsu_sigen_ext_target,
+            registers.dtsu_sigen_ext_energy,
+        )
         for point in target.points.values()
     }
     assert set(values) == required
@@ -80,6 +84,41 @@ async def test_static_feeder_writes_both_maps_and_keeps_store_fresh():
     sigen = registers.dtsu_sigen_ext_target.points["u_l1"]
     sigen_regs = pipe.context[config.dtsu.slave_id].getValues(4, sigen.addr, count=2)
     assert registers_to_float(sigen_regs, "big", "big") == pytest.approx(9000.0)
+
+
+async def test_static_pipeline_serves_complete_reverse_flow_energy_image():
+    config = load_config("config/config.json")
+    registers = load_registers("config/registers.json")
+    stop = asyncio.Event()
+    pipe = build_static_pipeline(config, registers, stop, RtuActivity())
+    slave = pipe.context[config.dtsu.slave_id]
+    feeder = asyncio.create_task(pipe.coros[0])
+    try:
+        await asyncio.sleep(0.02)
+        stop.set()
+        await asyncio.wait_for(feeder, timeout=1.0)
+        values, _ = pipe.store.snapshot()
+        assert values["p_total"] == -60000.0
+        assert values["reactive_energy_total"] == 2.8
+        assert values["active_energy_total"] == pytest.approx(7.2)
+        assert values["net_imp_energy_total"] == pytest.approx(7.0)
+        assert values["net_exp_energy_total"] == pytest.approx(0.2)
+
+        assert registers_to_float(
+            slave.getValues(4, 0x151C, count=2), "big", "big"
+        ) == pytest.approx(-60.0)
+        assert registers_to_float(
+            slave.getValues(4, 0x1828, count=2), "big", "big"
+        ) == pytest.approx(0.2)
+        assert slave.getValues(4, 0x182A, count=6) == [0] * 6
+        assert registers_to_float(
+            slave.getValues(4, 0x1830, count=2), "big", "big"
+        ) == pytest.approx(0.2)
+    finally:
+        stop.set()
+        if not feeder.done():
+            await asyncio.wait_for(feeder, timeout=1.0)
+        pipe.coros[1].close()
 
 
 def test_static_pipeline_contains_no_nd45_client_or_poller():

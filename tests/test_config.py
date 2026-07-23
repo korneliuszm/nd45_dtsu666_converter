@@ -173,7 +173,12 @@ def test_load_config_reads_seed():
     assert cfg.dtsu.identity.ur_at == 10
     assert cfg.static_debug.feed_interval_s == 0.5
     assert cfg.static_debug.values["u_l1"] == 9000.0
-    assert cfg.static_debug.values["p_total"] == 60000.0
+    assert cfg.static_debug.values["p_total"] == -60000.0
+    assert cfg.static_debug.values["pf_total"] == -0.95
+    assert cfg.static_debug.values["s_total"] == 60300.0
+    assert cfg.static_debug.values["imp_energy_total"] == 7.0
+    assert cfg.static_debug.values["exp_energy_total"] == 0.2
+    assert cfg.static_debug.values["reactive_energy_total"] == 2.8
 
 
 def test_static_debug_rejects_unknown_value_name():
@@ -191,6 +196,27 @@ def test_static_debug_accepts_apparent_power_values():
 
     assert configured.values["s_l1"] == 499.0
     assert configured.values["s_total"] == 1900.0
+
+
+def test_static_debug_accepts_total_reactive_energy():
+    configured = StaticDebugConf(values={"reactive_energy_total": 2.8})
+    assert configured.values["reactive_energy_total"] == 2.8
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "active_energy_total",
+        "net_imp_energy_total",
+        "net_exp_energy_total",
+        "exp_energy_l1",
+        "exp_energy_l2",
+        "exp_energy_l3",
+    ],
+)
+def test_static_debug_rejects_derived_or_constant_zero_energy_inputs(name):
+    with pytest.raises(ValidationError, match="unknown static debug value"):
+        StaticDebugConf(values={name: 1.0})
 
 
 @pytest.mark.parametrize("value", [True, "230.0", math.nan, math.inf, -math.inf])
