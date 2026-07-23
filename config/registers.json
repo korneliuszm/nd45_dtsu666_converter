@@ -36,7 +36,11 @@
       "exp_energy_total": {"compose": [928, 930], "factors": [1000, 1]},
       "exp_energy_l1": {"compose": [916, 918], "factors": [1000, 1]},
       "exp_energy_l2": {"compose": [920, 922], "factors": [1000, 1]},
-      "exp_energy_l3": {"compose": [924, 926], "factors": [1000, 1]}
+      "exp_energy_l3": {"compose": [924, 926], "factors": [1000, 1]},
+      "reactive_energy_total": {
+        "compose": [944, 946, 960, 962, 976, 978, 992, 994],
+        "factors": [1000, 1, 1000, 1, 1000, 1, 1000, 1]
+      }
     }
   },
   "dtsu_target": {

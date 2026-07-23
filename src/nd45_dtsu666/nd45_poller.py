@@ -13,8 +13,9 @@ from .config import SourceSide
 log = logging.getLogger(__name__)
 
 # Fixed read blocks (base_addr, register_count) covering every mapped ND45 point.
-# Group 1: 200 ms measurements 50..145; Group 2: frequency 818..819; Group 3: energy 900..931.
-READ_GROUPS: list[tuple[int, int]] = [(50, 96), (818, 2), (900, 32)]
+# Group 1: measurements 50..145; Group 2: frequency 818..819;
+# Group 3: active and four-quadrant reactive energy 900..995.
+READ_GROUPS: list[tuple[int, int]] = [(50, 96), (818, 2), (900, 96)]
 
 OPTIONAL_INVALID_ZERO_POINTS = frozenset(
     {"pf_l1", "pf_l2", "pf_l3", "pf_total"}
@@ -26,16 +27,12 @@ class PollError(RuntimeError):
 
 
 def compute_derived(values: dict[str, float]) -> None:
-    """Fill in canonical values derived from the raw ND45 readings, in place.
-
-    Net import/export energy is import minus export, floored at zero.
-    Apparent power is not derived here: live mode reads the ND45 measurements
-    directly from registers 60, 84, 108, and 132.
-    """
+    """Fill canonical physical-meter energy aliases in place."""
     imp = values.get("imp_energy_total", 0.0)
     exp = values.get("exp_energy_total", 0.0)
-    values["net_imp_energy_total"] = max(imp - exp, 0.0)
-    values["net_exp_energy_total"] = max(exp - imp, 0.0)
+    values["active_energy_total"] = imp + exp
+    values["net_imp_energy_total"] = imp
+    values["net_exp_energy_total"] = exp
 
 
 def _source_point_addresses(source: SourceSide) -> set[int]:

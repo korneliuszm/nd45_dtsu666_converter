@@ -8,6 +8,7 @@ from nd45_dtsu666.config import SourcePoint, SourceSide, load_registers
 from nd45_dtsu666.nd45_poller import (
     PollError,
     READ_GROUPS,
+    compute_derived,
     extract_registers,
     poll_once,
     run_poller,
@@ -99,6 +100,10 @@ async def test_poll_once_decodes_points():
         920: 0.0, 922: 4.0,     # exp energy L2 -> 4 kWh
         924: 0.0, 926: 5.0,     # exp energy L3 -> 5 kWh
         928: 0.0, 930: 12.0,    # exp energy total -> 12 kWh
+        944: 1.0, 946: 10.0,    # imported inductive -> 1010 kvarh
+        960: 0.0, 962: 20.0,    # exported inductive -> 20 kvarh
+        976: 2.0, 978: 30.0,    # imported capacitive -> 2030 kvarh
+        992: 0.0, 994: 40.0,    # exported capacitive -> 40 kvarh
     })
     client = FakeClient(image)
     values = await poll_once(client, src, slave=1)
@@ -113,8 +118,23 @@ async def test_poll_once_decodes_points():
     assert values["exp_energy_l2"] == pytest.approx(4.0, rel=1e-5)
     assert values["exp_energy_l3"] == pytest.approx(5.0, rel=1e-5)
     assert values["exp_energy_total"] == pytest.approx(12.0, rel=1e-5)
-    assert values["net_imp_energy_total"] == pytest.approx(2333.0, rel=1e-5)
-    assert values["net_exp_energy_total"] == pytest.approx(0.0, abs=1e-9)
+    assert values["reactive_energy_total"] == pytest.approx(3100.0, rel=1e-5)
+    assert values["active_energy_total"] == pytest.approx(2357.0, rel=1e-5)
+    assert values["net_imp_energy_total"] == pytest.approx(2345.0, rel=1e-5)
+    assert values["net_exp_energy_total"] == pytest.approx(12.0, rel=1e-5)
+
+
+def test_compute_derived_matches_physical_directional_aliases():
+    values = {
+        "imp_energy_total": 7.0078125,
+        "exp_energy_total": 0.19921875,
+    }
+
+    compute_derived(values)
+
+    assert values["active_energy_total"] == pytest.approx(7.20703125)
+    assert values["net_imp_energy_total"] == pytest.approx(7.0078125)
+    assert values["net_exp_energy_total"] == pytest.approx(0.19921875)
 
 
 def test_extract_registers_raises_for_uncovered_address():
@@ -152,6 +172,7 @@ async def test_poll_once_substitutes_zero_only_for_invalid_power_factor():
         (52, float("inf"), "i_l1"),
         (128, 3e20, "p_total"),
         (912, 3e20, "imp_energy_total"),
+        (944, 3e20, "reactive_energy_total"),
     ],
 )
 async def test_poll_once_rejects_invalid_critical_value(address, value, point):

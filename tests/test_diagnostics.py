@@ -36,5 +36,6 @@ def test_synthetic_values_cover_every_dtsu_target_source():
     values = _synthetic_values(reg)
     for key, pt in reg.dtsu_target.points.items():
         assert pt.from_ in values, f"selftest serves nothing for {key} (from {pt.from_})"
-    assert values["net_imp_energy_total"] == pytest.approx(1234.5 - 67.8)
-    assert values["net_exp_energy_total"] == 0.0
+    assert values["active_energy_total"] == pytest.approx(1234.5 + 67.8)
+    assert values["net_imp_energy_total"] == pytest.approx(1234.5)
+    assert values["net_exp_energy_total"] == pytest.approx(67.8)
