@@ -19,7 +19,6 @@ from .config import (
     AppConfig,
     RegisterMap,
     StaticIdentitySide,
-    StaticZeroSide,
     TargetSide,
 )
 from .dtsu_server import _IDENTITY_REGISTER_ADDRS, RtuActivity
@@ -48,7 +47,6 @@ class RegisterNameIndex:
         cls,
         target: TargetSide | Iterable[TargetSide],
         sigen_identity: StaticIdentitySide | None = None,
-        sigen_zero_ranges: StaticZeroSide | None = None,
     ) -> "RegisterNameIndex":
         targets = [target] if isinstance(target, TargetSide) else list(target)
         spans: list[tuple[int, int, int, str]] = []
@@ -67,16 +65,6 @@ class RegisterNameIndex:
                         point.addr,
                         point.register_count,
                         name,
-                    )
-                )
-        if sigen_zero_ranges is not None:
-            for item in sigen_zero_ranges.ranges:
-                spans.append(
-                    (
-                        sigen_zero_ranges.function_code,
-                        item.addr,
-                        item.count,
-                        item.name,
                     )
                 )
         return cls(spans)
@@ -128,9 +116,8 @@ async def run_rtudebug(
 ) -> None:
     """Run the bridge and log every DTSU register block read by Sigenergy."""
     index = RegisterNameIndex.build(
-        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        [registers.dtsu_target, registers.dtsu_sigen_ext_target, registers.dtsu_sigen_ext_energy],
         registers.dtsu_sigen_identity,
-        registers.dtsu_sigen_zero_ranges,
     )
     activity = LoggingRtuActivity(index)
     pipe = build_pipeline(config, registers, stop_event, activity=activity)

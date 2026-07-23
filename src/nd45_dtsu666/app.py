@@ -30,10 +30,12 @@ class Pipeline:
     heartbeat: Heartbeat
 
 
-def build_on_update(store, context, slave_id, target) -> Callable[[dict, float], None]:
+def build_on_update(
+    store, context, slave_id, target, ct_ratio: float = 1.0
+) -> Callable[[dict, float], None]:
     def on_update(values: dict[str, float], ts: float) -> None:
         store.update(values, ts)
-        update_datastore(context, slave_id, values, target)
+        update_datastore(context, slave_id, values, target, ct_ratio=ct_ratio)
 
     return on_update
 
@@ -107,16 +109,21 @@ def build_pipeline(
     """Wire poller + DTSU output server + fail-safe. Pass `activity` to record read requests."""
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
-    targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
+    targets = [
+        registers.dtsu_target,
+        registers.dtsu_sigen_ext_target,
+        registers.dtsu_sigen_ext_energy,
+    ]
     context = build_context(
         targets,
         config.dtsu.slave_id,
         activity=activity,
         dtsu_cfg=config.dtsu,
         sigen_identity=registers.dtsu_sigen_identity,
-        sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
     )
-    base_on_update = build_on_update(store, context, config.dtsu.slave_id, targets)
+    base_on_update = build_on_update(
+        store, context, config.dtsu.slave_id, targets, ct_ratio=config.dtsu.identity.ir_at
+    )
     reporter = FaultReporter()
     heartbeat = Heartbeat()
 

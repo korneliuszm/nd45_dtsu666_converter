@@ -25,7 +25,11 @@ def expand_static_values(
     registers: RegisterMap, configured: dict[str, float]
 ) -> dict[str, float]:
     """Return every canonical value consumed by an output map, zero-filling omissions."""
-    targets = (registers.dtsu_target, registers.dtsu_sigen_ext_target)
+    targets = (
+        registers.dtsu_target,
+        registers.dtsu_sigen_ext_target,
+        registers.dtsu_sigen_ext_energy,
+    )
     required = {
         point.from_
         for target in targets
@@ -43,14 +47,17 @@ def build_static_pipeline(
     """Build a static feeder plus the normal output server supervisor."""
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
-    targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
+    targets = [
+        registers.dtsu_target,
+        registers.dtsu_sigen_ext_target,
+        registers.dtsu_sigen_ext_energy,
+    ]
     context = build_context(
         targets,
         config.dtsu.slave_id,
         activity=activity,
         dtsu_cfg=config.dtsu,
         sigen_identity=registers.dtsu_sigen_identity,
-        sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
     )
     values = expand_static_values(registers, config.static_debug.values)
 
@@ -58,7 +65,10 @@ def build_static_pipeline(
         loop = asyncio.get_running_loop()
         while not stop_event.is_set():
             store.update(values, loop.time())
-            update_datastore(context, config.dtsu.slave_id, values, targets)
+            update_datastore(
+                context, config.dtsu.slave_id, values, targets,
+                ct_ratio=config.dtsu.identity.ir_at,
+            )
             try:
                 await asyncio.wait_for(
                     stop_event.wait(),

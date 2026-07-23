@@ -57,13 +57,16 @@ def _run_selftest(config, registers) -> int:
     async def _main() -> None:
         store = CanonicalStore()
         gate = HealthGate(config.safety.max_data_age_s)
-        targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
+        targets = [
+            registers.dtsu_target,
+            registers.dtsu_sigen_ext_target,
+            registers.dtsu_sigen_ext_energy,
+        ]
         context = build_context(
             targets,
             config.dtsu.slave_id,
             dtsu_cfg=config.dtsu,
             sigen_identity=registers.dtsu_sigen_identity,
-            sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
         )
         values = _synthetic_values(registers)
         stop = asyncio.Event()
@@ -71,7 +74,10 @@ def _run_selftest(config, registers) -> int:
         async def _feeder() -> None:
             while not stop.is_set():
                 store.update(values, asyncio.get_running_loop().time())
-                update_datastore(context, config.dtsu.slave_id, values, targets)
+                update_datastore(
+                    context, config.dtsu.slave_id, values, targets,
+                    ct_ratio=config.dtsu.identity.ir_at,
+                )
                 await asyncio.sleep(0.5)
 
         print(

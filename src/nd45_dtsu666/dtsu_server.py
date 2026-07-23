@@ -18,7 +18,7 @@ from pymodbus.framer.socket_framer import ModbusSocketFramer
 from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from .codec import encode_point
-from .config import DtsuConf, StaticIdentitySide, StaticZeroSide, TargetSide
+from .config import DtsuConf, StaticIdentitySide, TargetSide
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ _IDENTITY_REGISTER_ADDRS: dict[str, int] = {
     "ucode": 0x0001,  # UCode    - programming code
     "clr_e": 0x0002,  # CLr.E    - energy clear command
     "net": 0x0003,  # net      - network mode: 0 = 3P4W, 1 = 3P3W
-    "ir_at": 0x0006,  # IrAt     - current transformer ratio, x0.1 -> 10 = ratio 1.0
+    "ir_at": 0x0006,  # IrAt     - CT ratio, used directly (raw value == ratio)
     "ur_at": 0x0007,  # UrAt     - voltage transformer ratio, x0.1 -> 10 = ratio 1.0
     "disp": 0x000A,  # Disp     - display rotation time
     "b_lcd": 0x000B,  # B.LCD    - backlight time
@@ -61,6 +61,8 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
         baud_code = _BAUD_CODES[9600]
     slave.setValues(_HOLDING_FC, 0x002D, [baud_code])  # bAud
     slave.setValues(_HOLDING_FC, 0x002E, [slave_id])  # Addr
+    # Observed on a live meter read by Sigenergy every ~5.4s; always 0.
+    slave.setValues(_HOLDING_FC, 0x0046, [0])
 
 
 def write_sigen_identity(
@@ -147,7 +149,6 @@ def build_context(
     activity: RtuActivity | None = None,
     dtsu_cfg: DtsuConf | None = None,
     sigen_identity: StaticIdentitySide | None = None,
-    sigen_zero_ranges: StaticZeroSide | None = None,
 ) -> ModbusServerContext:
     target_list = _targets(target)
     max_addresses = {3: 0, 4: 0}
@@ -167,11 +168,6 @@ def build_context(
                 default=0,
             ),
         )
-    if sigen_zero_ranges is not None:
-        max_addresses[4] = max(
-            max_addresses[4],
-            max((item.end_addr for item in sigen_zero_ranges.ranges), default=0),
-        )
     holding = ModbusSequentialDataBlock(0, [0] * (max_addresses[3] + 1))
     inputs = ModbusSequentialDataBlock(0, [0] * (max_addresses[4] + 1))
     if activity is not None:
@@ -190,7 +186,16 @@ def update_datastore(
     slave_id: int,
     canonical: dict[str, float],
     target: TargetSide | Iterable[TargetSide],
+    ct_ratio: float = 1.0,
 ) -> None:
+    """Encode canonical SI values into every target's registers.
+
+    `ct_ratio` is the configured CT ratio (`dtsu.identity.ir_at`): points with
+    `divide_by_ct` (the classic DTSU666 map's secondary-side current, power,
+    and energy points) are divided by it before scaling, since the ND45
+    source and Sigen OEM map (`dtsu_sigen_ext_target`/`_ext_energy`) carry
+    primary-side values. See docs/superpowers/specs for the CT-ratio design.
+    """
     slave = context[slave_id]
     for side in _targets(target):
         wo, bo = side.word_order, side.byte_order
@@ -198,6 +203,8 @@ def update_datastore(
             si = canonical.get(pt.from_)
             if si is None:
                 continue
+            if pt.divide_by_ct:
+                si = si / ct_ratio
             regs = encode_point(si, pt.scale, pt.sign, pt.offset, wo, bo)
             slave.setValues(side.function_code, pt.addr, regs)
 
