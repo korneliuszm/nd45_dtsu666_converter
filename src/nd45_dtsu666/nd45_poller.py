@@ -74,6 +74,13 @@ async def poll_once(
         rr = await client.read_holding_registers(base, count, slave=slave)
         if rr.isError():
             raise PollError(f"ND45 read error at {base}: {rr}")
+        # A short frame would otherwise surface as a cryptic KeyError from
+        # extract_registers for whichever point falls in the missing tail;
+        # name it explicitly so the log points at the real cause.
+        if len(rr.registers) < count:
+            raise PollError(
+                f"ND45 short read at {base}: got {len(rr.registers)} of {count} registers"
+            )
         groups.append((base, rr.registers))
 
     wo, bo = source.word_order, source.byte_order

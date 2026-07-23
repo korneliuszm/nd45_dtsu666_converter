@@ -56,6 +56,22 @@ class SourcePoint(BaseModel):
     offset: float = 0.0
     sign: int = 1
 
+    @model_validator(mode="after")
+    def _check_shape(self) -> "SourcePoint":
+        if self.compose is not None:
+            if self.addr is not None:
+                raise ValueError("source point cannot set both 'addr' and 'compose'")
+            if len(self.compose) < 1:
+                raise ValueError("source point 'compose' must list at least one address")
+            # factors is optional (poll_once defaults it to all-1.0), but a
+            # provided list that doesn't line up with compose would be silently
+            # truncated by zip() and quietly under-count energy -- reject it.
+            if self.factors is not None and len(self.factors) != len(self.compose):
+                raise ValueError("source point 'factors' length must match 'compose' length")
+        elif self.addr is None:
+            raise ValueError("source point must set either 'addr' or 'compose'")
+        return self
+
 
 class TargetPoint(BaseModel):
     addr: int

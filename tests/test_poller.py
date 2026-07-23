@@ -116,6 +116,19 @@ def test_extract_registers_raises_for_uncovered_address():
         extract_registers(999, groups)
 
 
+class _ShortReadClient:
+    """Returns fewer registers than requested (truncated Modbus frame)."""
+
+    async def read_holding_registers(self, address, count, slave=0):
+        return FakeResponse([0] * (count - 1))
+
+
+async def test_poll_once_raises_clear_error_on_short_read():
+    src = load_registers("config/registers.json").nd45_source
+    with pytest.raises(Exception, match="short read"):
+        await poll_once(_ShortReadClient(), src, slave=1)
+
+
 async def test_poll_once_substitutes_zero_for_nan():
     # NaN fails every >= comparison, so a plain abs(si) >= OVERRANGE guard
     # would let it through to Sigenergy -- it must be masked to 0.0 like
