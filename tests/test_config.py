@@ -6,6 +6,7 @@ from nd45_dtsu666.config import DtsuConf, DtsuIdentityConf, DtsuRtuConf, DtsuTcp
 
 def test_load_registers_reads_seed(tmp_path):
     reg = load_registers("config/registers.json")
+    assert reg.dtsu_target.function_code == 3
     assert reg.nd45_source.points["u_l1"].addr == 50
     assert reg.dtsu_target.points["u_l1"].addr == 8198
     assert reg.dtsu_target.points["u_l1"].from_ == "u_l1"
@@ -13,6 +14,35 @@ def test_load_registers_reads_seed(tmp_path):
     # energy is a two-register compose on the ND45 side
     assert reg.nd45_source.points["imp_energy_total"].compose == [912, 914]
     assert reg.nd45_source.points["imp_energy_total"].factors == [1000, 1]
+
+
+def test_load_registers_reads_sigen_measurement_map():
+    reg = load_registers("config/registers.json")
+    sigen = reg.dtsu_sigen_ext_target
+
+    assert sigen.function_code == 4
+    assert sigen.word_order == "big"
+    assert sigen.byte_order == "big"
+    for name, point in sigen.points.items():
+        classic = reg.dtsu_target.points[name]
+        assert point.addr == classic.addr - 2806
+        assert point.scale == 1
+        assert point.sign == classic.sign
+
+
+def test_load_registers_reads_sigen_identity():
+    identity = load_registers("config/registers.json").dtsu_sigen_identity
+
+    assert identity.function_code == 3
+    model = identity.points["model_string"]
+    assert model.addr == 0xF100
+    assert model.type == "ascii"
+    assert model.length == 20
+    assert model.static_value == "Sigen Sensor TPX-CH\u0000"
+    handshake = identity.points["handshake_magic"]
+    assert handshake.addr == 0xF114
+    assert handshake.type == "uint32"
+    assert handshake.static_value == 5376
 
 
 def test_load_config_reads_seed():

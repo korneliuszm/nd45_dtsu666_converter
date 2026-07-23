@@ -37,12 +37,68 @@ class SourceSide(BaseModel):
 class TargetSide(BaseModel):
     word_order: str = "big"
     byte_order: str = "big"
+    function_code: Literal[3, 4] = 3
     points: dict[str, TargetPoint]
+
+    @model_validator(mode="after")
+    def _check_point_ranges_do_not_overlap(self) -> "TargetSide":
+        occupied: dict[int, str] = {}
+        for name, point in self.points.items():
+            for addr in (point.addr, point.addr + 1):
+                if addr in occupied:
+                    raise ValueError(
+                        f"target points {occupied[addr]!r} and {name!r} overlap at {addr}"
+                    )
+                occupied[addr] = name
+        return self
+
+
+class StaticIdentityPoint(BaseModel):
+    addr: int
+    type: Literal["ascii", "uint32"]
+    static_value: str | int
+    length: int | None = None
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> "StaticIdentityPoint":
+        if self.type == "ascii":
+            if not isinstance(self.static_value, str) or self.length is None or self.length < 1:
+                raise ValueError(
+                    "ascii static point requires a string value and positive register length"
+                )
+            try:
+                byte_length = len(self.static_value.encode("ascii"))
+            except UnicodeEncodeError as exc:
+                raise ValueError("ascii static value must contain ASCII characters only") from exc
+            if byte_length > self.length * 2:
+                raise ValueError("ascii static value does not fit configured register length")
+        else:
+            if (
+                not isinstance(self.static_value, int)
+                or isinstance(self.static_value, bool)
+                or self.length is not None
+                or not 0 <= self.static_value <= 0xFFFFFFFF
+            ):
+                raise ValueError(
+                    "uint32 static point requires a 0..0xFFFFFFFF integer and no length"
+                )
+        return self
+
+    @property
+    def register_count(self) -> int:
+        return self.length if self.type == "ascii" else 2
+
+
+class StaticIdentitySide(BaseModel):
+    function_code: Literal[3] = 3
+    points: dict[str, StaticIdentityPoint]
 
 
 class RegisterMap(BaseModel):
     nd45_source: SourceSide
     dtsu_target: TargetSide
+    dtsu_sigen_ext_target: TargetSide
+    dtsu_sigen_identity: StaticIdentitySide
 
 
 class Nd45Conf(BaseModel):

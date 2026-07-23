@@ -36,6 +36,7 @@
     }
   },
   "dtsu_target": {
+    "function_code": 3,
     "word_order": "big",
     "byte_order": "big",
     "points": {
@@ -71,6 +72,51 @@
       "exp_ep_l2":  {"addr": 4140, "from": "exp_energy_l2", "scale": 1},
       "exp_ep_l3":  {"addr": 4142, "from": "exp_energy_l3", "scale": 1},
       "net_exp_ep": {"addr": 4144, "from": "net_exp_energy_total", "scale": 1}
+    }
+  },
+  "dtsu_sigen_ext_target": {
+    "word_order": "big",
+    "byte_order": "big",
+    "function_code": 4,
+    "points": {
+      "u_l12":   {"addr": 5386, "from": "u_l12", "scale": 1},
+      "u_l23":   {"addr": 5388, "from": "u_l23", "scale": 1},
+      "u_l31":   {"addr": 5390, "from": "u_l31", "scale": 1},
+      "u_l1":    {"addr": 5392, "from": "u_l1", "scale": 1},
+      "u_l2":    {"addr": 5394, "from": "u_l2", "scale": 1},
+      "u_l3":    {"addr": 5396, "from": "u_l3", "scale": 1},
+      "i_l1":    {"addr": 5398, "from": "i_l1", "scale": 1},
+      "i_l2":    {"addr": 5400, "from": "i_l2", "scale": 1},
+      "i_l3":    {"addr": 5402, "from": "i_l3", "scale": 1},
+      "p_total": {"addr": 5404, "from": "p_total", "scale": 1, "sign": 1},
+      "p_l1":    {"addr": 5406, "from": "p_l1", "scale": 1, "sign": 1},
+      "p_l2":    {"addr": 5408, "from": "p_l2", "scale": 1, "sign": 1},
+      "p_l3":    {"addr": 5410, "from": "p_l3", "scale": 1, "sign": 1},
+      "q_total": {"addr": 5412, "from": "q_total", "scale": 1},
+      "q_l1":    {"addr": 5414, "from": "q_l1", "scale": 1},
+      "q_l2":    {"addr": 5416, "from": "q_l2", "scale": 1},
+      "q_l3":    {"addr": 5418, "from": "q_l3", "scale": 1},
+      "pf_total":{"addr": 5428, "from": "pf_total", "scale": 1},
+      "pf_l1":   {"addr": 5430, "from": "pf_l1", "scale": 1},
+      "pf_l2":   {"addr": 5432, "from": "pf_l2", "scale": 1},
+      "pf_l3":   {"addr": 5434, "from": "pf_l3", "scale": 1},
+      "freq":    {"addr": 5454, "from": "freq", "scale": 1}
+    }
+  },
+  "dtsu_sigen_identity": {
+    "function_code": 3,
+    "points": {
+      "model_string": {
+        "addr": 61696,
+        "type": "ascii",
+        "length": 20,
+        "static_value": "Sigen Sensor TPX-CH\u0000"
+      },
+      "handshake_magic": {
+        "addr": 61716,
+        "type": "uint32",
+        "static_value": 5376
+      }
     }
   }
 }
