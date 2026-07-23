@@ -26,14 +26,22 @@ def _direction(p_total: float | None) -> str:
     return "ZERO"
 
 
-def render_dashboard(canonical, age, healthy, activity, slave_id, now) -> str:
+def render_dashboard(
+    canonical,
+    age,
+    healthy,
+    activity,
+    slave_id,
+    now,
+    source_label: str = "ND45",
+) -> str:
     """Render the two-panel dashboard (ND45 values + Sigenergy read activity)."""
     state = "SERVING" if healthy else "FAIL-SAFE SILENT"
     poll = "OK" if healthy else "STALE"
     lines = [
-        f" ND45 -> DTSU666  monitor                     state: {state}",
+        f" {source_label} -> DTSU666  monitor                     state: {state}",
         _SEP,
-        f" ND45 (source)                    data age: {age:.2f}s   poll: {poll}",
+        f" {source_label} (source)                    data age: {age:.2f}s   poll: {poll}",
         f"   {'Phase':<7}{'U [V]':>9}{'I [A]':>9}{'P [W]':>10}{'Q [var]':>10}{'PF':>8}",
     ]
     for phase, suf in (("L1", "l1"), ("L2", "l2"), ("L3", "l3")):

@@ -3,10 +3,49 @@
 from __future__ import annotations
 
 import json
+import math
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+STATIC_DEBUG_VALUE_KEYS = frozenset(
+    {
+        "u_l1",
+        "u_l2",
+        "u_l3",
+        "u_l12",
+        "u_l23",
+        "u_l31",
+        "i_l1",
+        "i_l2",
+        "i_l3",
+        "p_l1",
+        "p_l2",
+        "p_l3",
+        "p_total",
+        "q_l1",
+        "q_l2",
+        "q_l3",
+        "q_total",
+        "pf_l1",
+        "pf_l2",
+        "pf_l3",
+        "pf_total",
+        "freq",
+        "imp_energy_total",
+        "imp_energy_l1",
+        "imp_energy_l2",
+        "imp_energy_l3",
+        "exp_energy_total",
+        "exp_energy_l1",
+        "exp_energy_l2",
+        "exp_energy_l3",
+        "net_imp_energy_total",
+        "net_exp_energy_total",
+    }
+)
 
 
 class SourcePoint(BaseModel):
@@ -192,10 +231,39 @@ class SafetyConf(BaseModel):
     min_restart_interval_s: float = 5.0  # min gap between DTSU server (re)starts (anti-flap)
 
 
+class StaticDebugConf(BaseModel):
+    feed_interval_s: float = Field(default=0.5, gt=0)
+    values: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("values", mode="before")
+    @classmethod
+    def _validate_values(cls, values):
+        if not isinstance(values, dict):
+            raise ValueError("static debug values must be an object")
+        unknown = sorted(set(values) - STATIC_DEBUG_VALUE_KEYS)
+        if unknown:
+            raise ValueError(f"unknown static debug value(s): {', '.join(unknown)}")
+        validated: dict[str, float] = {}
+        for name, value in values.items():
+            if type(value) not in (int, float) or not math.isfinite(float(value)):
+                raise ValueError(f"static debug value {name!r} must be a finite number")
+            validated[name] = float(value)
+        return validated
+
+
 class AppConfig(BaseModel):
     nd45: Nd45Conf
     dtsu: DtsuConf
     safety: SafetyConf = SafetyConf()
+    static_debug: StaticDebugConf = StaticDebugConf()
+
+    @model_validator(mode="after")
+    def _check_static_debug_freshness(self) -> "AppConfig":
+        if self.static_debug.feed_interval_s >= self.safety.max_data_age_s:
+            raise ValueError(
+                "static_debug.feed_interval_s must be shorter than safety.max_data_age_s"
+            )
+        return self
 
 
 def load_registers(path: str) -> RegisterMap:

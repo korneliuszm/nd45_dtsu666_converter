@@ -50,6 +50,21 @@ def test_dashboard_handles_missing_values_without_crashing():
     assert "L1" in out  # phase rows still render with placeholders
 
 
+def test_dashboard_can_label_static_debug_source():
+    out = render_dashboard(
+        _sample_canonical(),
+        age=0.1,
+        healthy=True,
+        activity=RtuActivity(),
+        slave_id=10,
+        now=100.0,
+        source_label="STATIC DEBUG",
+    )
+
+    assert "STATIC DEBUG" in out
+    assert "ND45 (source)" not in out
+
+
 async def test_run_monitor_returns_cleanly_when_never_connected(monkeypatch):
     # Locks the not-connected early-return wiring: coros closed (no
     # "coroutine never awaited" warnings), client closed, prompt return --

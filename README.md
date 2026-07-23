@@ -78,6 +78,35 @@ capture:
 python -m nd45_dtsu666 rtudebug > rtu_debug.log 2>&1   # Ctrl-C to quit
 ```
 
+## Static debug values for Sigenergy
+
+Use `static` when rapidly changing ND45 measurements make commissioning hard.
+This mode does not connect to the ND45. It continuously serves the fixed values
+from `static_debug.values` in `config/config.json` through the same classic
+FC03 and Sigen FC04 maps as the live bridge:
+
+```bash
+python -m nd45_dtsu666 static
+```
+
+The dashboard is labeled `STATIC DEBUG` and still shows the blocks requested by
+Sigenergy. Edit the JSON values before startup; omitted measurements are served
+as zero. Values must be finite JSON numbers, and unknown names stop startup so
+spelling mistakes cannot silently produce zeros.
+
+Only one process can own an RTU serial port. Stop the normal service or monitor
+before starting static mode:
+
+```bash
+sudo systemctl stop nd45-dtsu666
+python -m nd45_dtsu666 static
+# Ctrl-C when finished
+sudo systemctl start nd45-dtsu666
+```
+
+Static mode is strictly opt-in: the `run`, `monitor`, `rtudebug`, and `selftest`
+commands continue to use their existing data sources.
+
 ## Run as a service
 ```bash
 sudo cp systemd/nd45-dtsu666.service /etc/systemd/system/

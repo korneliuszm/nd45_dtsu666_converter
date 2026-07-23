@@ -1,7 +1,20 @@
+import math
+
 import pytest
 from pydantic import ValidationError
 
-from nd45_dtsu666.config import DtsuConf, DtsuIdentityConf, DtsuRtuConf, DtsuTcpConf, load_config, load_registers
+from nd45_dtsu666.config import (
+    AppConfig,
+    DtsuConf,
+    DtsuIdentityConf,
+    DtsuRtuConf,
+    DtsuTcpConf,
+    Nd45Conf,
+    SafetyConf,
+    StaticDebugConf,
+    load_config,
+    load_registers,
+)
 
 
 def test_load_registers_reads_seed(tmp_path):
@@ -70,6 +83,34 @@ def test_load_config_reads_seed():
     assert cfg.dtsu.identity.ucode == 701
     assert cfg.dtsu.identity.ir_at == 200
     assert cfg.dtsu.identity.ur_at == 10
+    assert cfg.static_debug.feed_interval_s == 0.5
+    assert cfg.static_debug.values["u_l1"] == 9000.0
+    assert cfg.static_debug.values["p_total"] == 60000.0
+
+
+def test_static_debug_rejects_unknown_value_name():
+    with pytest.raises(ValidationError, match="unknown static debug value"):
+        StaticDebugConf(values={"u_l1_typo": 230.0})
+
+
+@pytest.mark.parametrize("value", [True, "230.0", math.nan, math.inf, -math.inf])
+def test_static_debug_rejects_non_numeric_or_non_finite_values(value):
+    with pytest.raises(ValidationError, match="finite number"):
+        StaticDebugConf(values={"u_l1": value})
+
+
+def test_static_debug_feed_interval_must_be_shorter_than_max_data_age():
+    with pytest.raises(ValidationError, match="feed_interval_s"):
+        AppConfig(
+            nd45=Nd45Conf(host="127.0.0.1"),
+            dtsu=DtsuConf(
+                transport="rtu",
+                slave_id=1,
+                rtu=DtsuRtuConf(port="/dev/null"),
+            ),
+            safety=SafetyConf(max_data_age_s=0.5),
+            static_debug=StaticDebugConf(feed_interval_s=0.5),
+        )
 
 
 def test_target_point_defaults(tmp_path):

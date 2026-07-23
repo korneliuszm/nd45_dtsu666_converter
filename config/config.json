@@ -1,5 +1,32 @@
 {
   "nd45":   {"host": "192.168.1.10", "port": 502, "unit_id": 1, "poll_interval_s": 0.3, "timeout_s": 1.0, "reconnect_delay_s": 1.0, "reconnect_delay_max_s": 30.0},
   "dtsu":   {"transport": "rtu", "slave_id": 10, "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10, "protocol": 0}, "rtu": {"port": "/dev/ttyAMA2", "baudrate": 9600, "parity": "N", "stopbits": 1}, "tcp": {"host": "0.0.0.0", "port": 502}},
-  "safety": {"max_data_age_s": 3.0, "check_interval_s": 0.5, "min_restart_interval_s": 5.0}
+  "safety": {"max_data_age_s": 3.0, "check_interval_s": 0.5, "min_restart_interval_s": 5.0},
+  "static_debug": {
+    "feed_interval_s": 0.5,
+    "values": {
+      "u_l1": 9000.0,
+      "u_l2": 9000.0,
+      "u_l3": 9000.0,
+      "u_l12": 15588.0,
+      "u_l23": 15588.0,
+      "u_l31": 15588.0,
+      "i_l1": 10.0,
+      "i_l2": 20.0,
+      "i_l3": 30.0,
+      "p_l1": 10000.0,
+      "p_l2": 20000.0,
+      "p_l3": 30000.0,
+      "p_total": 60000.0,
+      "q_l1": 1000.0,
+      "q_l2": 2000.0,
+      "q_l3": 3000.0,
+      "q_total": 6000.0,
+      "pf_l1": 0.95,
+      "pf_l2": 0.95,
+      "pf_l3": 0.95,
+      "pf_total": 0.95,
+      "freq": 50.0
+    }
+  }
 }
