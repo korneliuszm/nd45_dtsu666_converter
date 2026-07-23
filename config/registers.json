@@ -74,18 +74,42 @@
       "pf_l2":  {"addr": 8238, "from": "pf_l2", "scale": 1000},
       "pf_l3":  {"addr": 8240, "from": "pf_l3", "scale": 1000},
       "freq":   {"addr": 8260, "from": "freq", "scale": 100},
-      "forward_active_ep":       {"addr": 4106, "from": "imp_energy_total", "scale": 1, "divide_by_ct": true},
-      "forward_active_ep_alias": {"addr": 4176, "from": "imp_energy_total", "scale": 1, "divide_by_ct": true},
-      "imp_ep":     {"addr": 4126, "from": "imp_energy_total", "scale": 1, "divide_by_ct": true},
-      "imp_ep_l1":  {"addr": 4128, "from": "imp_energy_l1", "scale": 1, "divide_by_ct": true},
-      "imp_ep_l2":  {"addr": 4130, "from": "imp_energy_l2", "scale": 1, "divide_by_ct": true},
-      "imp_ep_l3":  {"addr": 4132, "from": "imp_energy_l3", "scale": 1, "divide_by_ct": true},
-      "net_imp_ep": {"addr": 4134, "from": "net_imp_energy_total", "scale": 1, "divide_by_ct": true},
-      "exp_ep":     {"addr": 4136, "from": "exp_energy_total", "scale": 1, "divide_by_ct": true},
-      "exp_ep_l1":  {"addr": 4138, "from": "exp_energy_l1", "scale": 1, "divide_by_ct": true},
-      "exp_ep_l2":  {"addr": 4140, "from": "exp_energy_l2", "scale": 1, "divide_by_ct": true},
-      "exp_ep_l3":  {"addr": 4142, "from": "exp_energy_l3", "scale": 1, "divide_by_ct": true},
-      "net_exp_ep": {"addr": 4144, "from": "net_exp_energy_total", "scale": 1, "divide_by_ct": true}
+      "imp_energy_coarse": {
+        "addr": 4096, "from": "imp_energy_total", "scale": 1,
+        "divide_by_ct": true, "zero_low_word": true
+      },
+      "reactive_energy_coarse": {
+        "addr": 4106, "from": "reactive_energy_total", "scale": 1,
+        "divide_by_ct": true, "zero_low_word": true
+      },
+      "imp_ep": {
+        "addr": 4126, "from": "imp_energy_total", "scale": 1,
+        "divide_by_ct": true
+      },
+      "imp_ep_l1": {
+        "addr": 4128, "from": "imp_energy_l1", "scale": 1,
+        "divide_by_ct": true
+      },
+      "imp_ep_l2": {
+        "addr": 4130, "from": "imp_energy_l2", "scale": 1,
+        "divide_by_ct": true
+      },
+      "imp_ep_l3": {
+        "addr": 4132, "from": "imp_energy_l3", "scale": 1,
+        "divide_by_ct": true
+      },
+      "net_imp_ep": {
+        "addr": 4134, "from": "net_imp_energy_total", "scale": 1,
+        "divide_by_ct": true
+      },
+      "net_exp_ep": {
+        "addr": 4144, "from": "net_exp_energy_total", "scale": 1,
+        "divide_by_ct": true
+      },
+      "reactive_energy_coarse_alias": {
+        "addr": 4176, "from": "reactive_energy_total", "scale": 1,
+        "divide_by_ct": true, "zero_low_word": true
+      }
     }
   },
   "dtsu_sigen_ext_target": {
@@ -142,17 +166,29 @@
     "byte_order": "big",
     "function_code": 4,
     "points": {
-      "forward_active_ep": {"addr": 6154, "from": "imp_energy_total", "scale": 1},
-      "imp_ep":     {"addr": 6174, "from": "imp_energy_total", "scale": 1},
-      "imp_ep_l1":  {"addr": 6176, "from": "imp_energy_l1", "scale": 1},
-      "imp_ep_l2":  {"addr": 6178, "from": "imp_energy_l2", "scale": 1},
-      "imp_ep_l3":  {"addr": 6180, "from": "imp_energy_l3", "scale": 1},
-      "net_imp_ep": {"addr": 6182, "from": "net_imp_energy_total", "scale": 1},
-      "exp_ep":     {"addr": 6184, "from": "exp_energy_total", "scale": 1},
-      "exp_ep_l1":  {"addr": 6186, "from": "exp_energy_l1", "scale": 1},
-      "exp_ep_l2":  {"addr": 6188, "from": "exp_energy_l2", "scale": 1},
-      "exp_ep_l3":  {"addr": 6190, "from": "exp_energy_l3", "scale": 1},
-      "net_exp_ep": {"addr": 6192, "from": "net_exp_energy_total", "scale": 1}
+      "active_energy_coarse": {
+        "addr": 6144, "from": "active_energy_total", "scale": 1,
+        "zero_low_word": true
+      },
+      "reactive_energy_coarse": {
+        "addr": 6154, "from": "reactive_energy_total", "scale": 1,
+        "zero_low_word": true
+      },
+      "imp_ep": {"addr": 6174, "from": "imp_energy_total", "scale": 1},
+      "imp_ep_l1": {"addr": 6176, "from": "imp_energy_l1", "scale": 1},
+      "imp_ep_l2": {"addr": 6178, "from": "imp_energy_l2", "scale": 1},
+      "imp_ep_l3": {"addr": 6180, "from": "imp_energy_l3", "scale": 1},
+      "net_imp_ep": {
+        "addr": 6182, "from": "net_imp_energy_total", "scale": 1
+      },
+      "exp_ep": {"addr": 6184, "from": "exp_energy_total", "scale": 1},
+      "net_exp_ep": {
+        "addr": 6192, "from": "net_exp_energy_total", "scale": 1
+      },
+      "reactive_energy_coarse_alias": {
+        "addr": 6224, "from": "reactive_energy_total", "scale": 1,
+        "zero_low_word": true
+      }
     }
   }
 }

@@ -4,7 +4,7 @@ import pytest
 from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from nd45_dtsu666.canonical import CanonicalStore, HealthGate
-from nd45_dtsu666.codec import registers_to_float
+from nd45_dtsu666.codec import float_to_registers, registers_to_float
 from nd45_dtsu666.config import DtsuConf, DtsuIdentityConf, DtsuRtuConf, DtsuTcpConf, load_registers
 from nd45_dtsu666.dtsu_server import (
     RecordingSlaveContext,
@@ -228,7 +228,13 @@ def test_sigen_ext_energy_active_reads_are_valid_and_unknown_gap_is_zero():
     assert slave.getValues(4, 0x180C, count=18) == [0] * 18
 
 
-def test_sigen_ext_energy_encodes_primary_kwh_at_offset_0x800():
+def _coarse_float(value: float) -> list[int]:
+    registers = float_to_registers(value, "big", "big")
+    registers[1] = 0
+    return registers
+
+
+def test_energy_maps_match_physical_reverse_flow_scan():
     registers = load_registers("config/registers.json")
     targets = [
         registers.dtsu_target,
@@ -236,30 +242,49 @@ def test_sigen_ext_energy_encodes_primary_kwh_at_offset_0x800():
         registers.dtsu_sigen_ext_energy,
     ]
     context = build_context(targets, slave_id=1)
-    update_datastore(
-        context, 1, {"imp_energy_total": 1234.5, "exp_energy_total": 67.8}, targets, ct_ratio=200
+    canonical = {
+        "active_energy_total": 7.20703125,
+        "reactive_energy_total": 2.796875,
+        "imp_energy_total": 7.0078125,
+        "imp_energy_l1": 2.0039122,
+        "imp_energy_l2": 2.394534,
+        "imp_energy_l3": 2.1914597,
+        "net_imp_energy_total": 7.0078125,
+        "exp_energy_total": 0.19921875,
+        "net_exp_energy_total": 0.19921875,
+    }
+    update_datastore(context, 1, canonical, targets, ct_ratio=200)
+    slave = context[1]
+
+    assert slave.getValues(4, 0x1800, count=2) == _coarse_float(7.20703125)
+    assert slave.getValues(4, 0x180A, count=2) == _coarse_float(2.796875)
+    assert slave.getValues(4, 0x180C, count=18) == [0] * 18
+    assert slave.getValues(4, 0x181E, count=2) == float_to_registers(7.0078125)
+    assert slave.getValues(4, 0x1826, count=2) == float_to_registers(7.0078125)
+    assert slave.getValues(4, 0x1828, count=2) == float_to_registers(0.19921875)
+    assert slave.getValues(4, 0x182A, count=6) == [0] * 6
+    assert slave.getValues(4, 0x1830, count=2) == float_to_registers(0.19921875)
+    assert slave.getValues(4, 0x1850, count=2) == _coarse_float(2.796875)
+
+    assert slave.getValues(3, 0x1000, count=2) == _coarse_float(
+        7.0078125 / 200
     )
-
-    classic_imp = registers.dtsu_target.points["imp_ep"]
-    classic_regs = context[1].getValues(3, classic_imp.addr, count=2)
-    assert registers_to_float(classic_regs, "big", "big") == pytest.approx(1234.5 / 200)
-
-    ext_imp = registers.dtsu_sigen_ext_energy.points["imp_ep"]
-    assert ext_imp.addr == classic_imp.addr + 2048
-    ext_regs = context[1].getValues(4, ext_imp.addr, count=2)
-    assert registers_to_float(ext_regs, "big", "big") == pytest.approx(1234.5)  # primary, un-divided
-
-    forward_classic = registers.dtsu_target.points["forward_active_ep"]
-    forward_alias = registers.dtsu_target.points["forward_active_ep_alias"]
-    forward_extended = registers.dtsu_sigen_ext_energy.points["forward_active_ep"]
-
-    for point in (forward_classic, forward_alias):
-        regs = context[1].getValues(3, point.addr, count=2)
-        assert registers_to_float(regs, "big", "big") == pytest.approx(
-            1234.5 / 200
-        )
-    regs = context[1].getValues(4, forward_extended.addr, count=2)
-    assert registers_to_float(regs, "big", "big") == pytest.approx(1234.5)
+    assert slave.getValues(3, 0x100A, count=2) == _coarse_float(
+        2.796875 / 200
+    )
+    assert slave.getValues(3, 0x101E, count=2) == float_to_registers(
+        7.0078125 / 200
+    )
+    assert slave.getValues(3, 0x1026, count=2) == float_to_registers(
+        7.0078125 / 200
+    )
+    assert slave.getValues(3, 0x1028, count=8) == [0] * 8
+    assert slave.getValues(3, 0x1030, count=2) == float_to_registers(
+        0.19921875 / 200
+    )
+    assert slave.getValues(3, 0x1050, count=2) == _coarse_float(
+        2.796875 / 200
+    )
 
 
 def test_missing_canonical_key_is_skipped():

@@ -83,36 +83,65 @@ def test_load_registers_classic_secondary_side_points_divide_by_ct():
         "p_total", "p_l1", "p_l2", "p_l3",
         "q_total", "q_l1", "q_l2", "q_l3",
         "s_total", "s_l1", "s_l2", "s_l3",
-        "forward_active_ep", "forward_active_ep_alias",
-        "imp_ep", "imp_ep_l1", "imp_ep_l2", "imp_ep_l3", "net_imp_ep",
-        "exp_ep", "exp_ep_l1", "exp_ep_l2", "exp_ep_l3", "net_exp_ep",
+        "imp_energy_coarse", "reactive_energy_coarse",
+        "reactive_energy_coarse_alias",
+        "imp_ep", "imp_ep_l1", "imp_ep_l2", "imp_ep_l3",
+        "net_imp_ep", "net_exp_ep",
     }
     for name, point in classic.points.items():
         assert point.divide_by_ct == (name in ct_divided), name
 
 
-def test_load_registers_reads_sigen_ext_energy_map():
+def test_load_registers_reads_physical_energy_maps():
     reg = load_registers("config/registers.json")
-    energy = reg.dtsu_sigen_ext_energy
+    classic = reg.dtsu_target.points
+    extended = reg.dtsu_sigen_ext_energy.points
 
-    assert energy.function_code == 4
-    # offset +0x800 (+2048) versus the classic energy block
-    for name, point in energy.points.items():
-        classic = reg.dtsu_target.points[name]
-        assert point.addr == classic.addr + 2048
-        assert point.scale == 1
-        assert point.divide_by_ct is False  # already primary-side kWh
+    classic_expected = {
+        "imp_energy_coarse": (0x1000, "imp_energy_total", True),
+        "reactive_energy_coarse": (0x100A, "reactive_energy_total", True),
+        "imp_ep": (0x101E, "imp_energy_total", False),
+        "imp_ep_l1": (0x1020, "imp_energy_l1", False),
+        "imp_ep_l2": (0x1022, "imp_energy_l2", False),
+        "imp_ep_l3": (0x1024, "imp_energy_l3", False),
+        "net_imp_ep": (0x1026, "net_imp_energy_total", False),
+        "net_exp_ep": (0x1030, "net_exp_energy_total", False),
+        "reactive_energy_coarse_alias": (
+            0x1050, "reactive_energy_total", True
+        ),
+    }
+    extended_expected = {
+        "active_energy_coarse": (0x1800, "active_energy_total", True),
+        "reactive_energy_coarse": (0x180A, "reactive_energy_total", True),
+        "imp_ep": (0x181E, "imp_energy_total", False),
+        "imp_ep_l1": (0x1820, "imp_energy_l1", False),
+        "imp_ep_l2": (0x1822, "imp_energy_l2", False),
+        "imp_ep_l3": (0x1824, "imp_energy_l3", False),
+        "net_imp_ep": (0x1826, "net_imp_energy_total", False),
+        "exp_ep": (0x1828, "exp_energy_total", False),
+        "net_exp_ep": (0x1830, "net_exp_energy_total", False),
+        "reactive_energy_coarse_alias": (
+            0x1850, "reactive_energy_total", True
+        ),
+    }
 
-    classic = reg.dtsu_target.points["forward_active_ep"]
-    alias = reg.dtsu_target.points["forward_active_ep_alias"]
-    extended = energy.points["forward_active_ep"]
-    assert classic.addr == 0x100A
-    assert alias.addr == 0x1050
-    assert extended.addr == 0x180A
-    assert classic.from_ == alias.from_ == extended.from_ == "imp_energy_total"
-    assert classic.divide_by_ct is True
-    assert alias.divide_by_ct is True
-    assert extended.divide_by_ct is False
+    assert set(classic_expected) <= set(classic)
+    assert set(extended) == set(extended_expected)
+    for name, (addr, source, coarse) in classic_expected.items():
+        point = classic[name]
+        assert (point.addr, point.from_, point.zero_low_word) == (
+            addr, source, coarse
+        )
+        assert point.divide_by_ct is True
+    for name, (addr, source, coarse) in extended_expected.items():
+        point = extended[name]
+        assert (point.addr, point.from_, point.zero_low_word) == (
+            addr, source, coarse
+        )
+        assert point.divide_by_ct is False
+
+    assert not {"exp_ep", "exp_ep_l1", "exp_ep_l2", "exp_ep_l3"} & set(classic)
+    assert not {"exp_ep_l1", "exp_ep_l2", "exp_ep_l3"} & set(extended)
 
 
 def test_load_registers_reads_sigen_identity():
