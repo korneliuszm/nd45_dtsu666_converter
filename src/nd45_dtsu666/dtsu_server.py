@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from collections import Counter, deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from pymodbus.datastore import (
     ModbusSequentialDataBlock,
@@ -18,7 +18,7 @@ from pymodbus.framer.socket_framer import ModbusSocketFramer
 from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from .codec import encode_point
-from .config import DtsuConf, TargetSide
+from .config import DtsuConf, StaticIdentitySide, TargetSide
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +61,30 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
         baud_code = _BAUD_CODES[9600]
     slave.setValues(_HOLDING_FC, 0x002D, [baud_code])  # bAud
     slave.setValues(_HOLDING_FC, 0x002E, [slave_id])  # Addr
+
+
+def write_sigen_identity(
+    slave: ModbusSlaveContext, identity: StaticIdentitySide
+) -> None:
+    """Seed configured Sigen OEM identity values into FC03 holding registers."""
+    for point in identity.points.values():
+        if point.type == "ascii":
+            raw = point.static_value.encode("ascii")
+            padded = raw.ljust(point.register_count * 2, b"\0")
+            values = [
+                (padded[index] << 8) | padded[index + 1]
+                for index in range(0, len(padded), 2)
+            ]
+        else:
+            value = point.static_value
+            values = [(value >> 16) & 0xFFFF, value & 0xFFFF]
+        slave.setValues(identity.function_code, point.addr, values)
+
+
+def _targets(value: TargetSide | Iterable[TargetSide]) -> list[TargetSide]:
+    if isinstance(value, TargetSide):
+        return [value]
+    return list(value)
 
 
 class RtuActivity:
@@ -118,33 +142,58 @@ class RecordingSlaveContext(ModbusSlaveContext):
 
 
 def build_context(
-    target: TargetSide,
+    target: TargetSide | Iterable[TargetSide],
     slave_id: int,
     activity: RtuActivity | None = None,
     dtsu_cfg: DtsuConf | None = None,
+    sigen_identity: StaticIdentitySide | None = None,
 ) -> ModbusServerContext:
-    max_addr = max(pt.addr for pt in target.points.values())
-    block = ModbusSequentialDataBlock(0, [0] * (max_addr + 2))
+    target_list = _targets(target)
+    max_addresses = {3: 0, 4: 0}
+    for side in target_list:
+        max_addresses[side.function_code] = max(
+            max_addresses[side.function_code],
+            max((point.addr + 1 for point in side.points.values()), default=0),
+        )
+    if sigen_identity is not None:
+        max_addresses[3] = max(
+            max_addresses[3],
+            max(
+                (
+                    point.addr + point.register_count - 1
+                    for point in sigen_identity.points.values()
+                ),
+                default=0,
+            ),
+        )
+    holding = ModbusSequentialDataBlock(0, [0] * (max_addresses[3] + 1))
+    inputs = ModbusSequentialDataBlock(0, [0] * (max_addresses[4] + 1))
     if activity is not None:
-        slave = RecordingSlaveContext(activity, hr=block, zero_mode=True)
+        slave = RecordingSlaveContext(activity, hr=holding, ir=inputs, zero_mode=True)
     else:
-        slave = ModbusSlaveContext(hr=block, zero_mode=True)
+        slave = ModbusSlaveContext(hr=holding, ir=inputs, zero_mode=True)
     if dtsu_cfg is not None:
         write_static_registers(slave, slave_id, dtsu_cfg)
+    if sigen_identity is not None:
+        write_sigen_identity(slave, sigen_identity)
     return ModbusServerContext(slaves={slave_id: slave}, single=False)
 
 
 def update_datastore(
-    context: ModbusServerContext, slave_id: int, canonical: dict[str, float], target: TargetSide
+    context: ModbusServerContext,
+    slave_id: int,
+    canonical: dict[str, float],
+    target: TargetSide | Iterable[TargetSide],
 ) -> None:
     slave = context[slave_id]
-    wo, bo = target.word_order, target.byte_order
-    for pt in target.points.values():
-        si = canonical.get(pt.from_)
-        if si is None:
-            continue
-        regs = encode_point(si, pt.scale, pt.sign, pt.offset, wo, bo)
-        slave.setValues(_HOLDING_FC, pt.addr, regs)
+    for side in _targets(target):
+        wo, bo = side.word_order, side.byte_order
+        for pt in side.points.values():
+            si = canonical.get(pt.from_)
+            if si is None:
+                continue
+            regs = encode_point(si, pt.scale, pt.sign, pt.offset, wo, bo)
+            slave.setValues(side.function_code, pt.addr, regs)
 
 
 def make_serial_server(cfg: DtsuConf, context) -> ModbusSerialServer:

@@ -23,7 +23,7 @@ def _read_point(context, slave_id, pt, target):
     # Inverse of encode_point (raw = si*sign*scale + offset): recover SI from the
     # DTSU register. decode_point cannot be used here because it multiplies by
     # scale (source-side convention), while the target side stores si*scale.
-    regs = context[slave_id].getValues(3, pt.addr, count=2)
+    regs = context[slave_id].getValues(target.function_code, pt.addr, count=2)
     raw = registers_to_float(regs, target.word_order, target.byte_order)
     return (raw - pt.offset) / (pt.scale * pt.sign)
 
@@ -46,6 +46,59 @@ def test_datastore_raw_scaling_matches_dtsu_spec():
     # DTSU voltage is x10 -> raw register float must be 2300.0
     regs = context[1].getValues(3, target.points["u_l1"].addr, count=2)
     assert registers_to_float(regs, target.word_order, target.byte_order) == pytest.approx(2300.0)
+
+
+def test_classic_and_sigen_measurements_use_separate_data_spaces_and_scales():
+    registers = load_registers("config/registers.json")
+    targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
+    context = build_context(
+        targets,
+        slave_id=1,
+        sigen_identity=registers.dtsu_sigen_identity,
+    )
+
+    update_datastore(context, 1, {"u_l1": 230.0}, targets)
+
+    classic = registers.dtsu_target.points["u_l1"]
+    classic_regs = context[1].getValues(3, classic.addr, count=2)
+    assert registers_to_float(classic_regs, "big", "big") == pytest.approx(2300.0)
+    sigen = registers.dtsu_sigen_ext_target.points["u_l1"]
+    sigen_regs = context[1].getValues(4, sigen.addr, count=2)
+    assert registers_to_float(sigen_regs, "big", "big") == pytest.approx(230.0)
+
+
+def test_sigen_identity_and_handshake_are_seeded_exactly():
+    registers = load_registers("config/registers.json")
+    context = build_context(
+        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        slave_id=1,
+        sigen_identity=registers.dtsu_sigen_identity,
+    )
+    slave = context[1]
+
+    assert slave.getValues(3, 0xF100, count=20) == [
+        0x5369,
+        0x6765,
+        0x6E20,
+        0x5365,
+        0x6E73,
+        0x6F72,
+        0x2054,
+        0x5058,
+        0x2D43,
+        0x4800,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
 
 
 def test_missing_canonical_key_is_skipped():
