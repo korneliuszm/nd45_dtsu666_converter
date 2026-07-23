@@ -121,18 +121,18 @@ s_l1, s_l2, s_l3, s_total
 pf_l1, pf_l2, pf_l3, pf_total
 freq
 imp_energy_total, imp_energy_l1, imp_energy_l2, imp_energy_l3
-exp_energy_total
-reactive_energy_total
+exp_energy_total, exp_energy_l1, exp_energy_l2, exp_energy_l3
+reactive_imp_energy_total, reactive_exp_energy_total
 ```
 
-No other keys are accepted. All other energy outputs are fixed zero fields or
-derived from these independent values.
+No other keys are accepted. `active_energy_total`, `net_imp_energy_total`, and
+`net_exp_energy_total` are derived from these independent values; the other
+energy fields map directly to their physical register counterparts.
 
-The checked-in example represents export: active power and PF are negative,
-`exp_energy_total` is non-zero, and `reactive_energy_total` drives the coarse
-reactive aliases. `active_energy_total`, both `net_*` values, CT-side values,
-and coarse aliases are derived automatically. Confirmed zero-only phase
-export registers cannot be configured.
+The checked-in image represents about 7 kWh import and 3 kWh export, including
+0.8/1.0/1.0 kWh L1/L2/L3 export; Q+ is 1.2 kvarh and Q- is 2.8 kvarh. Active
+power and PF are negative. `active_energy_total`, both `net_*` values,
+CT-side values, and coarse aliases are derived automatically.
 
 Only one process can own an RTU serial port. Stop the normal service or monitor
 before starting static mode:

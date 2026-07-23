@@ -33,20 +33,24 @@ obie mapy wyjściowe kodują z niego.
 | `pf_l1/l2/l3`, `pf_total` | – | odczyt ND45 |
 | `freq` | Hz | odczyt ND45 |
 | `imp_energy_*`, `exp_energy_*` | kWh | odczyt ND45 (compose hi/lo) |
-| `reactive_energy_total` | kvarh | suma czterech par ND45: `944/946`, `960/962`, `976/978`, `992/994` |
+| `reactive_imp_energy_total` | kvarh | suma importowanych (`Q+`) par ND45: `944/946` i `976/978` |
+| `reactive_exp_energy_total` | kvarh | suma eksportowanych (`Q-`) par ND45: `960/962` i `992/994` |
 | `s_l1/l2/l3`, `s_total` | VA | odczyt ND45: `60/84/108/132` (`float32`); suma z `132` |
 | `active_energy_total` | kWh | **wyliczane**: `imp_energy_total + exp_energy_total` |
 | `net_imp_energy_total` | kWh | **wyliczane**: kopia `imp_energy_total` |
 | `net_exp_energy_total` | kWh | **wyliczane**: kopia `exp_energy_total` |
 
-Each reactive component uses `Mvarh * 1000 + kvarh`; the exact formula is:
+Each reactive component uses `Mvarh * 1000 + kvarh`; the exact directional
+formulas are:
 
 ```text
-reactive_energy_total =
-    (944 * 1000 + 946) +
-    (960 * 1000 + 962) +
-    (976 * 1000 + 978) +
-    (992 * 1000 + 994)
+reactive_imp_energy_total =
+    ND45[944] * 1000 + ND45[946]
+  + ND45[976] * 1000 + ND45[978]
+
+reactive_exp_energy_total =
+    ND45[960] * 1000 + ND45[962]
+  + ND45[992] * 1000 + ND45[994]
 ```
 
 `nd45_poller.compute_derived()` derives `active_energy_total` and the
@@ -110,16 +114,21 @@ Strona wtórna: energia czynna w kWh, aliasy energii biernej w kvarh;
 
 | Adres | Hex | Wielkość | `from` | /CT |
 |---:|---|---|---|:--:|
-| 4096 | 0x1000 | Import energy coarse | imp_energy_total | ✓ |
-| 4106 | 0x100A | Reactive energy coarse | reactive_energy_total | ✓ |
+| 4096 | 0x1000 | Combined active energy coarse | active_energy_total | ✓ |
+| 4106 | 0x100A | Exported reactive energy coarse (Q-) | reactive_exp_energy_total | ✓ |
+| 4116 | 0x1014 | Imported reactive energy coarse (Q+) | reactive_imp_energy_total | ✓ |
 | 4126 | 0x101E | ImpEp total | imp_energy_total | ✓ |
 | 4128 | 0x1020 | ImpEp L1 | imp_energy_l1 | ✓ |
 | 4130 | 0x1022 | ImpEp L2 | imp_energy_l2 | ✓ |
 | 4132 | 0x1024 | ImpEp L3 | imp_energy_l3 | ✓ |
 | 4134 | 0x1026 | NetImpEp | net_imp_energy_total | ✓ |
-| 4136-4142 | 0x1028-0x102E | Confirmed phase export | constant zero | ✓ |
+| 4136 | 0x1028 | ExpEp total | exp_energy_total | ✓ |
+| 4138 | 0x102A | ExpEp L1 | exp_energy_l1 | ✓ |
+| 4140 | 0x102C | ExpEp L2 | exp_energy_l2 | ✓ |
+| 4142 | 0x102E | ExpEp L3 | exp_energy_l3 | ✓ |
 | 4144 | 0x1030 | NetExpEp | net_exp_energy_total | ✓ |
-| 4176 | 0x1050 | Reactive energy coarse (alias) | reactive_energy_total | ✓ |
+| 4156 | 0x103C | Imported reactive energy coarse (Q+ alias) | reactive_imp_energy_total | ✓ |
+| 4176 | 0x1050 | Exported reactive energy coarse (Q- alias) | reactive_exp_energy_total | ✓ |
 
 ## 3. FC04 — mapa OEM Sigen, pomiary (baza `0x150A`, offset −0x0AF6 vs FC03)
 
@@ -160,30 +169,37 @@ Bloki czytane przez Sigenergy: `0x150A`/qty30, `0x151C`/qty16 (szybka pętla ~60
 
 Strona **pierwotna**: energia czynna w kWh, aliasy energii biernej w kvarh,
 scale 1. Sigenergy reads `0x180A`/qty22
-(reactive coarse energy at `0x180A`, a zero-filled gap at `0x180C`-`0x181D`,
-and `imp_ep` at `0x181E`) and `0x1828`/qty4 (`exp_ep` plus zero-only phase
-export registers).
+(directional reactive coarse energy at `0x180A` and `0x1814`, a zero-filled gap
+at `0x180C`-`0x1813` and `0x1816`-`0x181D`, and `imp_ep` at `0x181E`) and
+`0x1828`/qty4 (total and phase active export).
 
 | Adres | Hex | Wielkość | `from` |
 |---:|---|---|---|
 | 6144 | 0x1800 | Active energy coarse | active_energy_total |
-| 6154 | 0x180A | Reactive energy coarse | reactive_energy_total |
-| 6156-6173 | 0x180C-0x181D | Polled gap | constant zero |
+| 6154 | 0x180A | Exported reactive energy coarse (Q-) | reactive_exp_energy_total |
+| 6156-6163 | 0x180C-0x1813 | Unmapped polled gap (zero-filled) | unmapped |
+| 6164 | 0x1814 | Imported reactive energy coarse (Q+) | reactive_imp_energy_total |
+| 6166-6173 | 0x1816-0x181D | Unmapped polled gap (zero-filled) | unmapped |
 | 6174 | 0x181E | ImpEp total | imp_energy_total |
 | 6176 | 0x1820 | ImpEp L1 | imp_energy_l1 |
 | 6178 | 0x1822 | ImpEp L2 | imp_energy_l2 |
 | 6180 | 0x1824 | ImpEp L3 | imp_energy_l3 |
 | 6182 | 0x1826 | NetImpEp | net_imp_energy_total |
 | 6184 | 0x1828 | ExpEp total | exp_energy_total |
-| 6186-6190 | 0x182A-0x182E | Confirmed phase export | constant zero |
+| 6186 | 0x182A | ExpEp L1 | exp_energy_l1 |
+| 6188 | 0x182C | ExpEp L2 | exp_energy_l2 |
+| 6190 | 0x182E | ExpEp L3 | exp_energy_l3 |
 | 6192 | 0x1830 | NetExpEp | net_exp_energy_total |
-| 6224 | 0x1850 | Reactive energy coarse (alias) | reactive_energy_total |
+| 6204 | 0x183C | Imported reactive energy coarse (Q+ alias) | reactive_imp_energy_total |
+| 6224 | 0x1850 | Exported reactive energy coarse (Q- alias) | reactive_exp_energy_total |
 
-The six coarse aliases (`0x1000`, `0x100A`, `0x1050`, `0x1800`, `0x180A`,
-and `0x1850`) encode the IEEE754 high word and force the low word to zero.
-`0x1000` is CT-side import, `0x100A` and `0x1050` are CT-side reactive
-aliases; `0x1800` is primary-side active energy, and `0x180A` and `0x1850`
-are primary-side reactive aliases.
+The ten coarse fields (`0x1000`, `0x100A`, `0x1014`, `0x103C`, `0x1050`,
+`0x1800`, `0x180A`, `0x1814`, `0x183C`, and `0x1850`) encode the IEEE754 high
+word and force the low word to zero. `0x1000` and `0x1800` are combined active
+energy (CT-side and primary-side respectively). The `0x100A`/`0x1050` and
+`0x180A`/`0x1850` pairs are exported-reactive (`Q-`) aliases; the
+`0x1014`/`0x103C` and `0x1814`/`0x183C` pairs are imported-reactive (`Q+`)
+aliases.
 
 ## 5. FC03 — blok konfiguracyjny / tożsamości
 

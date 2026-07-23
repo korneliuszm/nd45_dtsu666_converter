@@ -205,9 +205,11 @@ def test_load_config_reads_seed():
     assert cfg.static_debug.values["s_total"] == 60300.0
     assert cfg.static_debug.values["imp_energy_total"] == 7.0
     assert cfg.static_debug.values["exp_energy_total"] == 3.0
-    assert cfg.static_debug.values["exp_energy_l1"] == 0.796875
-    assert cfg.static_debug.values["reactive_exp_energy_total"] == 2.796875
-    assert cfg.static_debug.values["reactive_imp_energy_total"] == 1.1953125
+    assert cfg.static_debug.values["exp_energy_l1"] == 0.8
+    assert cfg.static_debug.values["exp_energy_l2"] == 1.0
+    assert cfg.static_debug.values["exp_energy_l3"] == 1.0
+    assert cfg.static_debug.values["reactive_imp_energy_total"] == 1.2
+    assert cfg.static_debug.values["reactive_exp_energy_total"] == 2.8
 
 
 def test_static_debug_rejects_unknown_value_name():
@@ -227,17 +229,17 @@ def test_static_debug_accepts_apparent_power_values():
     assert configured.values["s_total"] == 1900.0
 
 
-def test_static_debug_accepts_physical_energy_inputs():
+def test_static_debug_accepts_independent_directional_energy_values():
     configured = StaticDebugConf(values={
-        "reactive_imp_energy_total": 1.1953125,
-        "reactive_exp_energy_total": 2.796875,
-        "exp_energy_l1": 0.796875,
+        "exp_energy_l1": 0.8,
         "exp_energy_l2": 1.0,
         "exp_energy_l3": 1.0,
+        "reactive_imp_energy_total": 1.2,
+        "reactive_exp_energy_total": 2.8,
     })
-    assert configured.values["reactive_imp_energy_total"] == 1.1953125
-    assert configured.values["reactive_exp_energy_total"] == 2.796875
-    assert configured.values["exp_energy_l1"] == 0.796875
+    assert configured.values["exp_energy_l1"] == 0.8
+    assert configured.values["reactive_imp_energy_total"] == 1.2
+    assert configured.values["reactive_exp_energy_total"] == 2.8
 
 
 @pytest.mark.parametrize(
@@ -249,7 +251,7 @@ def test_static_debug_accepts_physical_energy_inputs():
         "reactive_energy_total",
     ],
 )
-def test_static_debug_rejects_derived_or_constant_zero_energy_inputs(name):
+def test_static_debug_rejects_derived_or_obsolete_energy_inputs(name):
     with pytest.raises(ValidationError, match="unknown static debug value"):
         StaticDebugConf(values={name: 1.0})
 

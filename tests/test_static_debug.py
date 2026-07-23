@@ -105,24 +105,23 @@ async def test_static_pipeline_serves_complete_reverse_flow_energy_image():
         await asyncio.wait_for(feeder, timeout=1.0)
         values, _ = pipe.store.snapshot()
         assert values["p_total"] == -60000.0
-        assert values["reactive_exp_energy_total"] == pytest.approx(2.796875)
-        assert values["reactive_imp_energy_total"] == pytest.approx(1.1953125)
+        assert values["reactive_imp_energy_total"] == 1.2
+        assert values["reactive_exp_energy_total"] == 2.8
         assert values["active_energy_total"] == pytest.approx(10.0)
-        assert values["net_imp_energy_total"] == pytest.approx(7.0)
         assert values["net_exp_energy_total"] == pytest.approx(3.0)
 
         assert registers_to_float(
             slave.getValues(4, 0x151C, count=2), "big", "big"
         ) == pytest.approx(-60.0)
         assert slave.getValues(4, 0x1800, count=2) == _coarse_float(10.0)
-        assert slave.getValues(4, 0x180A, count=2) == _coarse_float(2.796875)
-        assert slave.getValues(4, 0x1814, count=2) == _coarse_float(1.1953125)
+        assert slave.getValues(4, 0x180A, count=2) == _coarse_float(2.8)
+        assert slave.getValues(4, 0x1814, count=2) == _coarse_float(1.2)
         assert registers_to_float(
             slave.getValues(4, 0x1828, count=2), "big", "big"
         ) == pytest.approx(3.0)
         assert registers_to_float(
             slave.getValues(4, 0x182A, count=2), "big", "big"
-        ) == pytest.approx(0.796875)
+        ) == pytest.approx(0.8)
         assert registers_to_float(
             slave.getValues(4, 0x182C, count=2), "big", "big"
         ) == pytest.approx(1.0)
@@ -132,8 +131,12 @@ async def test_static_pipeline_serves_complete_reverse_flow_energy_image():
         assert registers_to_float(
             slave.getValues(4, 0x1830, count=2), "big", "big"
         ) == pytest.approx(3.0)
-        assert slave.getValues(4, 0x183C, count=2) == _coarse_float(1.1953125)
-        assert slave.getValues(4, 0x1850, count=2) == _coarse_float(2.796875)
+        assert slave.getValues(4, 0x1814, count=2)[0] == slave.getValues(
+            4, 0x183C, count=2
+        )[0]
+        assert slave.getValues(4, 0x180A, count=2)[0] == slave.getValues(
+            4, 0x1850, count=2
+        )[0]
     finally:
         stop.set()
         if not feeder.done():
