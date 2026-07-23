@@ -207,3 +207,71 @@ Expected: Ruff exits 0 and pytest reports zero failures.
 git add tests/test_app.py tests/test_rtudebug.py src/nd45_dtsu666/app.py src/nd45_dtsu666/diagnostics.py src/nd45_dtsu666/rtudebug.py README.md
 git commit -m "feat: enable Sigen-compatible bridge mode"
 ```
+
+### Task 4: Temporarily unidentified FC04 ranges
+
+**Files:**
+- Modify: `tests/test_config.py`
+- Modify: `tests/test_server.py`
+- Modify: `tests/test_rtudebug.py`
+- Modify: `src/nd45_dtsu666/config.py`
+- Modify: `src/nd45_dtsu666/dtsu_server.py`
+- Modify: `src/nd45_dtsu666/rtudebug.py`
+- Modify: `config/registers.json`
+- Modify: `README.md`
+
+**Interfaces:**
+- Produces: `RegisterMap.dtsu_sigen_zero_ranges: StaticZeroSide`
+- Produces: zero-filled FC04 responses for `0x180A` count 22 and `0x1828` count 4
+
+- [ ] **Step 1: Write failing configuration, datastore, and diagnostics tests**
+
+Assert that the seed map declares the two exact FC04 ranges, both live reads
+return lists of zero words, and the register-name index labels both requests as
+temporarily unidentified Sigen ranges.
+
+- [ ] **Step 2: Verify the tests fail**
+
+Run:
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests/test_config.py tests/test_server.py tests/test_rtudebug.py -q
+```
+
+Expected: failure because `dtsu_sigen_zero_ranges` does not exist and FC04
+validation rejects addresses above `0x154F`.
+
+- [ ] **Step 3: Implement configured zero ranges**
+
+Add validated `StaticZeroRange(addr: int, count: int, name: str)` and
+`StaticZeroSide(function_code: Literal[4], ranges: list[StaticZeroRange])`.
+Include range ends when sizing the FC04 datastore and add the ranges to the
+diagnostic index. Do not write canonical values into them.
+
+- [ ] **Step 4: Verify focused tests pass**
+
+Run:
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests/test_config.py tests/test_server.py tests/test_rtudebug.py -q
+```
+
+Expected: all tests pass.
+
+- [ ] **Step 5: Verify lint and the platform-compatible suite**
+
+Run:
+
+```powershell
+.venv\Scripts\python.exe -m ruff check .
+.venv\Scripts\python.exe -m pytest -q --ignore=tests/test_watchdog.py -k "not test_run_app_pings_watchdog_during_initial_connect_retry"
+```
+
+Expected: Ruff exits 0 and pytest reports zero failures.
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add docs/superpowers/specs/2026-07-23-sigen-register-map-design.md docs/superpowers/plans/2026-07-23-sigen-register-map.md tests/test_config.py tests/test_server.py tests/test_rtudebug.py src/nd45_dtsu666/config.py src/nd45_dtsu666/dtsu_server.py src/nd45_dtsu666/rtudebug.py config/registers.json README.md
+git commit -m "fix: serve unidentified Sigen FC04 ranges"
+```

@@ -47,6 +47,24 @@ Energy registers are not added to the Sigen map because their Sigen addresses
 have not been observed. They remain available only through the confirmed
 classic DTSU666 map.
 
+## Temporarily unidentified Sigen ranges
+
+Captured Sigenergy traffic also reads FC04 `0x180A` for 22 registers and
+FC04 `0x1828` for 4 registers. A scan of a physical TPX-CH connected to one
+phase returned zero throughout these ranges, but that observation is
+insufficient to assign measurement semantics because the meter was not tested
+under a known load and the scan used FC03.
+
+The register configuration therefore declares these as temporarily
+unidentified FC04 zero-filled ranges:
+
+- `0x180A` through `0x181F`;
+- `0x1828` through `0x182B`.
+
+They extend the FC04 datastore through `0x182B` and return stable zero words so
+the observed requests receive normal responses instead of `IllegalAddress`.
+They do not mirror or copy values from the `0x15xx` measurement block.
+
 ## Sigen identity and handshake
 
 FC03 holding registers will include the static OEM identity block:
@@ -114,6 +132,8 @@ Automated tests will verify:
   scaling in FC04;
 - all configured Sigen measurement addresses match the specified offset;
 - request diagnostics distinguish FC03 from FC04;
+- FC04 reads `0x180A` count 22 and `0x1828` count 4 return zero words without
+  an exception and are labeled as temporarily unidentified;
 - existing classic-map, identity, transport, supervisor, and fail-safe tests
   continue to pass.
 
@@ -124,6 +144,8 @@ load. Those observations cannot be proven by datastore-level tests.
 ## Non-goals
 
 - Inferring unobserved Sigen energy-register addresses.
+- Assigning measurement semantics to the temporarily unidentified `0x18xx`
+  ranges without a loaded FC04 capture.
 - Removing or replacing the classic DTSU666 map.
 - Changing ND45 polling or the canonical measurement model.
 - Claiming hardware validation of inferred registers without a loaded-meter
