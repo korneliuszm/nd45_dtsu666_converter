@@ -164,23 +164,20 @@ async def test_poll_once_overrange_warning_logged_once_per_episode(caplog):
     assert "u_l1" not in seen  # recovered -> a future episode logs again
 
 
-async def test_poll_once_computes_apparent_power_from_u_and_i():
+async def test_poll_once_reads_apparent_power_from_nd45():
     src = load_registers("config/registers.json").nd45_source
-    # phase U*I: 227.26*7.008, 226.26*8.578, 225.25*8.016 (from the real scan)
     image = _image_for({
-        50: 227.26, 52: 7.008,    # u_l1, i_l1
-        74: 226.26, 76: 8.578,    # u_l2, i_l2
-        98: 225.25, 100: 8.016,   # u_l3, i_l3
+        50: 230.0, 52: 2.0,  # U*I is deliberately different from ND45 S
+        60: 471.0,
+        84: 582.0,
+        108: 693.0,
+        132: 1801.0,  # independent ND45 total, not the phase sum (1746 VA)
     })
     values = await poll_once(FakeClient(image), src, slave=1)
-    assert values["s_l1"] == pytest.approx(227.26 * 7.008, rel=1e-4)
-    assert values["s_l2"] == pytest.approx(226.26 * 8.578, rel=1e-4)
-    assert values["s_l3"] == pytest.approx(225.25 * 8.016, rel=1e-4)
-    assert values["s_total"] == pytest.approx(
-        values["s_l1"] + values["s_l2"] + values["s_l3"], rel=1e-6
-    )
-    # matches the live-meter apparent-power total (~5.34 kVA) within drift
-    assert values["s_total"] / 1000 == pytest.approx(5.34, abs=0.05)
+    assert values["s_l1"] == pytest.approx(471.0)
+    assert values["s_l2"] == pytest.approx(582.0)
+    assert values["s_l3"] == pytest.approx(693.0)
+    assert values["s_total"] == pytest.approx(1801.0)
 
 
 async def test_poll_once_compose_applies_sign_scale_offset():

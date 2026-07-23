@@ -33,12 +33,14 @@ obie mapy wyjściowe kodują z niego.
 | `pf_l1/l2/l3`, `pf_total` | – | odczyt ND45 |
 | `freq` | Hz | odczyt ND45 |
 | `imp_energy_*`, `exp_energy_*` | kWh | odczyt ND45 (compose hi/lo) |
-| `s_l1/l2/l3`, `s_total` | VA | **wyliczane**: `S = \|U·I\|`, `s_total = Σ faz` |
+| `s_l1/l2/l3`, `s_total` | VA | odczyt ND45: `60/84/108/132` (`float32`); suma z `132` |
 | `net_imp_energy_total` | kWh | **wyliczane**: `max(imp−exp, 0)` |
 | `net_exp_energy_total` | kWh | **wyliczane**: `max(exp−imp, 0)` |
 
-Wartości pochodne (`s_*`, `net_*`) liczy `nd45_poller.compute_derived()` —
-wspólne dla trybu live, `selftest` i `static`.
+Tylko wartości `net_*` są pochodne i liczy je
+`nd45_poller.compute_derived()`. W trybie `static` pominięte `s_l1/l2/l3`
+są pomocniczo wyliczane jako `|U·I|`, a pominięte `s_total` jako ich suma;
+jawnie skonfigurowane `s_*` nie są nadpisywane.
 
 ## Przekładnia CT (`dtsu.identity.ir_at`, tu = 200)
 

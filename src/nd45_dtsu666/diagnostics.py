@@ -40,11 +40,11 @@ def run_diag_command(args) -> int:
 def _synthetic_values(registers: RegisterMap) -> dict[str, float]:
     demo = {"u_l1": 230.0, "u_l2": 231.0, "u_l3": 229.0, "i_l1": 5.0, "i_l2": 5.1, "i_l3": 4.9,
             "p_total": 1500.0, "q_total": 200.0, "pf_total": 0.95, "freq": 50.0,
+            "s_l1": 1150.0, "s_l2": 1178.1, "s_l3": 1122.1, "s_total": 3450.2,
             "imp_energy_total": 1234.5, "exp_energy_total": 67.8}
     values = {k: demo.get(k, 0.0) for k in registers.nd45_source.points}
-    # derived keys (net energy, apparent power) normally computed by
-    # nd45_poller.poll_once -- without them the mbpoll bench shows the net_*
-    # and S DTSU registers stuck at 0
+    # Net energy is normally computed by nd45_poller.poll_once; without it the
+    # mbpoll bench would show the net_* DTSU registers stuck at zero.
     from .nd45_poller import compute_derived
 
     compute_derived(values)

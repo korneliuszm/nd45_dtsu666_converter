@@ -139,6 +139,18 @@ def test_static_debug_rejects_unknown_value_name():
         StaticDebugConf(values={"u_l1_typo": 230.0})
 
 
+def test_static_debug_accepts_apparent_power_values():
+    configured = StaticDebugConf(values={
+        "s_l1": 499.0,
+        "s_l2": 599.0,
+        "s_l3": 699.0,
+        "s_total": 1900.0,
+    })
+
+    assert configured.values["s_l1"] == 499.0
+    assert configured.values["s_total"] == 1900.0
+
+
 @pytest.mark.parametrize("value", [True, "230.0", math.nan, math.inf, -math.inf])
 def test_static_debug_rejects_non_numeric_or_non_finite_values(value):
     with pytest.raises(ValidationError, match="finite number"):

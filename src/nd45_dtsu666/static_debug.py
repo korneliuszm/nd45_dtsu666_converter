@@ -36,8 +36,19 @@ def expand_static_values(
         for point in target.points.values()
     }
     values = {name: configured.get(name, 0.0) for name in required}
-    # derive net energy + apparent power from the configured base values so the
-    # static feed matches what the live poller would produce (S = |U*I|, etc.)
+    # Static mode has no ND45 source registers. Derive only omitted apparent
+    # power values as a convenience; explicit test values must remain exact.
+    for suffix in ("l1", "l2", "l3"):
+        s_key = f"s_{suffix}"
+        if s_key not in configured:
+            values[s_key] = abs(
+                values.get(f"u_{suffix}", 0.0)
+                * values.get(f"i_{suffix}", 0.0)
+            )
+    if "s_total" not in configured:
+        values["s_total"] = sum(values[f"s_{suffix}"] for suffix in ("l1", "l2", "l3"))
+
+    # Net energy remains common to static and live pipelines.
     from .nd45_poller import compute_derived
 
     compute_derived(values)

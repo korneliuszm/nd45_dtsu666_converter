@@ -106,7 +106,7 @@ def test_apparent_power_encoded_both_maps_matches_real_meter():
     registers = load_registers("config/registers.json")
     targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
     context = build_context(targets, slave_id=1)
-    # S is derived (|U*I|); feed it directly as a canonical value here.
+    # S is a direct ND45 canonical measurement.
     update_datastore(context, 1, {"s_total": 5339.1}, targets, ct_ratio=200)
 
     # classic (FC03, secondary side): (5339.1/200)*10 = 266.955 raw

@@ -11,11 +11,11 @@ energy at a `+0x800` offset from the classic energy block). Both sides derive fr
 same ND45 reading; the classic map divides current/power/energy by the configured CT
 ratio (`dtsu.identity.ir_at`) while the Sigen map does not (already primary). It also
 serves the FC03 identity string `Sigen Sensor TPX-CH` at `0xF100` and the observed
-`0x00001500` handshake at `0xF114`. Apparent power (S = |U·I|) is served on both maps
-(classic `0x2022`, Sigen FC04 `0x152C`), matching the real meter. A handful of addresses
-inside the polled FC04 energy ranges have no confirmed ND45 source (e.g. the
-reactive-energy accumulator) and are left zero rather than fabricated, which also prevents
-`IllegalAddress` on those reads.
+`0x00001500` handshake at `0xF114`. Apparent power is read directly from ND45
+registers `60`/`84`/`108` (L1/L2/L3) and `132` (L123 sum), then served on both maps
+(classic `0x2022`, Sigen FC04 `0x152C`). A handful of addresses inside the polled FC04
+energy ranges have no confirmed ND45 source (e.g. the reactive-energy accumulator) and
+are left zero rather than fabricated, which also prevents `IllegalAddress` on those reads.
 
 The full verified register layout — every address, description and multiplier, checked
 against a live-meter scan — is in [`docs/register-map.md`](docs/register-map.md).
@@ -100,8 +100,10 @@ python -m nd45_dtsu666 static
 
 The dashboard is labeled `STATIC DEBUG` and still shows the blocks requested by
 Sigenergy. Edit the JSON values before startup; omitted measurements are served
-as zero. Values must be finite JSON numbers, and unknown names stop startup so
-spelling mistakes cannot silently produce zeros.
+as zero, except omitted phase apparent power (`s_l1/s_l2/s_l3`) is calculated
+from the configured U and I, and omitted `s_total` is their sum. Explicit `s_*`
+values are served unchanged. Values must be finite JSON numbers, and unknown
+names stop startup so spelling mistakes cannot silently produce zeros.
 
 Only one process can own an RTU serial port. Stop the normal service or monitor
 before starting static mode:

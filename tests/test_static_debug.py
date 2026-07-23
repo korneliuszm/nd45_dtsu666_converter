@@ -25,6 +25,37 @@ def test_expand_static_values_preserves_configured_and_zero_fills_missing():
     assert values["imp_energy_total"] == 0.0
 
 
+def test_expand_static_values_derives_omitted_apparent_power():
+    registers = load_registers("config/registers.json")
+    values = expand_static_values(registers, {
+        "u_l1": 230.0, "i_l1": 2.0,
+        "u_l2": 231.0, "i_l2": 3.0,
+        "u_l3": 232.0, "i_l3": 4.0,
+    })
+
+    assert values["s_l1"] == pytest.approx(460.0)
+    assert values["s_l2"] == pytest.approx(693.0)
+    assert values["s_l3"] == pytest.approx(928.0)
+    assert values["s_total"] == pytest.approx(2081.0)
+
+
+def test_expand_static_values_preserves_explicit_apparent_power():
+    registers = load_registers("config/registers.json")
+    values = expand_static_values(registers, {
+        "u_l1": 230.0,
+        "i_l1": 2.0,
+        "s_l1": 499.0,
+        "s_l2": 599.0,
+        "s_l3": 699.0,
+        "s_total": 1900.0,
+    })
+
+    assert values["s_l1"] == pytest.approx(499.0)
+    assert values["s_l2"] == pytest.approx(599.0)
+    assert values["s_l3"] == pytest.approx(699.0)
+    assert values["s_total"] == pytest.approx(1900.0)
+
+
 async def test_static_feeder_writes_both_maps_and_keeps_store_fresh():
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
