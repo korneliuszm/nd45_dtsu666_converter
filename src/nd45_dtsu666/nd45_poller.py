@@ -103,8 +103,16 @@ async def poll_once(
     for key, pt in source.points.items():
         if pt.compose:
             parts = [registers_to_float(extract_registers(a, groups), wo, bo) for a in pt.compose]
-            raw = compose(parts, pt.factors or [1.0] * len(parts))
-            si = raw * pt.scale * pt.sign + pt.offset
+            invalid_parts = [
+                part
+                for part in parts
+                if not math.isfinite(part) or abs(part) >= OVERRANGE
+            ]
+            if invalid_parts:
+                si = invalid_parts[0]
+            else:
+                raw = compose(parts, pt.factors or [1.0] * len(parts))
+                si = raw * pt.scale * pt.sign + pt.offset
         else:
             regs = extract_registers(pt.addr, groups)
             si = decode_point(regs, pt.scale, pt.sign, pt.offset, wo, bo)

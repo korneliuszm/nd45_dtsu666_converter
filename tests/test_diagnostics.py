@@ -27,6 +27,22 @@ def test_render_table_shows_stale_status():
     assert "STALE" in table.upper() or "FAIL" in table.upper()
 
 
+def test_render_table_matches_ct_divided_coarse_energy_encoding():
+    reg = load_registers("config/registers.json")
+
+    table = render_table(
+        reg.nd45_source,
+        reg.dtsu_target,
+        canonical={"imp_energy_total": 24690.0},
+        age=0.4,
+        healthy=True,
+        ct_ratio=200.0,
+    )
+
+    coarse_line = next(line for line in table.splitlines() if "4096" in line)
+    assert coarse_line.split()[-1] == "123.0"
+
+
 def test_synthetic_values_cover_every_dtsu_target_source():
     # selftest is the operator's mbpoll bench tool: every register in the DTSU
     # map must serve a value, including the net_* energies that poll_once

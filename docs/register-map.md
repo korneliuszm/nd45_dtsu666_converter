@@ -105,7 +105,8 @@ Strona wtórna. `raw = (SI/CT)·scale` dla pozycji z „/CT".
 
 ## 2. FC03 — klasyczna mapa DTSU666, energia i aliasy
 
-Strona wtórna, kWh, `raw = SI/CT` (×1).
+Strona wtórna: energia czynna w kWh, aliasy energii biernej w kvarh;
+`raw = SI/CT` (×1).
 
 | Adres | Hex | Wielkość | `from` | /CT |
 |---:|---|---|---|:--:|
@@ -157,7 +158,8 @@ Bloki czytane przez Sigenergy: `0x150A`/qty30, `0x151C`/qty16 (szybka pętla ~60
 
 ## 4. FC04 — mapa OEM Sigen, energia
 
-Strona **pierwotna**, kWh, scale 1. Sigenergy reads `0x180A`/qty22
+Strona **pierwotna**: energia czynna w kWh, aliasy energii biernej w kvarh,
+scale 1. Sigenergy reads `0x180A`/qty22
 (reactive coarse energy at `0x180A`, a zero-filled gap at `0x180C`-`0x181D`,
 and `imp_ep` at `0x181E`) and `0x1828`/qty4 (`exp_ep` plus zero-only phase
 export registers).

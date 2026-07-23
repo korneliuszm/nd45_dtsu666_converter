@@ -183,6 +183,29 @@ async def test_poll_once_rejects_invalid_critical_value(address, value, point):
         await poll_once(FakeClient(image), src, slave=1)
 
 
+async def test_poll_once_rejects_invalid_composite_parts_that_cancel(caplog):
+    src = load_registers("config/registers.json").nd45_source
+    image = {
+        944: _raw_float_registers(3e20),
+        960: _raw_float_registers(-3e20),
+    }
+    seen: set[str] = set()
+
+    with caplog.at_level("WARNING", logger="nd45_dtsu666.nd45_poller"):
+        for _ in range(2):
+            with pytest.raises(PollError, match="reactive_energy_total"):
+                await poll_once(
+                    FakeClient(image), src, slave=1, overrange_seen=seen
+                )
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "reactive_energy_total" in record.getMessage()
+    ]
+    assert len(warnings) == 1
+
+
 async def test_poll_once_reports_all_invalid_critical_points():
     src = load_registers("config/registers.json").nd45_source
     image = {

@@ -110,10 +110,23 @@ from the configured U and I, and omitted `s_total` is their sum. Explicit `s_*`
 values are served unchanged. Values must be finite JSON numbers, and unknown
 names stop startup so spelling mistakes cannot silently produce zeros.
 
-Independent static inputs are voltages, currents, active/reactive/apparent power,
-PF, frequency, active-import total and phase counters, active-export total, and
-total reactive energy. All other energy outputs are fixed zero fields or derived
-from those independent values.
+The exact independently configurable `static_debug.values` keys are:
+
+```text
+u_l1, u_l2, u_l3, u_l12, u_l23, u_l31
+i_l1, i_l2, i_l3
+p_l1, p_l2, p_l3, p_total
+q_l1, q_l2, q_l3, q_total
+s_l1, s_l2, s_l3, s_total
+pf_l1, pf_l2, pf_l3, pf_total
+freq
+imp_energy_total, imp_energy_l1, imp_energy_l2, imp_energy_l3
+exp_energy_total
+reactive_energy_total
+```
+
+No other keys are accepted. All other energy outputs are fixed zero fields or
+derived from these independent values.
 
 The checked-in example represents export: active power and PF are negative,
 `exp_energy_total` is non-zero, and `reactive_energy_total` drives the coarse

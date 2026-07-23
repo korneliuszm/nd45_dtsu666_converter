@@ -6,11 +6,19 @@ import asyncio
 import time
 
 from .canonical import CanonicalStore, HealthGate
-from .codec import encode_point, registers_to_float
+from .codec import registers_to_float
 from .config import RegisterMap, load_config, load_registers
+from .dtsu_server import encode_target_point
 
 
-def render_table(source, target, canonical: dict[str, float], age: float, healthy: bool) -> str:
+def render_table(
+    source,
+    target,
+    canonical: dict[str, float],
+    age: float,
+    healthy: bool,
+    ct_ratio: float = 1.0,
+) -> str:
     status = "OK" if healthy else "STALE/FAILSAFE"
     lines = [
         f"status: {status}   data age: {age:.2f}s",
@@ -22,7 +30,7 @@ def render_table(source, target, canonical: dict[str, float], age: float, health
         if si is None:
             si_txt, raw_txt = "-", "-"
         else:
-            regs = encode_point(si, pt.scale, pt.sign, pt.offset, target.word_order, target.byte_order)
+            regs = encode_target_point(si, pt, target, ct_ratio=ct_ratio)
             si_txt = f"{si:.3f}"
             raw_txt = f"{registers_to_float(regs, target.word_order, target.byte_order):.1f}"
         lines.append(f"{pt.from_:<18}{si_txt:>14}   {pt.addr:>9}{raw_txt:>14}")
@@ -119,7 +127,16 @@ def _run_diag(config, registers) -> int:
                     values, age, healthy = {}, float("inf"), False
                     print(f"poll error: {exc}")
                 print("\033[2J\033[H", end="")  # clear screen
-                print(render_table(registers.nd45_source, registers.dtsu_target, values, age, healthy))
+                print(
+                    render_table(
+                        registers.nd45_source,
+                        registers.dtsu_target,
+                        values,
+                        age,
+                        healthy,
+                        ct_ratio=config.dtsu.identity.ir_at,
+                    )
+                )
                 await asyncio.sleep(1.0)
         finally:
             client.close()

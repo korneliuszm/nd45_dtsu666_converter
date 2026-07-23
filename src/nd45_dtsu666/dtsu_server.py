@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from collections import Counter, deque
 from collections.abc import Callable, Iterable
@@ -18,7 +19,7 @@ from pymodbus.framer.socket_framer import ModbusSocketFramer
 from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from .codec import encode_point
-from .config import DtsuConf, StaticIdentitySide, TargetSide
+from .config import DtsuConf, StaticIdentitySide, TargetPoint, TargetSide
 
 log = logging.getLogger(__name__)
 
@@ -208,26 +209,37 @@ def update_datastore(
     slave = context[slave_id]
     pending: list[tuple[int, int, list[int]]] = []
     for side in _targets(target):
-        wo, bo = side.word_order, side.byte_order
         for pt in side.points.values():
             si = canonical.get(pt.from_)
             if si is None:
                 continue
-            if pt.divide_by_ct:
-                si = si / ct_ratio
-            regs = encode_point(
-                si,
-                pt.scale,
-                pt.sign,
-                pt.offset,
-                wo,
-                bo,
-                zero_low_word=pt.zero_low_word,
-            )
+            regs = encode_target_point(si, pt, side, ct_ratio=ct_ratio)
             pending.append((side.function_code, pt.addr, regs))
 
     for function_code, address, registers in pending:
         slave.setValues(function_code, address, registers)
+
+
+def encode_target_point(
+    si: float,
+    point: TargetPoint,
+    target: TargetSide,
+    ct_ratio: float = 1.0,
+) -> list[int]:
+    """Apply target-side conversion and encode one canonical SI value."""
+    if point.divide_by_ct:
+        if not math.isfinite(ct_ratio) or ct_ratio <= 0:
+            raise ValueError("CT ratio must be a positive finite number")
+        si = si / ct_ratio
+    return encode_point(
+        si,
+        point.scale,
+        point.sign,
+        point.offset,
+        target.word_order,
+        target.byte_order,
+        zero_low_word=point.zero_low_word,
+    )
 
 
 def make_serial_server(cfg: DtsuConf, context) -> ModbusSerialServer:
