@@ -46,32 +46,32 @@
       "u_l1":   {"addr": 8198, "from": "u_l1", "scale": 10},
       "u_l2":   {"addr": 8200, "from": "u_l2", "scale": 10},
       "u_l3":   {"addr": 8202, "from": "u_l3", "scale": 10},
-      "i_l1":   {"addr": 8204, "from": "i_l1", "scale": 1000},
-      "i_l2":   {"addr": 8206, "from": "i_l2", "scale": 1000},
-      "i_l3":   {"addr": 8208, "from": "i_l3", "scale": 1000},
-      "p_total":{"addr": 8210, "from": "p_total", "scale": 10, "sign": 1},
-      "p_l1":   {"addr": 8212, "from": "p_l1", "scale": 10, "sign": 1},
-      "p_l2":   {"addr": 8214, "from": "p_l2", "scale": 10, "sign": 1},
-      "p_l3":   {"addr": 8216, "from": "p_l3", "scale": 10, "sign": 1},
-      "q_total":{"addr": 8218, "from": "q_total", "scale": 10},
-      "q_l1":   {"addr": 8220, "from": "q_l1", "scale": 10},
-      "q_l2":   {"addr": 8222, "from": "q_l2", "scale": 10},
-      "q_l3":   {"addr": 8224, "from": "q_l3", "scale": 10},
+      "i_l1":   {"addr": 8204, "from": "i_l1", "scale": 1000, "divide_by_ct": true},
+      "i_l2":   {"addr": 8206, "from": "i_l2", "scale": 1000, "divide_by_ct": true},
+      "i_l3":   {"addr": 8208, "from": "i_l3", "scale": 1000, "divide_by_ct": true},
+      "p_total":{"addr": 8210, "from": "p_total", "scale": 10, "sign": 1, "divide_by_ct": true},
+      "p_l1":   {"addr": 8212, "from": "p_l1", "scale": 10, "sign": 1, "divide_by_ct": true},
+      "p_l2":   {"addr": 8214, "from": "p_l2", "scale": 10, "sign": 1, "divide_by_ct": true},
+      "p_l3":   {"addr": 8216, "from": "p_l3", "scale": 10, "sign": 1, "divide_by_ct": true},
+      "q_total":{"addr": 8218, "from": "q_total", "scale": 10, "divide_by_ct": true},
+      "q_l1":   {"addr": 8220, "from": "q_l1", "scale": 10, "divide_by_ct": true},
+      "q_l2":   {"addr": 8222, "from": "q_l2", "scale": 10, "divide_by_ct": true},
+      "q_l3":   {"addr": 8224, "from": "q_l3", "scale": 10, "divide_by_ct": true},
       "pf_total":{"addr": 8234, "from": "pf_total", "scale": 1000},
       "pf_l1":  {"addr": 8236, "from": "pf_l1", "scale": 1000},
       "pf_l2":  {"addr": 8238, "from": "pf_l2", "scale": 1000},
       "pf_l3":  {"addr": 8240, "from": "pf_l3", "scale": 1000},
       "freq":   {"addr": 8260, "from": "freq", "scale": 100},
-      "imp_ep":     {"addr": 4126, "from": "imp_energy_total", "scale": 1},
-      "imp_ep_l1":  {"addr": 4128, "from": "imp_energy_l1", "scale": 1},
-      "imp_ep_l2":  {"addr": 4130, "from": "imp_energy_l2", "scale": 1},
-      "imp_ep_l3":  {"addr": 4132, "from": "imp_energy_l3", "scale": 1},
-      "net_imp_ep": {"addr": 4134, "from": "net_imp_energy_total", "scale": 1},
-      "exp_ep":     {"addr": 4136, "from": "exp_energy_total", "scale": 1},
-      "exp_ep_l1":  {"addr": 4138, "from": "exp_energy_l1", "scale": 1},
-      "exp_ep_l2":  {"addr": 4140, "from": "exp_energy_l2", "scale": 1},
-      "exp_ep_l3":  {"addr": 4142, "from": "exp_energy_l3", "scale": 1},
-      "net_exp_ep": {"addr": 4144, "from": "net_exp_energy_total", "scale": 1}
+      "imp_ep":     {"addr": 4126, "from": "imp_energy_total", "scale": 1, "divide_by_ct": true},
+      "imp_ep_l1":  {"addr": 4128, "from": "imp_energy_l1", "scale": 1, "divide_by_ct": true},
+      "imp_ep_l2":  {"addr": 4130, "from": "imp_energy_l2", "scale": 1, "divide_by_ct": true},
+      "imp_ep_l3":  {"addr": 4132, "from": "imp_energy_l3", "scale": 1, "divide_by_ct": true},
+      "net_imp_ep": {"addr": 4134, "from": "net_imp_energy_total", "scale": 1, "divide_by_ct": true},
+      "exp_ep":     {"addr": 4136, "from": "exp_energy_total", "scale": 1, "divide_by_ct": true},
+      "exp_ep_l1":  {"addr": 4138, "from": "exp_energy_l1", "scale": 1, "divide_by_ct": true},
+      "exp_ep_l2":  {"addr": 4140, "from": "exp_energy_l2", "scale": 1, "divide_by_ct": true},
+      "exp_ep_l3":  {"addr": 4142, "from": "exp_energy_l3", "scale": 1, "divide_by_ct": true},
+      "net_exp_ep": {"addr": 4144, "from": "net_exp_energy_total", "scale": 1, "divide_by_ct": true}
     }
   },
   "dtsu_sigen_ext_target": {
@@ -88,14 +88,14 @@
       "i_l1":    {"addr": 5398, "from": "i_l1", "scale": 1},
       "i_l2":    {"addr": 5400, "from": "i_l2", "scale": 1},
       "i_l3":    {"addr": 5402, "from": "i_l3", "scale": 1},
-      "p_total": {"addr": 5404, "from": "p_total", "scale": 1, "sign": 1},
-      "p_l1":    {"addr": 5406, "from": "p_l1", "scale": 1, "sign": 1},
-      "p_l2":    {"addr": 5408, "from": "p_l2", "scale": 1, "sign": 1},
-      "p_l3":    {"addr": 5410, "from": "p_l3", "scale": 1, "sign": 1},
-      "q_total": {"addr": 5412, "from": "q_total", "scale": 1},
-      "q_l1":    {"addr": 5414, "from": "q_l1", "scale": 1},
-      "q_l2":    {"addr": 5416, "from": "q_l2", "scale": 1},
-      "q_l3":    {"addr": 5418, "from": "q_l3", "scale": 1},
+      "p_total": {"addr": 5404, "from": "p_total", "scale": 0.001, "sign": 1},
+      "p_l1":    {"addr": 5406, "from": "p_l1", "scale": 0.001, "sign": 1},
+      "p_l2":    {"addr": 5408, "from": "p_l2", "scale": 0.001, "sign": 1},
+      "p_l3":    {"addr": 5410, "from": "p_l3", "scale": 0.001, "sign": 1},
+      "q_total": {"addr": 5412, "from": "q_total", "scale": 0.001},
+      "q_l1":    {"addr": 5414, "from": "q_l1", "scale": 0.001},
+      "q_l2":    {"addr": 5416, "from": "q_l2", "scale": 0.001},
+      "q_l3":    {"addr": 5418, "from": "q_l3", "scale": 0.001},
       "pf_total":{"addr": 5428, "from": "pf_total", "scale": 1},
       "pf_l1":   {"addr": 5430, "from": "pf_l1", "scale": 1},
       "pf_l2":   {"addr": 5432, "from": "pf_l2", "scale": 1},
@@ -119,19 +119,21 @@
       }
     }
   },
-  "dtsu_sigen_zero_ranges": {
+  "dtsu_sigen_ext_energy": {
+    "word_order": "big",
+    "byte_order": "big",
     "function_code": 4,
-    "ranges": [
-      {
-        "name": "sigen_unidentified_180a",
-        "addr": 6154,
-        "count": 22
-      },
-      {
-        "name": "sigen_unidentified_1828",
-        "addr": 6184,
-        "count": 4
-      }
-    ]
+    "points": {
+      "imp_ep":     {"addr": 6174, "from": "imp_energy_total", "scale": 1},
+      "imp_ep_l1":  {"addr": 6176, "from": "imp_energy_l1", "scale": 1},
+      "imp_ep_l2":  {"addr": 6178, "from": "imp_energy_l2", "scale": 1},
+      "imp_ep_l3":  {"addr": 6180, "from": "imp_energy_l3", "scale": 1},
+      "net_imp_ep": {"addr": 6182, "from": "net_imp_energy_total", "scale": 1},
+      "exp_ep":     {"addr": 6184, "from": "exp_energy_total", "scale": 1},
+      "exp_ep_l1":  {"addr": 6186, "from": "exp_energy_l1", "scale": 1},
+      "exp_ep_l2":  {"addr": 6188, "from": "exp_energy_l2", "scale": 1},
+      "exp_ep_l3":  {"addr": 6190, "from": "exp_energy_l3", "scale": 1},
+      "net_exp_ep": {"addr": 6192, "from": "net_exp_energy_total", "scale": 1}
+    }
   }
 }

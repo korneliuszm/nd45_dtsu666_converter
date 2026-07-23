@@ -36,11 +36,43 @@ def test_load_registers_reads_sigen_measurement_map():
     assert sigen.function_code == 4
     assert sigen.word_order == "big"
     assert sigen.byte_order == "big"
+    # power/reactive power are reported in kW/kvar (x0.001) on the Sigen OEM
+    # map, unlike every other quantity which is direct SI (x1).
+    power_names = {"p_total", "p_l1", "p_l2", "p_l3", "q_total", "q_l1", "q_l2", "q_l3"}
     for name, point in sigen.points.items():
         classic = reg.dtsu_target.points[name]
         assert point.addr == classic.addr - 2806
-        assert point.scale == 1
+        assert point.scale == (0.001 if name in power_names else 1)
         assert point.sign == classic.sign
+        assert point.divide_by_ct is False  # already primary-side, unlike the classic map
+
+
+def test_load_registers_classic_secondary_side_points_divide_by_ct():
+    reg = load_registers("config/registers.json")
+    classic = reg.dtsu_target
+
+    ct_divided = {
+        "i_l1", "i_l2", "i_l3",
+        "p_total", "p_l1", "p_l2", "p_l3",
+        "q_total", "q_l1", "q_l2", "q_l3",
+        "imp_ep", "imp_ep_l1", "imp_ep_l2", "imp_ep_l3", "net_imp_ep",
+        "exp_ep", "exp_ep_l1", "exp_ep_l2", "exp_ep_l3", "net_exp_ep",
+    }
+    for name, point in classic.points.items():
+        assert point.divide_by_ct == (name in ct_divided), name
+
+
+def test_load_registers_reads_sigen_ext_energy_map():
+    reg = load_registers("config/registers.json")
+    energy = reg.dtsu_sigen_ext_energy
+
+    assert energy.function_code == 4
+    # offset +0x800 (+2048) versus the classic energy block
+    for name, point in energy.points.items():
+        classic = reg.dtsu_target.points[name]
+        assert point.addr == classic.addr + 2048
+        assert point.scale == 1
+        assert point.divide_by_ct is False  # already primary-side kWh
 
 
 def test_load_registers_reads_sigen_identity():
@@ -56,19 +88,6 @@ def test_load_registers_reads_sigen_identity():
     assert handshake.addr == 0xF114
     assert handshake.type == "uint32"
     assert handshake.static_value == 5376
-
-
-def test_load_registers_reads_temporarily_unidentified_sigen_ranges():
-    ranges = load_registers("config/registers.json").dtsu_sigen_zero_ranges
-
-    assert ranges.function_code == 4
-    assert [
-        (item.name, item.addr, item.count)
-        for item in ranges.ranges
-    ] == [
-        ("sigen_unidentified_180a", 0x180A, 22),
-        ("sigen_unidentified_1828", 0x1828, 4),
-    ]
 
 
 def test_load_config_reads_seed():
@@ -118,6 +137,12 @@ def test_target_point_defaults(tmp_path):
     pf = reg.dtsu_target.points["pf_total"]
     assert pf.sign == 1
     assert pf.offset == 0
+    assert pf.divide_by_ct is False
+
+
+def test_dtsu_identity_conf_rejects_non_positive_ir_at():
+    with pytest.raises(ValidationError, match="ir_at"):
+        DtsuIdentityConf(ir_at=0)
 
 
 def test_reliability_defaults():

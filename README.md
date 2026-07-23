@@ -4,12 +4,16 @@ Temporary Modbus bridge: Lumel ND45 (Modbus TCP) → DTSU666 register map, serve
 either Modbus RTU or Modbus TCP (config-selectable) so a Sigenergy storage system can
 read it as a "Power Sensor".
 
-The output exposes both the standard DTSU666 holding-register map over FC03 and the
-Sigenergy OEM map over FC04. It also serves the FC03 identity string
-`Sigen Sensor TPX-CH` at `0xF100` and the observed `0x00001500` handshake at `0xF114`.
-Observed but not yet identified FC04 ranges `0x180A-0x181F` and `0x1828-0x182B`
-return stable zero words, matching the available one-phase TPX-CH scan and preventing
-`IllegalAddress`; they do not mirror values from the `0x15xx` measurement block.
+The output exposes both the standard DTSU666 holding-register map over FC03 (secondary/
+CT side, `0x2000`/`0x101E`) and the Sigenergy OEM map over FC04 (primary side, `0x150A`
+measurements in SI units except power/reactive power in kW/kvar, and `0x180A`/`0x1828`
+energy at a `+0x800` offset from the classic energy block). Both sides derive from the
+same ND45 reading; the classic map divides current/power/energy by the configured CT
+ratio (`dtsu.identity.ir_at`) while the Sigen map does not (already primary). It also
+serves the FC03 identity string `Sigen Sensor TPX-CH` at `0xF100` and the observed
+`0x00001500` handshake at `0xF114`. A handful of addresses inside the polled FC04 energy
+ranges have no confirmed ND45 source (e.g. the reactive-energy accumulator) and are left
+zero rather than fabricated, which also prevents `IllegalAddress` on those reads.
 
 ## Install (reComputer R1000, Ubuntu)
 ```bash
@@ -137,16 +141,23 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
    auto-toggles direction, or configure pyserial RS-485 mode if the master sees
    no/garbled replies. Not applicable when `dtsu.transport` is `"tcp"`.
 8. **Identity/config registers (0x0000-0x002E)** — values are set from `dtsu.identity` in
-   `config/config.json` (defaults: direct-connect 3P4W meter, CT/PT ratio 1:1 — `net=0`,
-   `ir_at=ur_at=10`). To match a specific real meter, edit `dtsu.identity` by hand, e.g.:
+   `config/config.json` (defaults: direct-connect 3P4W meter, CT ratio 1:1 — `net=0`,
+   `ir_at=ur_at=10`). `ir_at` is **not** cosmetic: it is the actual CT ratio the classic
+   DTSU666 map (FC03) divides current/power/energy by, since that map is secondary-side
+   while the ND45 source and Sigen OEM map (FC04) are assumed primary-side — get it wrong
+   and every classic-map value is off by that factor. To match a specific real meter, edit
+   `dtsu.identity` by hand, e.g.:
    ```json
    "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10}
    ```
    Fields omitted keep their default. See `DtsuIdentityConf` in `config.py` for the full
    field list and `_IDENTITY_REGISTER_ADDRS` in `dtsu_server.py` for the register mapping.
-   If Sigenergy rejects the meter or misapplies scaling, check these against the DTSU666
-   manual — this hasn't been confirmed against real Sigenergy behavior.
+   The primary-vs-secondary assumption for the ND45 source itself is unconfirmed — verify
+   on site (see `docs/superpowers/specs/2026-07-23-dtsu-sigen-ct-ratio-design.md`).
 9. **Sigen OEM registers** — confirm the storage reads FC04 `0x151C` for total active
-   power and periodically reads FC03 `0xF114` for the identity handshake. The configured
-   FC04 current and per-phase power positions follow the confirmed `-0x0AF6` block offset
-   but still require an on-site capture under load.
+   power (in kW, not W) and periodically reads FC03 `0xF114` for the identity handshake.
+   The configured FC04 current and per-phase power positions follow the confirmed
+   `-0x0AF6` block offset, and the energy block follows the confirmed `+0x800` offset from
+   the classic energy registers, but both still require an on-site capture under load —
+   in particular whether `exp_ep` (export energy) behaves correctly, since it was never
+   observed non-zero in the source capture (no generation source on the test bench).

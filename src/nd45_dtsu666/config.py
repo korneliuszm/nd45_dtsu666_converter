@@ -63,6 +63,11 @@ class TargetPoint(BaseModel):
     scale: float = 1.0
     offset: float = 0.0
     sign: int = 1
+    # True for classic DTSU666 (secondary/CT-side) points that must be divided
+    # by the configured CT ratio (dtsu.identity.ir_at) before scaling -- see
+    # update_datastore. Sigen OEM points read primary-side values directly and
+    # leave this False.
+    divide_by_ct: bool = False
 
     model_config = {"populate_by_name": True}
 
@@ -133,45 +138,12 @@ class StaticIdentitySide(BaseModel):
     points: dict[str, StaticIdentityPoint]
 
 
-class StaticZeroRange(BaseModel):
-    name: str
-    addr: int
-    count: int
-
-    @model_validator(mode="after")
-    def _check_range(self) -> "StaticZeroRange":
-        if not self.name:
-            raise ValueError("static zero range name must not be empty")
-        if self.addr < 0 or self.count < 1 or self.addr + self.count > 0x10000:
-            raise ValueError("static zero range must fit the 0..0xFFFF address space")
-        return self
-
-    @property
-    def end_addr(self) -> int:
-        return self.addr + self.count - 1
-
-
-class StaticZeroSide(BaseModel):
-    function_code: Literal[4] = 4
-    ranges: list[StaticZeroRange]
-
-    @model_validator(mode="after")
-    def _check_ranges_do_not_overlap(self) -> "StaticZeroSide":
-        ordered = sorted(self.ranges, key=lambda item: item.addr)
-        for previous, current in zip(ordered, ordered[1:]):
-            if current.addr <= previous.end_addr:
-                raise ValueError(
-                    f"static zero ranges {previous.name!r} and {current.name!r} overlap"
-                )
-        return self
-
-
 class RegisterMap(BaseModel):
     nd45_source: SourceSide
     dtsu_target: TargetSide
     dtsu_sigen_ext_target: TargetSide
+    dtsu_sigen_ext_energy: TargetSide
     dtsu_sigen_identity: StaticIdentitySide
-    dtsu_sigen_zero_ranges: StaticZeroSide
 
 
 class Nd45Conf(BaseModel):
@@ -201,12 +173,24 @@ class DtsuIdentityConf(BaseModel):
     ucode: int = 0
     clr_e: int = 0
     net: int = 0
+    # CT ratio (register 0x0006, "IrAt"): unlike UrAt, this is used directly as
+    # the primary/secondary current-transformer ratio (not x0.1-scaled) --
+    # verified against a live meter's current, power, and energy-accumulation
+    # readings. Doubles as the translator's single CT-ratio parameter: classic
+    # DTSU666 (secondary-side) points divide by it, see TargetPoint.divide_by_ct.
     ir_at: int = 10
     ur_at: int = 10
     disp: int = 0
     b_lcd: int = 0
     endian: int = 0
     protocol: int = 0
+
+    @field_validator("ir_at")
+    @classmethod
+    def _check_ir_at_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("dtsu.identity.ir_at (CT ratio) must be positive")
+        return value
 
 
 class DtsuConf(BaseModel):

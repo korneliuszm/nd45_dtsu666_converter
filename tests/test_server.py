@@ -48,6 +48,45 @@ def test_datastore_raw_scaling_matches_dtsu_spec():
     assert registers_to_float(regs, target.word_order, target.byte_order) == pytest.approx(2300.0)
 
 
+def test_update_datastore_divides_classic_ct_points_by_ct_ratio():
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    update_datastore(context, 1, {"p_total": 40000.0}, target, ct_ratio=200)
+
+    # classic (secondary-side) p_total: (40000/200) W x10 scale = 2000.0 raw
+    regs = context[1].getValues(3, target.points["p_total"].addr, count=2)
+    assert registers_to_float(regs, "big", "big") == pytest.approx(2000.0)
+
+
+def test_update_datastore_default_ct_ratio_is_a_no_op():
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    update_datastore(context, 1, {"p_total": 1500.0}, target)  # ct_ratio defaults to 1.0
+
+    regs = context[1].getValues(3, target.points["p_total"].addr, count=2)
+    assert registers_to_float(regs, "big", "big") == pytest.approx(15000.0)  # x10 scale only
+
+
+def test_sigen_ext_target_reports_primary_power_in_kw():
+    registers = load_registers("config/registers.json")
+    targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
+    context = build_context(targets, slave_id=1)
+    # p_total is already the primary-side ND45 reading; the classic (secondary)
+    # map still divides by ct_ratio, the Sigen ext map does not.
+    update_datastore(context, 1, {"p_total": 40000.0}, targets, ct_ratio=200)
+
+    ext = registers.dtsu_sigen_ext_target.points["p_total"]
+    regs = context[1].getValues(4, ext.addr, count=2)
+    assert registers_to_float(regs, "big", "big") == pytest.approx(40.0)  # 40000 W -> 40 kW
+
+
+def test_static_registers_includes_reserved_0046():
+    target = load_registers("config/registers.json").dtsu_target
+    cfg = DtsuConf(transport="rtu", slave_id=1, rtu=DtsuRtuConf(port="/dev/null"))
+    context = build_context(target, slave_id=1, dtsu_cfg=cfg)
+    assert context[1].getValues(3, 0x0046, count=1) == [0]
+
+
 def test_classic_and_sigen_measurements_use_separate_data_spaces_and_scales():
     registers = load_registers("config/registers.json")
     targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
@@ -101,20 +140,48 @@ def test_sigen_identity_and_handshake_are_seeded_exactly():
     assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
 
 
-def test_temporarily_unidentified_sigen_ranges_return_zero_without_illegal_address():
+def test_sigen_ext_energy_gaps_return_zero_without_illegal_address():
     registers = load_registers("config/registers.json")
+    targets = [
+        registers.dtsu_target,
+        registers.dtsu_sigen_ext_target,
+        registers.dtsu_sigen_ext_energy,
+    ]
     context = build_context(
-        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        targets,
         slave_id=1,
         sigen_identity=registers.dtsu_sigen_identity,
-        sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
     )
     slave = context[1]
 
+    # Sigenergy polls these two ranges; only imp_ep/exp_ep points at their
+    # tail end are named, the rest (unconfirmed reactive-energy accumulator
+    # and reserved space) stays zero-filled rather than raising IllegalAddress.
     assert slave.validate(4, 0x180A, count=22)
-    assert slave.getValues(4, 0x180A, count=22) == [0] * 22
+    assert slave.getValues(4, 0x180A, count=22)[:20] == [0] * 20
     assert slave.validate(4, 0x1828, count=4)
-    assert slave.getValues(4, 0x1828, count=4) == [0] * 4
+
+
+def test_sigen_ext_energy_encodes_primary_kwh_at_offset_0x800():
+    registers = load_registers("config/registers.json")
+    targets = [
+        registers.dtsu_target,
+        registers.dtsu_sigen_ext_target,
+        registers.dtsu_sigen_ext_energy,
+    ]
+    context = build_context(targets, slave_id=1)
+    update_datastore(
+        context, 1, {"imp_energy_total": 1234.5, "exp_energy_total": 67.8}, targets, ct_ratio=200
+    )
+
+    classic_imp = registers.dtsu_target.points["imp_ep"]
+    classic_regs = context[1].getValues(3, classic_imp.addr, count=2)
+    assert registers_to_float(classic_regs, "big", "big") == pytest.approx(1234.5 / 200)
+
+    ext_imp = registers.dtsu_sigen_ext_energy.points["imp_ep"]
+    assert ext_imp.addr == classic_imp.addr + 2048
+    ext_regs = context[1].getValues(4, ext_imp.addr, count=2)
+    assert registers_to_float(ext_regs, "big", "big") == pytest.approx(1234.5)  # primary, un-divided
 
 
 def test_missing_canonical_key_is_skipped():
