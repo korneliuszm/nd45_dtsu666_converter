@@ -11,10 +11,32 @@ from nd45_dtsu666.config import (
     DtsuTcpConf,
     Nd45Conf,
     SafetyConf,
+    SourcePoint,
     StaticDebugConf,
     load_config,
     load_registers,
 )
+
+
+def test_source_point_rejects_both_addr_and_compose():
+    with pytest.raises(ValidationError, match="both 'addr' and 'compose'"):
+        SourcePoint(addr=50, compose=[900, 902], factors=[1000, 1])
+
+
+def test_source_point_rejects_neither_addr_nor_compose():
+    with pytest.raises(ValidationError, match="either 'addr' or 'compose'"):
+        SourcePoint()
+
+
+def test_source_point_rejects_factors_length_mismatch():
+    with pytest.raises(ValidationError, match="'factors' length must match"):
+        SourcePoint(compose=[900, 902], factors=[1000])
+
+
+def test_source_point_allows_compose_without_factors():
+    # factors is optional; poll_once defaults it to all-1.0
+    pt = SourcePoint(compose=[900, 902])
+    assert pt.factors is None
 
 
 def test_load_registers_reads_seed(tmp_path):

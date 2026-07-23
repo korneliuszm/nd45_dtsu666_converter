@@ -30,13 +30,17 @@ meter — the value was correct, but nothing in the translator actually used
 it to scale measurements before this change; it was cosmetic (written to the
 identity register, never applied to CT-ratio scaling).
 
-## Assumption carried into this design (unconfirmed, see CLAUDE.md)
+## ND45 side: primary-side, confirmed
 
-The ND45 is assumed to already report **primary-side** current/power/energy
-(matching the source report's working assumption). If that is wrong,
-`divide_by_ct` on the classic map and the CT-ratio semantics invert. Like
-sign convention and phase order, this is a bring-up item, not something the
-test suite can prove — see the README on-site checklist.
+The ND45 already reports converted (primary-side) current/power/energy — it
+applies its own configured CT ratio internally before exposing values over
+Modbus, so `nd45_source` values need no further primary/secondary
+adjustment. This resolves the open question the source report flagged in its
+section 4.6: `divide_by_ct` on the classic map and the direct pass-through on
+the Sigen OEM map are both correct as implemented, not merely a working
+assumption. What remains unconfirmed on-site is unrelated to this: sign
+convention, phase order, and `exp_ep` behavior under real export — see the
+README checklist.
 
 ## Changes
 
@@ -65,5 +69,6 @@ test suite can prove — see the README on-site checklist.
 
 - Changing the ND45 source register map or canonical model.
 - Inferring the unconfirmed reactive-energy accumulator's ND45 source.
-- Confirming primary-vs-secondary ND45 reporting or exp_ep behavior on
-  export — both remain on-site verification items.
+- Confirming `exp_ep` behavior under real export — remains an on-site
+  verification item (primary-vs-secondary ND45 reporting is now confirmed,
+  see above).

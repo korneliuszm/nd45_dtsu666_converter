@@ -100,7 +100,9 @@ def _run_selftest(config, registers) -> int:
 def _run_diag(config, registers) -> int:
     from pymodbus.client import AsyncModbusTcpClient
 
-    from .nd45_poller import poll_once
+    from .nd45_poller import poll_once, validate_source_coverage
+
+    validate_source_coverage(registers.nd45_source)
 
     async def _main() -> None:
         client = AsyncModbusTcpClient(config.nd45.host, port=config.nd45.port,
