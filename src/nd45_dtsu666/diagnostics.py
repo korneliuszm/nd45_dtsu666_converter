@@ -63,6 +63,7 @@ def _run_selftest(config, registers) -> int:
             config.dtsu.slave_id,
             dtsu_cfg=config.dtsu,
             sigen_identity=registers.dtsu_sigen_identity,
+            sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
         )
         values = _synthetic_values(registers)
         stop = asyncio.Event()

@@ -94,11 +94,45 @@ class StaticIdentitySide(BaseModel):
     points: dict[str, StaticIdentityPoint]
 
 
+class StaticZeroRange(BaseModel):
+    name: str
+    addr: int
+    count: int
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "StaticZeroRange":
+        if not self.name:
+            raise ValueError("static zero range name must not be empty")
+        if self.addr < 0 or self.count < 1 or self.addr + self.count > 0x10000:
+            raise ValueError("static zero range must fit the 0..0xFFFF address space")
+        return self
+
+    @property
+    def end_addr(self) -> int:
+        return self.addr + self.count - 1
+
+
+class StaticZeroSide(BaseModel):
+    function_code: Literal[4] = 4
+    ranges: list[StaticZeroRange]
+
+    @model_validator(mode="after")
+    def _check_ranges_do_not_overlap(self) -> "StaticZeroSide":
+        ordered = sorted(self.ranges, key=lambda item: item.addr)
+        for previous, current in zip(ordered, ordered[1:]):
+            if current.addr <= previous.end_addr:
+                raise ValueError(
+                    f"static zero ranges {previous.name!r} and {current.name!r} overlap"
+                )
+        return self
+
+
 class RegisterMap(BaseModel):
     nd45_source: SourceSide
     dtsu_target: TargetSide
     dtsu_sigen_ext_target: TargetSide
     dtsu_sigen_identity: StaticIdentitySide
+    dtsu_sigen_zero_ranges: StaticZeroSide
 
 
 class Nd45Conf(BaseModel):

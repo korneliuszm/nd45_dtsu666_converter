@@ -45,6 +45,19 @@ def test_load_registers_reads_sigen_identity():
     assert handshake.static_value == 5376
 
 
+def test_load_registers_reads_temporarily_unidentified_sigen_ranges():
+    ranges = load_registers("config/registers.json").dtsu_sigen_zero_ranges
+
+    assert ranges.function_code == 4
+    assert [
+        (item.name, item.addr, item.count)
+        for item in ranges.ranges
+    ] == [
+        ("sigen_unidentified_180a", 0x180A, 22),
+        ("sigen_unidentified_1828", 0x1828, 4),
+    ]
+
+
 def test_load_config_reads_seed():
     cfg = load_config("config/config.json")
     assert cfg.nd45.port == 502

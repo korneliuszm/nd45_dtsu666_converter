@@ -114,6 +114,7 @@ def build_pipeline(
         activity=activity,
         dtsu_cfg=config.dtsu,
         sigen_identity=registers.dtsu_sigen_identity,
+        sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
     )
     base_on_update = build_on_update(store, context, config.dtsu.slave_id, targets)
     reporter = FaultReporter()

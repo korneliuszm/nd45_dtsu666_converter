@@ -41,6 +41,8 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
     assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
     sigen_u_l1 = registers.dtsu_sigen_ext_target.points["u_l1"]
     assert slave.getValues(4, sigen_u_l1.addr, count=2) == [0, 0]
+    assert slave.getValues(4, 0x180A, count=22) == [0] * 22
+    assert slave.getValues(4, 0x1828, count=4) == [0] * 4
 
     for coro in pipe.coros:  # never awaited in this test; close to keep output pristine
         coro.close()

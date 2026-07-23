@@ -7,6 +7,9 @@ read it as a "Power Sensor".
 The output exposes both the standard DTSU666 holding-register map over FC03 and the
 Sigenergy OEM map over FC04. It also serves the FC03 identity string
 `Sigen Sensor TPX-CH` at `0xF100` and the observed `0x00001500` handshake at `0xF114`.
+Observed but not yet identified FC04 ranges `0x180A-0x181F` and `0x1828-0x182B`
+return stable zero words, matching the available one-phase TPX-CH scan and preventing
+`IllegalAddress`; they do not mirror values from the `0x15xx` measurement block.
 
 ## Install (reComputer R1000, Ubuntu)
 ```bash

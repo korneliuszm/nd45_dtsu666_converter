@@ -118,5 +118,20 @@
         "static_value": 5376
       }
     }
+  },
+  "dtsu_sigen_zero_ranges": {
+    "function_code": 4,
+    "ranges": [
+      {
+        "name": "sigen_unidentified_180a",
+        "addr": 6154,
+        "count": 22
+      },
+      {
+        "name": "sigen_unidentified_1828",
+        "addr": 6184,
+        "count": 4
+      }
+    ]
   }
 }

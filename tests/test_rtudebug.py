@@ -11,6 +11,7 @@ def _index():
     return RegisterNameIndex.build(
         [registers.dtsu_target, registers.dtsu_sigen_ext_target],
         registers.dtsu_sigen_identity,
+        registers.dtsu_sigen_zero_ranges,
     )
 
 
@@ -51,6 +52,13 @@ def test_lookup_sigen_identity_field():
 
     assert idx.lookup(0xF100, 20, function_code=3) == ["model_string"]
     assert idx.lookup(0xF114, 2, function_code=3) == ["handshake_magic"]
+
+
+def test_lookup_temporarily_unidentified_sigen_ranges():
+    idx = _index()
+
+    assert idx.lookup(0x180A, 22, function_code=4) == ["sigen_unidentified_180a"]
+    assert idx.lookup(0x1828, 4, function_code=4) == ["sigen_unidentified_1828"]
 
 
 def test_lookup_unmapped_block_returns_empty():

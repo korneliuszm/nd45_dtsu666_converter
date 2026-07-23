@@ -18,7 +18,7 @@ from pymodbus.framer.socket_framer import ModbusSocketFramer
 from pymodbus.server import ModbusSerialServer, ModbusTcpServer
 
 from .codec import encode_point
-from .config import DtsuConf, StaticIdentitySide, TargetSide
+from .config import DtsuConf, StaticIdentitySide, StaticZeroSide, TargetSide
 
 log = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ def build_context(
     activity: RtuActivity | None = None,
     dtsu_cfg: DtsuConf | None = None,
     sigen_identity: StaticIdentitySide | None = None,
+    sigen_zero_ranges: StaticZeroSide | None = None,
 ) -> ModbusServerContext:
     target_list = _targets(target)
     max_addresses = {3: 0, 4: 0}
@@ -165,6 +166,11 @@ def build_context(
                 ),
                 default=0,
             ),
+        )
+    if sigen_zero_ranges is not None:
+        max_addresses[4] = max(
+            max_addresses[4],
+            max((item.end_addr for item in sigen_zero_ranges.ranges), default=0),
         )
     holding = ModbusSequentialDataBlock(0, [0] * (max_addresses[3] + 1))
     inputs = ModbusSequentialDataBlock(0, [0] * (max_addresses[4] + 1))

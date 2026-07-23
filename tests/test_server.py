@@ -101,6 +101,22 @@ def test_sigen_identity_and_handshake_are_seeded_exactly():
     assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
 
 
+def test_temporarily_unidentified_sigen_ranges_return_zero_without_illegal_address():
+    registers = load_registers("config/registers.json")
+    context = build_context(
+        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        slave_id=1,
+        sigen_identity=registers.dtsu_sigen_identity,
+        sigen_zero_ranges=registers.dtsu_sigen_zero_ranges,
+    )
+    slave = context[1]
+
+    assert slave.validate(4, 0x180A, count=22)
+    assert slave.getValues(4, 0x180A, count=22) == [0] * 22
+    assert slave.validate(4, 0x1828, count=4)
+    assert slave.getValues(4, 0x1828, count=4) == [0] * 4
+
+
 def test_missing_canonical_key_is_skipped():
     target = load_registers("config/registers.json").dtsu_target
     context = build_context(target, slave_id=1)
