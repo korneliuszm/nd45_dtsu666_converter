@@ -207,7 +207,7 @@ def test_sigen_identity_and_handshake_are_seeded_exactly():
     assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
 
 
-def test_sigen_ext_energy_gaps_return_zero_without_illegal_address():
+def test_sigen_ext_energy_active_reads_are_valid_and_unknown_gap_is_zero():
     registers = load_registers("config/registers.json")
     targets = [
         registers.dtsu_target,
@@ -221,12 +221,11 @@ def test_sigen_ext_energy_gaps_return_zero_without_illegal_address():
     )
     slave = context[1]
 
-    # Sigenergy polls these two ranges; only imp_ep/exp_ep points at their
-    # tail end are named, the rest (unconfirmed reactive-energy accumulator
-    # and reserved space) stays zero-filled rather than raising IllegalAddress.
+    # Sigenergy polls both ranges. 0x180A is mapped below; the still-unconfirmed
+    # words through the pre-existing 0x181E point remain zero-filled.
     assert slave.validate(4, 0x180A, count=22)
-    assert slave.getValues(4, 0x180A, count=22)[:20] == [0] * 20
     assert slave.validate(4, 0x1828, count=4)
+    assert slave.getValues(4, 0x180C, count=18) == [0] * 18
 
 
 def test_sigen_ext_energy_encodes_primary_kwh_at_offset_0x800():
@@ -249,6 +248,18 @@ def test_sigen_ext_energy_encodes_primary_kwh_at_offset_0x800():
     assert ext_imp.addr == classic_imp.addr + 2048
     ext_regs = context[1].getValues(4, ext_imp.addr, count=2)
     assert registers_to_float(ext_regs, "big", "big") == pytest.approx(1234.5)  # primary, un-divided
+
+    forward_classic = registers.dtsu_target.points["forward_active_ep"]
+    forward_alias = registers.dtsu_target.points["forward_active_ep_alias"]
+    forward_extended = registers.dtsu_sigen_ext_energy.points["forward_active_ep"]
+
+    for point in (forward_classic, forward_alias):
+        regs = context[1].getValues(3, point.addr, count=2)
+        assert registers_to_float(regs, "big", "big") == pytest.approx(
+            1234.5 / 200
+        )
+    regs = context[1].getValues(4, forward_extended.addr, count=2)
+    assert registers_to_float(regs, "big", "big") == pytest.approx(1234.5)
 
 
 def test_missing_canonical_key_is_skipped():

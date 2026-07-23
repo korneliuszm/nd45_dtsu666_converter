@@ -90,12 +90,13 @@ Strona wtórna. `raw = (SI/CT)·scale` dla pozycji z „/CT".
 | 8240 | 0x2030 | PFc | pf_l3 | ×1000 | – | PF×1000 |
 | 8260 | 0x2044 | Freq | freq | ×100 | – | Hz×100 |
 
-## 2. FC03 — klasyczna mapa DTSU666, energia (baza `0x101E`)
+## 2. FC03 — klasyczna mapa DTSU666, energia i aliasy
 
 Strona wtórna, kWh, `raw = SI/CT` (×1).
 
 | Adres | Hex | Wielkość | `from` | /CT |
 |---:|---|---|---|:--:|
+| 4106 | 0x100A | Forward active total | imp_energy_total | ✓ |
 | 4126 | 0x101E | ImpEp total | imp_energy_total | ✓ |
 | 4128 | 0x1020 | ImpEp L1 | imp_energy_l1 | ✓ |
 | 4130 | 0x1022 | ImpEp L2 | imp_energy_l2 | ✓ |
@@ -106,6 +107,7 @@ Strona wtórna, kWh, `raw = SI/CT` (×1).
 | 4140 | 0x102C | ExpEp L2 | exp_energy_l2 | ✓ |
 | 4142 | 0x102E | ExpEp L3 | exp_energy_l3 | ✓ |
 | 4144 | 0x1030 | NetExpEp | net_exp_energy_total | ✓ |
+| 4176 | 0x1050 | Forward active total (alias) | imp_energy_total | ✓ |
 
 ## 3. FC04 — mapa OEM Sigen, pomiary (baza `0x150A`, offset −0x0AF6 vs FC03)
 
@@ -142,13 +144,15 @@ Bloki czytane przez Sigenergy: `0x150A`/qty30, `0x151C`/qty16 (szybka pętla ~60
 | 5434 | 0x153A | PFc | pf_l3 | ×1 | – |
 | 5454 | 0x154E | Freq | freq | ×1 | Hz |
 
-## 4. FC04 — mapa OEM Sigen, energia (baza `0x181E`, offset +0x800 vs FC03)
+## 4. FC04 — mapa OEM Sigen, energia
 
 Strona **pierwotna**, kWh, ×1. Bloki czytane przez Sigenergy: `0x180A`/qty22
-(obejmuje `imp_ep` na `0x181E`), `0x1828`/qty4 (`exp_ep`, `exp_ep_l1`).
+(obejmuje forward active na `0x180A`, zerową lukę `0x180C`–`0x181D`
+i `imp_ep` na `0x181E`), `0x1828`/qty4 (`exp_ep`, `exp_ep_l1`).
 
 | Adres | Hex | Wielkość | `from` |
 |---:|---|---|---|
+| 6154 | 0x180A | Forward active total | imp_energy_total |
 | 6174 | 0x181E | ImpEp total | imp_energy_total |
 | 6176 | 0x1820 | ImpEp L1 | imp_energy_l1 |
 | 6178 | 0x1822 | ImpEp L2 | imp_energy_l2 |
@@ -159,6 +163,10 @@ Strona **pierwotna**, kWh, ×1. Bloki czytane przez Sigenergy: `0x180A`/qty22
 | 6188 | 0x182C | ExpEp L2 | exp_energy_l2 |
 | 6190 | 0x182E | ExpEp L3 | exp_energy_l3 |
 | 6192 | 0x1830 | NetExpEp | net_exp_energy_total |
+
+**Energia czynna forward** (`0x180A` FC04 / `0x100A`, `0x1050` FC03) jest
+odwzorowana z `imp_energy_total` ND45. FC04 podaje stronę pierwotną, a oba
+aliasy FC03 stronę wtórną (`/CT`), zgodnie ze skanem licznika.
 
 ## 5. FC03 — blok konfiguracyjny / tożsamości
 
@@ -207,10 +215,6 @@ skanowane były kilka minut od siebie w trakcie 10-min skanu):
 
 ## Znane luki (do domknięcia w terenie)
 
-- **Energia bierna** (`0x180A` FC04 / `0x100A`, `0x1050` FC03) — prawdziwy
-  licznik pokazuje tu ~2,59 kvarh; konwerter serwuje 0, bo ND45 nie ma
-  potwierdzonego rejestru energii biernej. Sigen czyta `0x180A`/qty22, ale
-  potrzebny odczyt tej wielkości z ND45, by ją wypełnić.
 - **Eksport energii** (`exp_ep`) — brak generacji w teście (zrzut pokazuje 0);
   wymaga weryfikacji przy realnym eksporcie PV.
 - **Konwencja znaku P** — zrzut (pobór) pokazuje P>0; `sign=1` to odwzorowuje.

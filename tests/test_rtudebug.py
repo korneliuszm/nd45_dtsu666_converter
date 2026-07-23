@@ -56,8 +56,10 @@ def test_lookup_sigen_identity_field():
 def test_lookup_sigen_ext_energy_points_at_offset_0x800():
     idx = _index()
 
-    # imp_ep sits at the tail end of the 0x180A/qty22 range Sigenergy polls.
-    assert idx.lookup(0x180A, 22, function_code=4) == ["imp_ep"]
+    assert idx.lookup(0x180A, 22, function_code=4) == [
+        "forward_active_ep",
+        "imp_ep",
+    ]
     # 0x1828/qty4 covers exp_ep and exp_ep_l1.
     assert idx.lookup(0x1828, 4, function_code=4) == ["exp_ep", "exp_ep_l1"]
 

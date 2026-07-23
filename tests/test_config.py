@@ -82,6 +82,7 @@ def test_load_registers_classic_secondary_side_points_divide_by_ct():
         "p_total", "p_l1", "p_l2", "p_l3",
         "q_total", "q_l1", "q_l2", "q_l3",
         "s_total", "s_l1", "s_l2", "s_l3",
+        "forward_active_ep", "forward_active_ep_alias",
         "imp_ep", "imp_ep_l1", "imp_ep_l2", "imp_ep_l3", "net_imp_ep",
         "exp_ep", "exp_ep_l1", "exp_ep_l2", "exp_ep_l3", "net_exp_ep",
     }
@@ -100,6 +101,17 @@ def test_load_registers_reads_sigen_ext_energy_map():
         assert point.addr == classic.addr + 2048
         assert point.scale == 1
         assert point.divide_by_ct is False  # already primary-side kWh
+
+    classic = reg.dtsu_target.points["forward_active_ep"]
+    alias = reg.dtsu_target.points["forward_active_ep_alias"]
+    extended = energy.points["forward_active_ep"]
+    assert classic.addr == 0x100A
+    assert alias.addr == 0x1050
+    assert extended.addr == 0x180A
+    assert classic.from_ == alias.from_ == extended.from_ == "imp_energy_total"
+    assert classic.divide_by_ct is True
+    assert alias.divide_by_ct is True
+    assert extended.divide_by_ct is False
 
 
 def test_load_registers_reads_sigen_identity():
