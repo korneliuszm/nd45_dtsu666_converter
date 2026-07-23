@@ -64,9 +64,13 @@ def test_float_to_registers_rejects_non_finite(
 
 
 @pytest.mark.parametrize("value", [1e39, -1e39])
-def test_float_to_registers_rejects_finite_float32_overflow(value):
+@pytest.mark.parametrize("word_order", ["big", "little"])
+@pytest.mark.parametrize("byte_order", ["big", "little"])
+def test_float_to_registers_rejects_finite_float32_overflow(
+    value, word_order, byte_order
+):
     with pytest.raises(ValueError, match="finite float32"):
-        float_to_registers(value)
+        float_to_registers(value, word_order, byte_order)
 
 
 def test_float_to_registers_accepts_float32_max():
