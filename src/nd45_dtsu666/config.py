@@ -43,7 +43,11 @@ STATIC_DEBUG_VALUE_KEYS = frozenset(
         "imp_energy_l2",
         "imp_energy_l3",
         "exp_energy_total",
-        "reactive_energy_total",
+        "exp_energy_l1",
+        "exp_energy_l2",
+        "exp_energy_l3",
+        "reactive_imp_energy_total",
+        "reactive_exp_energy_total",
     }
 )
 

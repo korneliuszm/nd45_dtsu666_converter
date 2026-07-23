@@ -204,8 +204,10 @@ def test_load_config_reads_seed():
     assert cfg.static_debug.values["pf_total"] == -0.95
     assert cfg.static_debug.values["s_total"] == 60300.0
     assert cfg.static_debug.values["imp_energy_total"] == 7.0
-    assert cfg.static_debug.values["exp_energy_total"] == 0.2
-    assert cfg.static_debug.values["reactive_energy_total"] == 2.8
+    assert cfg.static_debug.values["exp_energy_total"] == 3.0
+    assert cfg.static_debug.values["exp_energy_l1"] == 0.796875
+    assert cfg.static_debug.values["reactive_exp_energy_total"] == 2.796875
+    assert cfg.static_debug.values["reactive_imp_energy_total"] == 1.1953125
 
 
 def test_static_debug_rejects_unknown_value_name():
@@ -225,9 +227,17 @@ def test_static_debug_accepts_apparent_power_values():
     assert configured.values["s_total"] == 1900.0
 
 
-def test_static_debug_accepts_total_reactive_energy():
-    configured = StaticDebugConf(values={"reactive_energy_total": 2.8})
-    assert configured.values["reactive_energy_total"] == 2.8
+def test_static_debug_accepts_physical_energy_inputs():
+    configured = StaticDebugConf(values={
+        "reactive_imp_energy_total": 1.1953125,
+        "reactive_exp_energy_total": 2.796875,
+        "exp_energy_l1": 0.796875,
+        "exp_energy_l2": 1.0,
+        "exp_energy_l3": 1.0,
+    })
+    assert configured.values["reactive_imp_energy_total"] == 1.1953125
+    assert configured.values["reactive_exp_energy_total"] == 2.796875
+    assert configured.values["exp_energy_l1"] == 0.796875
 
 
 @pytest.mark.parametrize(
@@ -236,9 +246,7 @@ def test_static_debug_accepts_total_reactive_energy():
         "active_energy_total",
         "net_imp_energy_total",
         "net_exp_energy_total",
-        "exp_energy_l1",
-        "exp_energy_l2",
-        "exp_energy_l3",
+        "reactive_energy_total",
     ],
 )
 def test_static_debug_rejects_derived_or_constant_zero_energy_inputs(name):

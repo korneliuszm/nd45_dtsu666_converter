@@ -2,10 +2,16 @@ import asyncio
 
 import pytest
 
-from nd45_dtsu666.codec import registers_to_float
+from nd45_dtsu666.codec import float_to_registers, registers_to_float
 from nd45_dtsu666.config import load_config, load_registers
 from nd45_dtsu666.dtsu_server import RtuActivity
 from nd45_dtsu666.static_debug import build_static_pipeline, expand_static_values
+
+
+def _coarse_float(value: float) -> list[int]:
+    registers = float_to_registers(value, "big", "big")
+    registers[1] = 0
+    return registers
 
 
 def test_expand_static_values_preserves_configured_and_zero_fills_missing():
@@ -99,21 +105,35 @@ async def test_static_pipeline_serves_complete_reverse_flow_energy_image():
         await asyncio.wait_for(feeder, timeout=1.0)
         values, _ = pipe.store.snapshot()
         assert values["p_total"] == -60000.0
-        assert values["reactive_energy_total"] == 2.8
-        assert values["active_energy_total"] == pytest.approx(7.2)
+        assert values["reactive_exp_energy_total"] == pytest.approx(2.796875)
+        assert values["reactive_imp_energy_total"] == pytest.approx(1.1953125)
+        assert values["active_energy_total"] == pytest.approx(10.0)
         assert values["net_imp_energy_total"] == pytest.approx(7.0)
-        assert values["net_exp_energy_total"] == pytest.approx(0.2)
+        assert values["net_exp_energy_total"] == pytest.approx(3.0)
 
         assert registers_to_float(
             slave.getValues(4, 0x151C, count=2), "big", "big"
         ) == pytest.approx(-60.0)
+        assert slave.getValues(4, 0x1800, count=2) == _coarse_float(10.0)
+        assert slave.getValues(4, 0x180A, count=2) == _coarse_float(2.796875)
+        assert slave.getValues(4, 0x1814, count=2) == _coarse_float(1.1953125)
         assert registers_to_float(
             slave.getValues(4, 0x1828, count=2), "big", "big"
-        ) == pytest.approx(0.2)
-        assert slave.getValues(4, 0x182A, count=6) == [0] * 6
+        ) == pytest.approx(3.0)
+        assert registers_to_float(
+            slave.getValues(4, 0x182A, count=2), "big", "big"
+        ) == pytest.approx(0.796875)
+        assert registers_to_float(
+            slave.getValues(4, 0x182C, count=2), "big", "big"
+        ) == pytest.approx(1.0)
+        assert registers_to_float(
+            slave.getValues(4, 0x182E, count=2), "big", "big"
+        ) == pytest.approx(1.0)
         assert registers_to_float(
             slave.getValues(4, 0x1830, count=2), "big", "big"
-        ) == pytest.approx(0.2)
+        ) == pytest.approx(3.0)
+        assert slave.getValues(4, 0x183C, count=2) == _coarse_float(1.1953125)
+        assert slave.getValues(4, 0x1850, count=2) == _coarse_float(2.796875)
     finally:
         stop.set()
         if not feeder.done():

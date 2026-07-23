@@ -33,7 +33,7 @@ def test_render_table_matches_ct_divided_coarse_energy_encoding():
     table = render_table(
         reg.nd45_source,
         reg.dtsu_target,
-        canonical={"imp_energy_total": 24690.0},
+        canonical={"active_energy_total": 24690.0},
         age=0.4,
         healthy=True,
         ct_ratio=200.0,
