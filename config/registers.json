@@ -40,6 +40,14 @@
       "reactive_energy_total": {
         "compose": [944, 946, 960, 962, 976, 978, 992, 994],
         "factors": [1000, 1, 1000, 1, 1000, 1, 1000, 1]
+      },
+      "reactive_imp_energy_total": {
+        "compose": [944, 946, 976, 978],
+        "factors": [1000, 1, 1000, 1]
+      },
+      "reactive_exp_energy_total": {
+        "compose": [960, 962, 992, 994],
+        "factors": [1000, 1, 1000, 1]
       }
     }
   },

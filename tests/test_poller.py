@@ -118,7 +118,12 @@ async def test_poll_once_decodes_points():
     assert values["exp_energy_l2"] == pytest.approx(4.0, rel=1e-5)
     assert values["exp_energy_l3"] == pytest.approx(5.0, rel=1e-5)
     assert values["exp_energy_total"] == pytest.approx(12.0, rel=1e-5)
-    assert values["reactive_energy_total"] == pytest.approx(3100.0, rel=1e-5)
+    assert values["reactive_imp_energy_total"] == pytest.approx(
+        3040.0, rel=1e-5
+    )
+    assert values["reactive_exp_energy_total"] == pytest.approx(
+        60.0, rel=1e-5
+    )
     assert values["active_energy_total"] == pytest.approx(2357.0, rel=1e-5)
     assert values["net_imp_energy_total"] == pytest.approx(2345.0, rel=1e-5)
     assert values["net_exp_energy_total"] == pytest.approx(12.0, rel=1e-5)
@@ -172,7 +177,8 @@ async def test_poll_once_substitutes_zero_only_for_invalid_power_factor():
         (52, float("inf"), "i_l1"),
         (128, 3e20, "p_total"),
         (912, 3e20, "imp_energy_total"),
-        (944, 3e20, "reactive_energy_total"),
+        (944, 3e20, "reactive_imp_energy_total"),
+        (960, 3e20, "reactive_exp_energy_total"),
     ],
 )
 async def test_poll_once_rejects_invalid_critical_value(address, value, point):
@@ -183,25 +189,32 @@ async def test_poll_once_rejects_invalid_critical_value(address, value, point):
         await poll_once(FakeClient(image), src, slave=1)
 
 
-async def test_poll_once_rejects_invalid_composite_parts_that_cancel(caplog):
+@pytest.mark.parametrize(
+    ("addresses", "point"),
+    [
+        ((944, 976), "reactive_imp_energy_total"),
+        ((960, 992), "reactive_exp_energy_total"),
+    ],
+)
+async def test_poll_once_rejects_invalid_directional_parts_that_cancel(
+    addresses, point, caplog
+):
     src = load_registers("config/registers.json").nd45_source
     image = {
-        944: _raw_float_registers(3e20),
-        960: _raw_float_registers(-3e20),
+        addresses[0]: _raw_float_registers(3e20),
+        addresses[1]: _raw_float_registers(-3e20),
     }
     seen: set[str] = set()
 
     with caplog.at_level("WARNING", logger="nd45_dtsu666.nd45_poller"):
         for _ in range(2):
-            with pytest.raises(PollError, match="reactive_energy_total"):
+            with pytest.raises(PollError, match=point):
                 await poll_once(
                     FakeClient(image), src, slave=1, overrange_seen=seen
                 )
 
     warnings = [
-        record
-        for record in caplog.records
-        if "reactive_energy_total" in record.getMessage()
+        record for record in caplog.records if point in record.getMessage()
     ]
     assert len(warnings) == 1
 
