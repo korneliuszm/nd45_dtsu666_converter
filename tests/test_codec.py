@@ -60,3 +60,13 @@ def test_roundtrip_nan_and_inf():
         for bo in ("big", "little"):
             assert math.isnan(registers_to_float(float_to_registers(float("nan"), wo, bo), wo, bo))
             assert registers_to_float(float_to_registers(float("inf"), wo, bo), wo, bo) == math.inf
+
+
+def test_float_to_registers_saturates_out_of_range_instead_of_raising():
+    import math
+
+    # struct.pack(">f", 1e39) raises OverflowError; encoding must never raise
+    # (it would abort a datastore update mid-write), so it saturates to a
+    # same-signed infinity rather than crashing.
+    assert registers_to_float(float_to_registers(1e39), "big", "big") == math.inf
+    assert registers_to_float(float_to_registers(-1e39), "big", "big") == -math.inf

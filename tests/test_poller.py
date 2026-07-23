@@ -3,8 +3,32 @@ import asyncio
 import pytest
 
 from nd45_dtsu666.codec import float_to_registers
-from nd45_dtsu666.config import load_registers
-from nd45_dtsu666.nd45_poller import READ_GROUPS, extract_registers, poll_once, run_poller
+from nd45_dtsu666.config import SourcePoint, SourceSide, load_registers
+from nd45_dtsu666.nd45_poller import (
+    READ_GROUPS,
+    extract_registers,
+    poll_once,
+    run_poller,
+    validate_source_coverage,
+)
+
+
+def test_validate_source_coverage_passes_for_seed_config():
+    validate_source_coverage(load_registers("config/registers.json").nd45_source)
+
+
+def test_validate_source_coverage_rejects_uncovered_address():
+    source = SourceSide(points={"bogus": SourcePoint(addr=200)})
+    with pytest.raises(ValueError, match="not covered by READ_GROUPS"):
+        validate_source_coverage(source)
+
+
+def test_validate_source_coverage_rejects_uncovered_compose_address():
+    source = SourceSide(
+        points={"e": SourcePoint(compose=[900, 5000], factors=[1000, 1])}
+    )
+    with pytest.raises(ValueError, match="5000"):
+        validate_source_coverage(source)
 
 
 class FakeResponse:

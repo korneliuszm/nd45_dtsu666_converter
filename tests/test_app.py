@@ -2,6 +2,8 @@ import asyncio
 import socket
 import time
 
+import pytest
+
 from nd45_dtsu666.app import FaultReporter, build_on_update, build_pipeline, connect_with_retry, run_app
 from nd45_dtsu666.canonical import CanonicalStore
 from nd45_dtsu666.codec import registers_to_float
@@ -22,6 +24,32 @@ def test_on_update_writes_store_and_datastore():
     assert values["u_l1"] == 230.0 and ts == 5.0
     regs = context[1].getValues(3, target.points["u_l1"].addr, count=2)
     assert registers_to_float(regs, target.word_order, target.byte_order) == 2300.0
+
+
+def test_on_update_leaves_store_stale_when_datastore_write_fails():
+    import math
+
+    target = load_registers("config/registers.json").dtsu_target
+    store = CanonicalStore()
+
+    class _BoomContext:
+        def __getitem__(self, slave_id):
+            class _Slave:
+                def setValues(self, *args, **kwargs):
+                    raise RuntimeError("datastore write failed")
+
+            return _Slave()
+
+    on_update = build_on_update(store, _BoomContext(), 1, target)
+
+    # a failed datastore write must propagate (poller logs it as a poll fault)
+    # and must NOT have stamped the store fresh -- otherwise the fail-safe would
+    # keep serving a half-written datastore as if it were valid.
+    with pytest.raises(RuntimeError):
+        on_update({"u_l1": 230.0}, ts=5.0)
+    values, ts = store.snapshot()
+    assert values == {}
+    assert math.isnan(ts)  # never stamped -> age() stays infinite -> fail-safe
 
 
 def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):

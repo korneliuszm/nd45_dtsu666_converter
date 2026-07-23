@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import struct
 
 OVERRANGE = 1e20  # ND45 writes 2e20 when a value is out of measuring range
@@ -26,7 +27,17 @@ def registers_to_float(regs: list[int], word_order: str = "big", byte_order: str
 
 
 def float_to_registers(value: float, word_order: str = "big", byte_order: str = "big") -> list[int]:
-    raw = struct.pack(">f", value)
+    try:
+        raw = struct.pack(">f", value)
+    except OverflowError:
+        # A finite value beyond float32's range: struct raises instead of
+        # saturating, so saturate ourselves to the same-signed IEEE-754
+        # infinity. Encoding must never raise -- otherwise one bad point would
+        # abort a whole datastore update mid-write. This only backstops
+        # pathological configured/debug inputs; live readings are clamped in
+        # poll_once, and masking non-finite values stays the poller's job (the
+        # codec carries IEEE-754 specials faithfully, see test_codec).
+        raw = struct.pack(">f", math.copysign(math.inf, value))
     hi, lo = raw[0:2], raw[2:4]
     words = [hi, lo] if word_order == "big" else [lo, hi]
     return [_bytes_word(w, byte_order) for w in words]

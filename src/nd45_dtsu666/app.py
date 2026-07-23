@@ -13,7 +13,7 @@ from pymodbus.client import AsyncModbusTcpClient
 from .canonical import CanonicalStore, HealthGate
 from .config import AppConfig, RegisterMap
 from .dtsu_server import RtuActivity, build_context, supervise_server, update_datastore
-from .nd45_poller import run_poller
+from .nd45_poller import run_poller, validate_source_coverage
 from .watchdog import Heartbeat, notify_ready, watchdog_loop, watchdog_seconds
 
 log = logging.getLogger(__name__)
@@ -34,8 +34,12 @@ def build_on_update(
     store, context, slave_id, target, ct_ratio: float = 1.0
 ) -> Callable[[dict, float], None]:
     def on_update(values: dict[str, float], ts: float) -> None:
-        store.update(values, ts)
+        # Encode into the served datastore BEFORE stamping the store fresh: if
+        # a write ever fails, the store stays stale so the freshness fail-safe
+        # silences the output, instead of serving a half-written datastore to
+        # Sigenergy as if it were fresh.
         update_datastore(context, slave_id, values, target, ct_ratio=ct_ratio)
+        store.update(values, ts)
 
     return on_update
 
@@ -107,6 +111,7 @@ def build_pipeline(
     client=None,
 ) -> Pipeline:
     """Wire poller + DTSU output server + fail-safe. Pass `activity` to record read requests."""
+    validate_source_coverage(registers.nd45_source)
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
     targets = [

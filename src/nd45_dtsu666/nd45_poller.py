@@ -21,6 +21,37 @@ class PollError(RuntimeError):
     pass
 
 
+def _source_point_addresses(source: SourceSide) -> set[int]:
+    addrs: set[int] = set()
+    for pt in source.points.values():
+        if pt.compose:
+            addrs.update(pt.compose)
+        elif pt.addr is not None:
+            addrs.add(pt.addr)
+    return addrs
+
+
+def validate_source_coverage(source: SourceSide) -> None:
+    """Fail loudly at startup if any nd45_source address can't be read.
+
+    Every point is a float32 (2 registers) served from the fixed READ_GROUPS.
+    An address outside them makes poll_once raise KeyError on every poll, which
+    the fault reporter mutes -- leaving the bridge in a permanent fail-safe that
+    is indistinguishable from a real ND45 outage. Catch it at load time instead,
+    when registers.json is edited (this project's maps change without code).
+    """
+    uncovered = [
+        addr
+        for addr in sorted(_source_point_addresses(source))
+        if not any(base <= addr < base + count - 1 for base, count in READ_GROUPS)
+    ]
+    if uncovered:
+        raise ValueError(
+            f"nd45_source addresses {uncovered} are not covered by READ_GROUPS "
+            f"{READ_GROUPS}; extend READ_GROUPS in nd45_poller.py to include them"
+        )
+
+
 def extract_registers(addr: int, groups: list[tuple[int, list[int]]]) -> list[int]:
     for base, regs in groups:
         if base <= addr < base + len(regs) - 1:
