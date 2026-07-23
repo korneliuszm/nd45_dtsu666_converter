@@ -35,7 +35,13 @@ def expand_static_values(
         for target in targets
         for point in target.points.values()
     }
-    return {name: configured.get(name, 0.0) for name in required}
+    values = {name: configured.get(name, 0.0) for name in required}
+    # derive net energy + apparent power from the configured base values so the
+    # static feed matches what the live poller would produce (S = |U*I|, etc.)
+    from .nd45_poller import compute_derived
+
+    compute_derived(values)
+    return values
 
 
 def build_static_pipeline(

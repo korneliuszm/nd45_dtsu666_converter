@@ -87,6 +87,41 @@ def test_static_registers_includes_reserved_0046():
     assert context[1].getValues(3, 0x0046, count=1) == [0]
 
 
+def test_static_registers_include_observed_meter_constants():
+    # 0x0004=1 (inside Sigenergy's 0x0003/qty5 config read) and 0x0008=4,
+    # both observed on the real TPX-CH meter scan.
+    from nd45_dtsu666.config import load_config
+
+    target = load_registers("config/registers.json").dtsu_target
+    cfg = load_config("config/config.json").dtsu  # ir_at=200, as on the real meter
+    slave = build_context(target, slave_id=cfg.slave_id, dtsu_cfg=cfg)[cfg.slave_id]
+    assert slave.getValues(3, 0x0004, count=1) == [1]
+    assert slave.getValues(3, 0x0008, count=1) == [4]
+    # the whole block Sigenergy reads (0x0003 qty5) matches the real meter scan:
+    # net=0, 0x0004=1, 0x0005=0, IrAt=200, UrAt=10
+    assert slave.getValues(3, 0x0003, count=5) == [0, 1, 0, 200, 10]
+
+
+def test_apparent_power_encoded_both_maps_matches_real_meter():
+    registers = load_registers("config/registers.json")
+    targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
+    context = build_context(targets, slave_id=1)
+    # S is derived (|U*I|); feed it directly as a canonical value here.
+    update_datastore(context, 1, {"s_total": 5339.1}, targets, ct_ratio=200)
+
+    # classic (FC03, secondary side): (5339.1/200)*10 = 266.955 raw
+    classic = registers.dtsu_target.points["s_total"]
+    assert classic.addr == 8226  # 0x2022, matching the real DTSU666 scan
+    classic_regs = context[1].getValues(3, classic.addr, count=2)
+    assert registers_to_float(classic_regs, "big", "big") == pytest.approx(266.955, rel=1e-4)
+
+    # Sigen (FC04, primary side): kVA
+    ext = registers.dtsu_sigen_ext_target.points["s_total"]
+    assert ext.addr == 5420  # 0x152C
+    ext_regs = context[1].getValues(4, ext.addr, count=2)
+    assert registers_to_float(ext_regs, "big", "big") == pytest.approx(5.3391, rel=1e-4)
+
+
 def test_classic_and_sigen_measurements_use_separate_data_spaces_and_scales():
     registers = load_registers("config/registers.json")
     targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]

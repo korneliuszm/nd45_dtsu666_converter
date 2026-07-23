@@ -11,9 +11,14 @@ energy at a `+0x800` offset from the classic energy block). Both sides derive fr
 same ND45 reading; the classic map divides current/power/energy by the configured CT
 ratio (`dtsu.identity.ir_at`) while the Sigen map does not (already primary). It also
 serves the FC03 identity string `Sigen Sensor TPX-CH` at `0xF100` and the observed
-`0x00001500` handshake at `0xF114`. A handful of addresses inside the polled FC04 energy
-ranges have no confirmed ND45 source (e.g. the reactive-energy accumulator) and are left
-zero rather than fabricated, which also prevents `IllegalAddress` on those reads.
+`0x00001500` handshake at `0xF114`. Apparent power (S = |U·I|) is served on both maps
+(classic `0x2022`, Sigen FC04 `0x152C`), matching the real meter. A handful of addresses
+inside the polled FC04 energy ranges have no confirmed ND45 source (e.g. the
+reactive-energy accumulator) and are left zero rather than fabricated, which also prevents
+`IllegalAddress` on those reads.
+
+The full verified register layout — every address, description and multiplier, checked
+against a live-meter scan — is in [`docs/register-map.md`](docs/register-map.md).
 
 ## Install (reComputer R1000, Ubuntu)
 ```bash

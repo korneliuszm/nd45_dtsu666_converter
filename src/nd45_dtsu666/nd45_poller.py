@@ -21,6 +21,30 @@ class PollError(RuntimeError):
     pass
 
 
+def compute_derived(values: dict[str, float]) -> None:
+    """Fill in canonical values derived from the raw ND45 readings, in place.
+
+    - net import/export energy (import minus export, floored at 0);
+    - per-phase and total apparent power S = |U*I| in VA -- the real DTSU666
+      serves these (classic 0x2022-0x2028, Sigen FC04 0x152C-0x1532, read by
+      Sigenergy in its 0x1528/qty14 block) as the arithmetic sum of per-phase
+      volt-amps, verified against a live-meter scan.
+
+    Shared by the live poller and the debug feeders so every data source
+    produces the same derived quantities.
+    """
+    imp = values.get("imp_energy_total", 0.0)
+    exp = values.get("exp_energy_total", 0.0)
+    values["net_imp_energy_total"] = max(imp - exp, 0.0)
+    values["net_exp_energy_total"] = max(exp - imp, 0.0)
+    s_total = 0.0
+    for suf in ("l1", "l2", "l3"):
+        s = abs(values.get(f"u_{suf}", 0.0) * values.get(f"i_{suf}", 0.0))
+        values[f"s_{suf}"] = s
+        s_total += s
+    values["s_total"] = s_total
+
+
 def _source_point_addresses(source: SourceSide) -> set[int]:
     addrs: set[int] = set()
     for pt in source.points.values():
@@ -106,10 +130,7 @@ async def poll_once(
             log.info("ND45 %s back in range", key)
         values[key] = si
 
-    imp_total = values.get("imp_energy_total", 0.0)
-    exp_total = values.get("exp_energy_total", 0.0)
-    values["net_imp_energy_total"] = max(imp_total - exp_total, 0.0)
-    values["net_exp_energy_total"] = max(exp_total - imp_total, 0.0)
+    compute_derived(values)
     return values
 
 
