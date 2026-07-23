@@ -221,11 +221,11 @@ def test_sigen_ext_energy_active_reads_are_valid_and_unknown_gap_is_zero():
     )
     slave = context[1]
 
-    # Sigenergy polls both ranges. 0x180A is mapped below; the still-unconfirmed
-    # words through the pre-existing 0x181E point remain zero-filled.
+    # Sigenergy polls both known energy gaps as contiguous FC04 ranges.
     assert slave.validate(4, 0x180A, count=22)
     assert slave.validate(4, 0x1828, count=4)
-    assert slave.getValues(4, 0x180C, count=18) == [0] * 18
+    assert slave.getValues(4, 0x180C, count=8) == [0] * 8
+    assert slave.getValues(4, 0x1816, count=8) == [0] * 8
 
 
 def _coarse_float(value: float) -> list[int]:
@@ -243,44 +243,66 @@ def test_energy_maps_match_physical_reverse_flow_scan():
     ]
     context = build_context(targets, slave_id=1)
     canonical = {
-        "active_energy_total": 7.20703125,
-        "reactive_energy_total": 2.796875,
-        "imp_energy_total": 7.0078125,
-        "imp_energy_l1": 2.0039122,
-        "imp_energy_l2": 2.394534,
-        "imp_energy_l3": 2.1914597,
-        "net_imp_energy_total": 7.0078125,
-        "exp_energy_total": 0.19921875,
-        "net_exp_energy_total": 0.19921875,
+        "active_energy_total": 10.0,
+        "reactive_exp_energy_total": 2.796875,
+        "reactive_imp_energy_total": 1.1953125,
+        "imp_energy_total": 7.0,
+        "imp_energy_l1": 2.0,
+        "imp_energy_l2": 2.390625,
+        "imp_energy_l3": 2.1875,
+        "net_imp_energy_total": 7.0,
+        "exp_energy_total": 3.0,
+        "exp_energy_l1": 0.796875,
+        "exp_energy_l2": 1.0,
+        "exp_energy_l3": 1.0,
+        "net_exp_energy_total": 3.0,
     }
     update_datastore(context, 1, canonical, targets, ct_ratio=200)
     slave = context[1]
 
-    assert slave.getValues(4, 0x1800, count=2) == _coarse_float(7.20703125)
+    assert slave.getValues(4, 0x1800, count=2) == _coarse_float(10.0)
     assert slave.getValues(4, 0x180A, count=2) == _coarse_float(2.796875)
-    assert slave.getValues(4, 0x180C, count=18) == [0] * 18
-    assert slave.getValues(4, 0x181E, count=2) == float_to_registers(7.0078125)
-    assert slave.getValues(4, 0x1826, count=2) == float_to_registers(7.0078125)
-    assert slave.getValues(4, 0x1828, count=2) == float_to_registers(0.19921875)
-    assert slave.getValues(4, 0x182A, count=6) == [0] * 6
-    assert slave.getValues(4, 0x1830, count=2) == float_to_registers(0.19921875)
+    assert slave.getValues(4, 0x1814, count=2) == _coarse_float(1.1953125)
+    assert slave.getValues(4, 0x181E, count=2) == float_to_registers(7.0)
+    assert slave.getValues(4, 0x1820, count=2) == float_to_registers(2.0)
+    assert slave.getValues(4, 0x1822, count=2) == float_to_registers(2.390625)
+    assert slave.getValues(4, 0x1824, count=2) == float_to_registers(2.1875)
+    assert slave.getValues(4, 0x1826, count=2) == float_to_registers(7.0)
+    assert slave.getValues(4, 0x1828, count=2) == float_to_registers(3.0)
+    assert slave.getValues(4, 0x182A, count=2) == float_to_registers(0.796875)
+    assert slave.getValues(4, 0x182C, count=2) == float_to_registers(1.0)
+    assert slave.getValues(4, 0x182E, count=2) == float_to_registers(1.0)
+    assert slave.getValues(4, 0x1830, count=2) == float_to_registers(3.0)
+    assert slave.getValues(4, 0x183C, count=2) == _coarse_float(1.1953125)
     assert slave.getValues(4, 0x1850, count=2) == _coarse_float(2.796875)
 
     assert slave.getValues(3, 0x1000, count=2) == _coarse_float(
-        7.0078125 / 200
+        10.0 / 200
     )
     assert slave.getValues(3, 0x100A, count=2) == _coarse_float(
         2.796875 / 200
     )
+    assert slave.getValues(3, 0x1014, count=2) == _coarse_float(
+        1.1953125 / 200
+    )
     assert slave.getValues(3, 0x101E, count=2) == float_to_registers(
-        7.0078125 / 200
+        7.0 / 200
     )
+    assert slave.getValues(3, 0x1020, count=2) == float_to_registers(2.0 / 200)
+    assert slave.getValues(3, 0x1022, count=2) == float_to_registers(2.390625 / 200)
+    assert slave.getValues(3, 0x1024, count=2) == float_to_registers(2.1875 / 200)
     assert slave.getValues(3, 0x1026, count=2) == float_to_registers(
-        7.0078125 / 200
+        7.0 / 200
     )
-    assert slave.getValues(3, 0x1028, count=8) == [0] * 8
+    assert slave.getValues(3, 0x1028, count=2) == float_to_registers(3.0 / 200)
+    assert slave.getValues(3, 0x102A, count=2) == float_to_registers(0.796875 / 200)
+    assert slave.getValues(3, 0x102C, count=2) == float_to_registers(1.0 / 200)
+    assert slave.getValues(3, 0x102E, count=2) == float_to_registers(1.0 / 200)
     assert slave.getValues(3, 0x1030, count=2) == float_to_registers(
-        0.19921875 / 200
+        3.0 / 200
+    )
+    assert slave.getValues(3, 0x103C, count=2) == _coarse_float(
+        1.1953125 / 200
     )
     assert slave.getValues(3, 0x1050, count=2) == _coarse_float(
         2.796875 / 200

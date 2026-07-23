@@ -57,10 +57,16 @@ def test_lookup_sigen_ext_energy_points_at_offset_0x800():
     idx = _index()
 
     assert idx.lookup(0x180A, 22, function_code=4) == [
-        "reactive_energy_coarse",
+        "reactive_exp_energy_coarse",
+        "reactive_imp_energy_coarse",
         "imp_ep",
     ]
-    assert idx.lookup(0x1828, 4, function_code=4) == ["exp_ep"]
+    assert idx.lookup(0x1828, 8, function_code=4) == [
+        "exp_ep",
+        "exp_ep_l1",
+        "exp_ep_l2",
+        "exp_ep_l3",
+    ]
 
 
 def test_lookup_unmapped_block_returns_empty():

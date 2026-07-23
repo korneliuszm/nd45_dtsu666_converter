@@ -83,10 +83,12 @@ def test_load_registers_classic_secondary_side_points_divide_by_ct():
         "p_total", "p_l1", "p_l2", "p_l3",
         "q_total", "q_l1", "q_l2", "q_l3",
         "s_total", "s_l1", "s_l2", "s_l3",
-        "imp_energy_coarse", "reactive_energy_coarse",
-        "reactive_energy_coarse_alias",
-        "imp_ep", "imp_ep_l1", "imp_ep_l2", "imp_ep_l3",
-        "net_imp_ep", "net_exp_ep",
+        "active_energy_coarse", "reactive_exp_energy_coarse",
+        "reactive_imp_energy_coarse", "imp_ep", "imp_ep_l1",
+        "imp_ep_l2", "imp_ep_l3", "net_imp_ep", "exp_ep",
+        "exp_ep_l1", "exp_ep_l2", "exp_ep_l3", "net_exp_ep",
+        "reactive_imp_energy_coarse_alias",
+        "reactive_exp_energy_coarse_alias",
     }
     for name, point in classic.points.items():
         assert point.divide_by_ct == (name in ct_divided), name
@@ -98,34 +100,60 @@ def test_load_registers_reads_physical_energy_maps():
     extended = reg.dtsu_sigen_ext_energy.points
 
     classic_expected = {
-        "imp_energy_coarse": (0x1000, "imp_energy_total", True),
-        "reactive_energy_coarse": (0x100A, "reactive_energy_total", True),
+        "active_energy_coarse": (0x1000, "active_energy_total", True),
+        "reactive_exp_energy_coarse": (
+            0x100A, "reactive_exp_energy_total", True
+        ),
+        "reactive_imp_energy_coarse": (
+            0x1014, "reactive_imp_energy_total", True
+        ),
         "imp_ep": (0x101E, "imp_energy_total", False),
         "imp_ep_l1": (0x1020, "imp_energy_l1", False),
         "imp_ep_l2": (0x1022, "imp_energy_l2", False),
         "imp_ep_l3": (0x1024, "imp_energy_l3", False),
         "net_imp_ep": (0x1026, "net_imp_energy_total", False),
+        "exp_ep": (0x1028, "exp_energy_total", False),
+        "exp_ep_l1": (0x102A, "exp_energy_l1", False),
+        "exp_ep_l2": (0x102C, "exp_energy_l2", False),
+        "exp_ep_l3": (0x102E, "exp_energy_l3", False),
         "net_exp_ep": (0x1030, "net_exp_energy_total", False),
-        "reactive_energy_coarse_alias": (
-            0x1050, "reactive_energy_total", True
+        "reactive_imp_energy_coarse_alias": (
+            0x103C, "reactive_imp_energy_total", True
+        ),
+        "reactive_exp_energy_coarse_alias": (
+            0x1050, "reactive_exp_energy_total", True
         ),
     }
     extended_expected = {
         "active_energy_coarse": (0x1800, "active_energy_total", True),
-        "reactive_energy_coarse": (0x180A, "reactive_energy_total", True),
+        "reactive_exp_energy_coarse": (
+            0x180A, "reactive_exp_energy_total", True
+        ),
+        "reactive_imp_energy_coarse": (
+            0x1814, "reactive_imp_energy_total", True
+        ),
         "imp_ep": (0x181E, "imp_energy_total", False),
         "imp_ep_l1": (0x1820, "imp_energy_l1", False),
         "imp_ep_l2": (0x1822, "imp_energy_l2", False),
         "imp_ep_l3": (0x1824, "imp_energy_l3", False),
         "net_imp_ep": (0x1826, "net_imp_energy_total", False),
         "exp_ep": (0x1828, "exp_energy_total", False),
+        "exp_ep_l1": (0x182A, "exp_energy_l1", False),
+        "exp_ep_l2": (0x182C, "exp_energy_l2", False),
+        "exp_ep_l3": (0x182E, "exp_energy_l3", False),
         "net_exp_ep": (0x1830, "net_exp_energy_total", False),
-        "reactive_energy_coarse_alias": (
-            0x1850, "reactive_energy_total", True
+        "reactive_imp_energy_coarse_alias": (
+            0x183C, "reactive_imp_energy_total", True
+        ),
+        "reactive_exp_energy_coarse_alias": (
+            0x1850, "reactive_exp_energy_total", True
         ),
     }
 
-    assert set(classic_expected) <= set(classic)
+    classic_energy = {
+        name for name, point in classic.items() if 0x1000 <= point.addr <= 0x1051
+    }
+    assert classic_energy == set(classic_expected)
     assert set(extended) == set(extended_expected)
     for name, (addr, source, coarse) in classic_expected.items():
         point = classic[name]
@@ -140,8 +168,7 @@ def test_load_registers_reads_physical_energy_maps():
         )
         assert point.divide_by_ct is False
 
-    assert not {"exp_ep", "exp_ep_l1", "exp_ep_l2", "exp_ep_l3"} & set(classic)
-    assert not {"exp_ep_l1", "exp_ep_l2", "exp_ep_l3"} & set(extended)
+    assert "reactive_energy_total" not in reg.nd45_source.points
 
 
 def test_load_registers_reads_sigen_identity():
