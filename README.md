@@ -144,16 +144,15 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
    `config/config.json` (defaults: direct-connect 3P4W meter, CT ratio 1:1 — `net=0`,
    `ir_at=ur_at=10`). `ir_at` is **not** cosmetic: it is the actual CT ratio the classic
    DTSU666 map (FC03) divides current/power/energy by, since that map is secondary-side
-   while the ND45 source and Sigen OEM map (FC04) are assumed primary-side — get it wrong
-   and every classic-map value is off by that factor. To match a specific real meter, edit
-   `dtsu.identity` by hand, e.g.:
+   while the ND45 source (already converted internally by the ND45) and the Sigen OEM map
+   (FC04) are primary-side — get it wrong and every classic-map value is off by that
+   factor. To match a specific real meter, edit `dtsu.identity` by hand, e.g.:
    ```json
    "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10}
    ```
    Fields omitted keep their default. See `DtsuIdentityConf` in `config.py` for the full
-   field list and `_IDENTITY_REGISTER_ADDRS` in `dtsu_server.py` for the register mapping.
-   The primary-vs-secondary assumption for the ND45 source itself is unconfirmed — verify
-   on site (see `docs/superpowers/specs/2026-07-23-dtsu-sigen-ct-ratio-design.md`).
+   field list and `_IDENTITY_REGISTER_ADDRS` in `dtsu_server.py` for the register mapping
+   (background: `docs/superpowers/specs/2026-07-23-dtsu-sigen-ct-ratio-design.md`).
 9. **Sigen OEM registers** — confirm the storage reads FC04 `0x151C` for total active
    power (in kW, not W) and periodically reads FC03 `0xF114` for the identity handshake.
    The configured FC04 current and per-phase power positions follow the confirmed
