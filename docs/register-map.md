@@ -33,14 +33,27 @@ obie mapy wyjściowe kodują z niego.
 | `pf_l1/l2/l3`, `pf_total` | – | odczyt ND45 |
 | `freq` | Hz | odczyt ND45 |
 | `imp_energy_*`, `exp_energy_*` | kWh | odczyt ND45 (compose hi/lo) |
+| `reactive_energy_total` | kvarh | suma czterech par ND45: `944/946`, `960/962`, `976/978`, `992/994` |
 | `s_l1/l2/l3`, `s_total` | VA | odczyt ND45: `60/84/108/132` (`float32`); suma z `132` |
-| `net_imp_energy_total` | kWh | **wyliczane**: `max(imp−exp, 0)` |
-| `net_exp_energy_total` | kWh | **wyliczane**: `max(exp−imp, 0)` |
+| `active_energy_total` | kWh | **wyliczane**: `imp_energy_total + exp_energy_total` |
+| `net_imp_energy_total` | kWh | **wyliczane**: kopia `imp_energy_total` |
+| `net_exp_energy_total` | kWh | **wyliczane**: kopia `exp_energy_total` |
 
-Tylko wartości `net_*` są pochodne i liczy je
-`nd45_poller.compute_derived()`. W trybie `static` pominięte `s_l1/l2/l3`
-są pomocniczo wyliczane jako `|U·I|`, a pominięte `s_total` jako ich suma;
-jawnie skonfigurowane `s_*` nie są nadpisywane.
+Each reactive component uses `Mvarh * 1000 + kvarh`; the exact formula is:
+
+```text
+reactive_energy_total =
+    (944 * 1000 + 946) +
+    (960 * 1000 + 962) +
+    (976 * 1000 + 978) +
+    (992 * 1000 + 994)
+```
+
+`nd45_poller.compute_derived()` derives `active_energy_total` and the
+`net_*` fields. The `net_*` fields are directional copies, not arithmetic
+import-minus-export values. In `static` mode, omitted `s_l1/l2/l3` are
+calculated as `|U·I|`, omitted `s_total` is their sum, and explicitly
+configured `s_*` values are not overwritten.
 
 ## Przekładnia CT (`dtsu.identity.ir_at`, tu = 200)
 
@@ -96,18 +109,16 @@ Strona wtórna, kWh, `raw = SI/CT` (×1).
 
 | Adres | Hex | Wielkość | `from` | /CT |
 |---:|---|---|---|:--:|
-| 4106 | 0x100A | Forward active total | imp_energy_total | ✓ |
+| 4096 | 0x1000 | Import energy coarse | imp_energy_total | ✓ |
+| 4106 | 0x100A | Reactive energy coarse | reactive_energy_total | ✓ |
 | 4126 | 0x101E | ImpEp total | imp_energy_total | ✓ |
 | 4128 | 0x1020 | ImpEp L1 | imp_energy_l1 | ✓ |
 | 4130 | 0x1022 | ImpEp L2 | imp_energy_l2 | ✓ |
 | 4132 | 0x1024 | ImpEp L3 | imp_energy_l3 | ✓ |
 | 4134 | 0x1026 | NetImpEp | net_imp_energy_total | ✓ |
-| 4136 | 0x1028 | ExpEp total | exp_energy_total | ✓ |
-| 4138 | 0x102A | ExpEp L1 | exp_energy_l1 | ✓ |
-| 4140 | 0x102C | ExpEp L2 | exp_energy_l2 | ✓ |
-| 4142 | 0x102E | ExpEp L3 | exp_energy_l3 | ✓ |
+| 4136-4142 | 0x1028-0x102E | Confirmed phase export | constant zero | ✓ |
 | 4144 | 0x1030 | NetExpEp | net_exp_energy_total | ✓ |
-| 4176 | 0x1050 | Forward active total (alias) | imp_energy_total | ✓ |
+| 4176 | 0x1050 | Reactive energy coarse (alias) | reactive_energy_total | ✓ |
 
 ## 3. FC04 — mapa OEM Sigen, pomiary (baza `0x150A`, offset −0x0AF6 vs FC03)
 
@@ -146,27 +157,31 @@ Bloki czytane przez Sigenergy: `0x150A`/qty30, `0x151C`/qty16 (szybka pętla ~60
 
 ## 4. FC04 — mapa OEM Sigen, energia
 
-Strona **pierwotna**, kWh, ×1. Bloki czytane przez Sigenergy: `0x180A`/qty22
-(obejmuje forward active na `0x180A`, zerową lukę `0x180C`–`0x181D`
-i `imp_ep` na `0x181E`), `0x1828`/qty4 (`exp_ep`, `exp_ep_l1`).
+Strona **pierwotna**, kWh, scale 1. Sigenergy reads `0x180A`/qty22
+(reactive coarse energy at `0x180A`, a zero-filled gap at `0x180C`-`0x181D`,
+and `imp_ep` at `0x181E`) and `0x1828`/qty4 (`exp_ep` plus zero-only phase
+export registers).
 
 | Adres | Hex | Wielkość | `from` |
 |---:|---|---|---|
-| 6154 | 0x180A | Forward active total | imp_energy_total |
+| 6144 | 0x1800 | Active energy coarse | active_energy_total |
+| 6154 | 0x180A | Reactive energy coarse | reactive_energy_total |
+| 6156-6173 | 0x180C-0x181D | Polled gap | constant zero |
 | 6174 | 0x181E | ImpEp total | imp_energy_total |
 | 6176 | 0x1820 | ImpEp L1 | imp_energy_l1 |
 | 6178 | 0x1822 | ImpEp L2 | imp_energy_l2 |
 | 6180 | 0x1824 | ImpEp L3 | imp_energy_l3 |
 | 6182 | 0x1826 | NetImpEp | net_imp_energy_total |
 | 6184 | 0x1828 | ExpEp total | exp_energy_total |
-| 6186 | 0x182A | ExpEp L1 | exp_energy_l1 |
-| 6188 | 0x182C | ExpEp L2 | exp_energy_l2 |
-| 6190 | 0x182E | ExpEp L3 | exp_energy_l3 |
+| 6186-6190 | 0x182A-0x182E | Confirmed phase export | constant zero |
 | 6192 | 0x1830 | NetExpEp | net_exp_energy_total |
+| 6224 | 0x1850 | Reactive energy coarse (alias) | reactive_energy_total |
 
-**Energia czynna forward** (`0x180A` FC04 / `0x100A`, `0x1050` FC03) jest
-odwzorowana z `imp_energy_total` ND45. FC04 podaje stronę pierwotną, a oba
-aliasy FC03 stronę wtórną (`/CT`), zgodnie ze skanem licznika.
+The six coarse aliases (`0x1000`, `0x100A`, `0x1050`, `0x1800`, `0x180A`,
+and `0x1850`) encode the IEEE754 high word and force the low word to zero.
+`0x1000` is CT-side import, `0x100A` and `0x1050` are CT-side reactive
+aliases; `0x1800` is primary-side active energy, and `0x180A` and `0x1850`
+are primary-side reactive aliases.
 
 ## 5. FC03 — blok konfiguracyjny / tożsamości
 
@@ -213,11 +228,18 @@ skanowane były kilka minut od siebie w trakcie 10-min skanu):
 | FC03 Freq (0x2044, ×100) | 4982.7 | 5000.6 | ✓ (dryf) |
 | blok konfig. + tożsamość | co do bitu | co do bitu | ✓ |
 
+### Reverse-flow scan evidence
+
+| Field | Value |
+|---|---:|
+| FC04 Pt (`0x151C`) | -3.058557 kW |
+| FC04 reactive coarse (`0x180A`) | 2.796875 kvarh |
+| FC04 ImpEp (`0x181E`) | 7.0078125 kWh |
+| FC04 ExpEp (`0x1828`) | 0.19921875 kWh |
+| FC04 export alias (`0x1830`) | 0.19921875 kWh |
+| FC04 phase export (`0x182A`-`0x182E`) | 0 |
+
 ## Znane luki (do domknięcia w terenie)
 
-- **Eksport energii** (`exp_ep`) — brak generacji w teście (zrzut pokazuje 0);
-  wymaga weryfikacji przy realnym eksporcie PV.
-- **Konwencja znaku P** — zrzut (pobór) pokazuje P>0; `sign=1` to odwzorowuje.
-  Potwierdzić, że Sigen interpretuje P>0 jako import.
-- **Nieznane rejestry** `0x153C`–`0x1540` (~304) i `0x2032`–`0x2036` (~3040) —
-  poza zakresem odczytów Sigenergy; nieodwzorowane.
+- **Phase-angle registers** `0x153C`-`0x1540` (~304) and `0x2032`-`0x2036`
+  (~3040) remain deliberately outside this energy-correction scope and are unmapped.

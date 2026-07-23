@@ -6,16 +6,21 @@ read it as a "Power Sensor".
 
 The output exposes both the standard DTSU666 holding-register map over FC03 (secondary/
 CT side, `0x2000`/`0x101E`) and the Sigenergy OEM map over FC04 (primary side, `0x150A`
-measurements in SI units except power/reactive power in kW/kvar, and `0x180A`/`0x1828`
-energy at a `+0x800` offset from the classic energy block). Both sides derive from the
-same ND45 reading; the classic map divides current/power/energy by the configured CT
+measurements in SI units except power/reactive power in kW/kvar). Both sides derive from
+the same ND45 reading; the classic map divides current/power/energy by the configured CT
 ratio (`dtsu.identity.ir_at`) while the Sigen map does not (already primary). It also
 serves the FC03 identity string `Sigen Sensor TPX-CH` at `0xF100` and the observed
 `0x00001500` handshake at `0xF114`. Apparent power is read directly from ND45
 registers `60`/`84`/`108` (L1/L2/L3) and `132` (L123 sum), then served on both maps
-(classic `0x2022`, Sigen FC04 `0x152C`). A handful of addresses inside the polled FC04
-energy ranges have no confirmed ND45 source (e.g. the reactive-energy accumulator) and
-are left zero rather than fabricated, which also prevents `IllegalAddress` on those reads.
+(classic `0x2022`, Sigen FC04 `0x152C`).
+
+The Sigen FC04 energy map reproduces the physical TPX-CH behavior rather than
+assuming a uniform `+0x800` copy of the generic DTSU666 map. `0x180A` is the
+coarse total reactive-energy accumulator built from all four ND45 reactive
+quadrants; `0x181E` is precise active import; `0x1828` is precise active
+export. The classic FC03 energy aliases are CT-side values. Confirmed
+phase-export fields remain zero, while the directional `net_*` fields repeat
+their corresponding import/export totals as on the physical meter.
 
 The full verified register layout — every address, description and multiplier, checked
 against a live-meter scan — is in [`docs/register-map.md`](docs/register-map.md).
@@ -104,6 +109,17 @@ as zero, except omitted phase apparent power (`s_l1/s_l2/s_l3`) is calculated
 from the configured U and I, and omitted `s_total` is their sum. Explicit `s_*`
 values are served unchanged. Values must be finite JSON numbers, and unknown
 names stop startup so spelling mistakes cannot silently produce zeros.
+
+Independent static inputs are voltages, currents, active/reactive/apparent power,
+PF, frequency, active-import total and phase counters, active-export total, and
+total reactive energy. All other energy outputs are fixed zero fields or derived
+from those independent values.
+
+The checked-in example represents export: active power and PF are negative,
+`exp_energy_total` is non-zero, and `reactive_energy_total` drives the coarse
+reactive aliases. `active_energy_total`, both `net_*` values, CT-side values,
+and coarse aliases are derived automatically. Confirmed zero-only phase
+export registers cannot be configured.
 
 Only one process can own an RTU serial port. Stop the normal service or monitor
 before starting static mode:
