@@ -38,7 +38,7 @@
 
 ---
 
-### Task 1: Split ND45 Reactive Energy into Q+ and Q-
+### Task 1: Add ND45 Reactive Energy Directions
 
 **Files:**
 - Modify: `tests/test_poller.py:91-206`
@@ -121,9 +121,10 @@ Update `test_synthetic_values_cover_every_dtsu_target_source` so it asserts:
 Expected: failures because the source map still exposes only
 `reactive_energy_total`.
 
-- [ ] **Step 3: Replace the source composition**
+- [ ] **Step 3: Add the directional source compositions**
 
-In `config/registers.json`, replace `reactive_energy_total` with:
+In `config/registers.json`, add these two source points alongside the existing
+aggregate:
 
 ```json
       "reactive_imp_energy_total": {
@@ -135,6 +136,10 @@ In `config/registers.json`, replace `reactive_energy_total` with:
         "factors": [1000, 1, 1000, 1]
       }
 ```
+
+Keep `reactive_energy_total` only as a transitional compatibility source in
+Task 1 because the target map still consumes it. Task 2 removes it in the same
+commit that switches all target registers to the directional sources.
 
 Do not change `READ_GROUPS` or add manual composition code. The generic
 component validator must remain the only validation path.
@@ -233,6 +238,12 @@ the energy subset as points whose addresses are in `0x1000..0x1051`, then
 assert that subset equals `set(classic_expected)`. Keep the existing loop that
 checks `(addr, from_, zero_low_word)` and `/CT`.
 
+Also assert:
+
+```python
+    assert "reactive_energy_total" not in reg.nd45_source.points
+```
+
 Update the `ct_divided` set to include every key in `classic_expected`.
 
 - [ ] **Step 2: Replace the server image with latest-scan values**
@@ -308,6 +319,9 @@ Expected: failures because the map still uses import at `0x1000`, lacks
 directional reactive points, and zero-fills phase export.
 
 - [ ] **Step 5: Replace both target maps**
+
+First remove the transitional `reactive_energy_total` source point so the
+source and target map change atomically.
 
 In `config/registers.json`, create exactly the points listed in
 `classic_expected` and `extended_expected`. Every classic point uses
