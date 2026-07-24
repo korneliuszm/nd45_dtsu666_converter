@@ -199,7 +199,7 @@ def test_load_config_reads_seed():
     assert cfg.dtsu.identity.ir_at == 200
     assert cfg.dtsu.identity.ur_at == 10
     assert cfg.static_debug.feed_interval_s == 0.5
-    assert cfg.static_debug.values["u_l1"] == 9000.0
+    assert cfg.static_debug.values["u_l1"] == 240.0
     assert cfg.static_debug.values["p_total"] == -60000.0
     assert cfg.static_debug.values["pf_total"] == -0.95
     assert cfg.static_debug.values["s_total"] == 60300.0

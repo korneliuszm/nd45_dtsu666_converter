@@ -24,6 +24,14 @@ Poller ND45 dekoduje surowe rejestry do wartości w jednostkach SI (strona
 **pierwotna** — ND45 sam stosuje swoją przekładnię CT). To jedyne źródło prawdy;
 obie mapy wyjściowe kodują z niego.
 
+**Przekładnia MV/LV instalacji:** ND45 w tej instalacji mierzy po stronie SN
+(~9000V faza / 15588V linia), a nie w punkcie 230V/400V, gdzie normalnie
+montowany jest fizyczny DTSU666/Sigen Sensor. `nd45_source` w
+`config/registers.json` dzieli `u_l1/l2/l3/l12/l23/l31` przez 37,5 (nominalna
+przekładnia transformatora SN/nn) i mnoży `i_l1/l2/l3` przez 37,5, więc wartość
+kanoniczna już odpowiada stronie nn — `p_*`/`q_*`/`s_*` pozostają
+nieskalowane (P=U·I zachowane przez idealny transformator).
+
 | Klucz | Jednostka | Pochodzenie |
 |---|---|---|
 | `u_l1/l2/l3`, `u_l12/l23/l31` | V | odczyt ND45 |

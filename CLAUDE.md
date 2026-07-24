@@ -56,6 +56,7 @@ Sigenergy (RTU or TCP master) --FC03--> DTSU output server (serves instantly fro
   - canonical → DTSU register: `register_float = (SI * sign * scale) + offset`
   - DTSU scales are e.g. V×10, A×1000, W×10, PF×1000, Hz×100; energy is direct kWh. `sign ∈ {+1,-1}` flips import/export.
 - Both sides default to big/big (ABCD) word/byte order, configurable per side.
+- **Site MV/LV scaling:** this installation's ND45 measures at the medium-voltage side (~9kV phase / 15588V line) via the site's step-down transformer, not at the 230V/400V point where a physical DTSU666/Sigen Sensor is normally mounted. `nd45_source` therefore carries a non-1.0 `scale` on `u_l1/l2/l3/l12/l23/l31` (÷37.5, the nameplate MV/LV ratio) and `i_l1/l2/l3` (×37.5) so canonical voltage/current already represent the equivalent LV-side reading before any DTSU encoding. Power/energy points are left unscaled since `P = U·I` is conserved across an (assumed-ideal) transformer — do not also scale `p_*`/`q_*`/`s_*`. If the transformer ratio is confirmed on-site to differ from 37.5, update only these six `scale` values.
 
 ## Things that only make sense across files
 

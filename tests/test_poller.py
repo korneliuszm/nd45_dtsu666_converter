@@ -106,7 +106,7 @@ async def test_poll_once_requests_the_complete_energy_block_once():
 async def test_poll_once_decodes_points():
     src = load_registers("config/registers.json").nd45_source
     image = _image_for({
-        50: 230.1, 128: 1500.0, 818: 50.02,
+        50: 8628.75, 128: 1500.0, 818: 50.02,  # u_l1 raw MV = 230.1 * 37.5 (site MV/LV scale)
         900: 0.0, 902: 100.0,   # imp energy L1 -> 100 kWh
         904: 0.0, 906: 200.0,   # imp energy L2 -> 200 kWh
         908: 0.0, 910: 300.0,   # imp energy L3 -> 300 kWh
@@ -253,7 +253,7 @@ async def test_poll_once_reports_all_invalid_critical_points():
 
 async def test_poll_once_invalid_warning_logged_once_per_episode(caplog):
     src = load_registers("config/registers.json").nd45_source
-    invalid = {50: _raw_float_registers(3e20)}
+    invalid = {50: _raw_float_registers(float("inf"))}
     seen: set[str] = set()
     with caplog.at_level("WARNING", logger="nd45_dtsu666.nd45_poller"):
         for _ in range(2):
@@ -264,7 +264,7 @@ async def test_poll_once_invalid_warning_logged_once_per_episode(caplog):
     warnings = [r for r in caplog.records if "u_l1" in r.getMessage()]
     assert len(warnings) == 1
 
-    normal = _image_for({50: 230.0})
+    normal = _image_for({50: 8625.0})  # u_l1 raw MV = 230.0 * 37.5 (site MV/LV scale)
     values = await poll_once(FakeClient(normal), src, slave=1, overrange_seen=seen)
     assert values["u_l1"] == pytest.approx(230.0)
     assert "u_l1" not in seen

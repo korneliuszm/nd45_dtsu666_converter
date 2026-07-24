@@ -1,0 +1,1276 @@
+2026-07-23 12:35:18,943 Opening serial interface: 
+	port: COM7
+	baudrate: 9600
+	bytesize: 8
+	parity: N
+	stopbits: 1
+	timeout: 0.00375s
+
+2026-07-23 12:35:18,990 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:18,991 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,054 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,055 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,113 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,114 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,175 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,176 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,313 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,315 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,672 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,672 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,736 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,736 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,799 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,799 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,863 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,863 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:19,926 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:19,926 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,161 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,161 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,224 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,224 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,288 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,288 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,352 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,352 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,526 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,527 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,589 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,589 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,651 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,652 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,837 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,838 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:20,901 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:20,902 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,202 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,203 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,265 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,266 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,329 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,330 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,565 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,566 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,627 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,628 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,691 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,691 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,755 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,756 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:21,819 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:21,820 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:22,119 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:22,120 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:22,183 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:22,183 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:22,358 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:22,358 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:22,422 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:22,422 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:22,690 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:35:22,692 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:35:22,896 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:22,897 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:23,006 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,007 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,243 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,244 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,307 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,308 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,482 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,483 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,546 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,547 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,783 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,784 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,845 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,845 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:23,908 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:23,909 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,083 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,084 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,146 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,147 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,210 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,211 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,448 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,449 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,512 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,513 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,576 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,576 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,638 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,639 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,701 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,701 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,877 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,878 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:24,940 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:24,941 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:25,573 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:25,574 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:25,636 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:25,637 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:25,697 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:25,698 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:25,759 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:25,760 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,218 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,219 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,282 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,283 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,345 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,346 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,409 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,410 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,472 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,473 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,534 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,535 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,597 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,598 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,661 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,662 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,724 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,725 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,788 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,789 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,852 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,853 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,916 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,917 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:26,979 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:26,980 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,044 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,044 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,107 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,108 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,169 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,170 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,230 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,232 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,804 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,807 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,866 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,869 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,930 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:27,932 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:27,992 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:35:27,994 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:35:28,085 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:35:28,087 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:35:28,146 Raw Message: 0a 04 15 4e 00 02 14 ab
+2026-07-23 12:35:28,146 Master	-> ID: 10, FC: 0x04, Read address: 5454, Read Quantity: 2
+2026-07-23 12:35:28,177 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:35:28,177 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:35:28,255 Raw Message: 0a 04 18 28 00 04 76 1a
+2026-07-23 12:35:28,258 Master	-> ID: 10, FC: 0x04, Read address: 6184, Read Quantity: 4
+2026-07-23 12:35:28,287 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:28,287 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:28,332 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:35:28,332 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:35:28,363 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:35:28,364 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:35:28,410 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,411 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,536 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,537 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,598 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,599 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,662 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,663 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,786 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,787 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,850 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,851 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,913 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,914 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:28,975 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:28,976 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,494 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,495 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,558 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,559 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,621 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,622 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,685 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,686 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,749 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,750 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,812 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,813 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,875 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,876 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:29,937 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:29,938 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,001 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,002 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,065 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,066 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,129 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,132 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,191 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,192 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,255 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,256 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,319 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,320 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,382 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,383 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,445 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,446 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,508 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,509 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,572 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,572 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,635 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,636 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,699 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,699 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,763 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,764 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:30,826 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:30,827 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,030 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,031 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,091 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,092 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,155 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,156 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,219 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,219 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,282 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,283 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,344 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,345 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,408 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,409 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,472 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,473 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,535 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,536 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,597 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,598 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,661 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,662 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:31,725 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:31,726 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,500 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,501 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,564 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,565 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,627 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,628 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,691 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,691 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,755 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,756 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,818 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,819 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,882 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,883 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:32,946 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:32,947 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,009 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,009 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,071 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,071 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,134 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,135 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,198 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,199 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,542 Raw Message: 0a 04 15 4e 00 02 14 ab
+2026-07-23 12:35:33,542 Master	-> ID: 10, FC: 0x04, Read address: 5454, Read Quantity: 2
+2026-07-23 12:35:33,574 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:35:33,574 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:35:33,699 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:33,699 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:33,730 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:35:33,730 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:35:33,808 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,809 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,869 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,869 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,932 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,932 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:33,994 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:33,994 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,058 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,058 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,184 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,184 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,639 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,639 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,701 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,702 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,762 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,762 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,825 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,825 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:34,952 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:34,952 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:35,015 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:35,015 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:35,533 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:35,533 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:35,596 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:35,596 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:35,660 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:35,660 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:35,722 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:35,722 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:35,850 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:35,851 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,111 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,111 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,173 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,173 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,236 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,236 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,299 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,299 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,361 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,361 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,423 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,424 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,686 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,686 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,747 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,747 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,808 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,809 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,870 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,870 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,934 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,934 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:36,997 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:36,998 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,060 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,060 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,124 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,124 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,186 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,187 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,248 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,248 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,513 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,514 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,574 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,574 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,635 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,635 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,697 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,698 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,759 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,760 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,897 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,897 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:37,959 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:37,959 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,021 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:38,022 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,083 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:38,083 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,145 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:38,146 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,596 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:38,598 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,658 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:38,658 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,722 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:38,722 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:38,784 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:35:38,784 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:35:38,878 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:35:38,879 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:35:39,082 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:39,082 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:39,114 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:35:39,114 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:35:39,145 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:35:39,145 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:35:39,177 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,177 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,240 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,240 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,502 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,503 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,564 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,564 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,626 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,626 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,689 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,689 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,752 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,752 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,816 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,816 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,879 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,879 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:39,942 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:39,942 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,005 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,005 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,204 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,205 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,266 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,266 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,328 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,328 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,390 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,390 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,453 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,453 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,516 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,516 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,578 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,578 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,639 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,640 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,702 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,703 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,888 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,888 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:40,951 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:40,952 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,075 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,077 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,340 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,342 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,402 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,402 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,466 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,466 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,528 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,528 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,591 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,591 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,653 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,653 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,715 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,715 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,778 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,778 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,841 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,841 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,902 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,902 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:41,964 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:41,964 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,025 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,026 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,087 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,087 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,150 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,151 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,212 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,212 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,276 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,277 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,338 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,338 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,401 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,402 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,464 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,464 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,701 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,701 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,765 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,766 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,827 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,827 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:42,891 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:42,891 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,066 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,066 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,130 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,130 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,256 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,256 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,556 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,556 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,618 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,618 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,681 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,681 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,918 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,918 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:43,982 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:43,983 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:44,157 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:35:44,157 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:35:44,253 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:35:44,254 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:35:44,347 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:35:44,347 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:35:44,452 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:44,452 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:44,488 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:35:44,488 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:35:44,521 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:35:44,521 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:35:44,556 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:44,556 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:44,616 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:44,616 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:44,681 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:44,681 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:44,745 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:44,745 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:45,047 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:45,047 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:45,110 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:45,110 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:45,348 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:45,348 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:45,411 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:45,411 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:45,711 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:45,712 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:45,774 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:45,774 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,139 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,139 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,203 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,203 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,440 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,440 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,566 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,566 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,629 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,629 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,804 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,805 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,867 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,867 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:46,931 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:46,931 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:47,168 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:47,168 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:47,232 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:47,232 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:47,533 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:47,533 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:47,597 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:47,597 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:47,660 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:47,661 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:47,722 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:47,723 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,086 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,086 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,149 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,149 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,213 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,213 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,277 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,277 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,341 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,341 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,403 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,404 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,467 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,467 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,531 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,531 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,594 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,594 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,658 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,658 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,720 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,720 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,783 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,783 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,847 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,848 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:48,910 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:48,910 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:49,481 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:49,481 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:49,640 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:35:49,640 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:35:49,702 Raw Message: 0a 04 15 4e 00 02 14 ab
+2026-07-23 12:35:49,702 Master	-> ID: 10, FC: 0x04, Read address: 5454, Read Quantity: 2
+2026-07-23 12:35:49,734 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:35:49,734 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:35:49,813 Raw Message: 0a 04 18 28 00 04 76 1a
+2026-07-23 12:35:49,815 Master	-> ID: 10, FC: 0x04, Read address: 6184, Read Quantity: 4
+2026-07-23 12:35:49,861 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:49,862 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:49,892 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:35:49,892 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:35:49,924 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:35:49,925 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:35:49,956 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:49,956 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:50,018 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:50,018 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:50,080 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:50,081 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:50,534 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:50,535 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:50,597 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:50,597 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:50,659 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:50,659 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:50,985 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:50,987 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,047 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,048 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,111 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,111 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,172 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,172 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,235 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,235 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,297 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,297 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,359 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,359 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,811 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,813 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,873 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,874 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,936 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,936 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:51,998 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:51,998 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,060 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,060 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,261 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,263 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,324 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,324 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,387 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,388 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,450 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,450 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,513 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,513 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,575 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,576 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,637 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,637 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,700 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,700 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,902 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,904 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:52,964 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:52,964 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,027 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,028 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,090 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,090 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,153 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,153 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,416 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,418 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,478 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,479 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,541 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,541 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,604 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,605 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,668 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,669 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:53,731 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:53,731 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,183 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,186 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,246 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,247 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,308 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,310 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,371 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,372 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,434 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,434 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,497 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,497 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,557 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,557 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,621 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,621 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,686 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,686 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,746 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,747 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,809 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,809 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,872 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:54,872 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:54,937 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:35:54,937 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:35:55,241 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:35:55,241 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:35:55,279 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:35:55,280 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:35:55,310 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:35:55,310 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:35:55,344 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,344 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,407 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,407 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,471 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,471 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,535 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,535 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,603 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,603 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,865 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,866 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,928 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,928 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:55,990 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:55,990 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,052 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,052 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,115 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,116 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,179 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,179 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,506 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,506 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,568 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,568 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,629 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,629 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,892 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,896 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:56,954 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:56,954 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:57,016 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:57,017 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:57,469 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:57,469 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:57,530 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:57,531 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:57,856 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:57,856 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:57,919 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:57,920 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:57,980 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:57,980 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,042 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,042 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,105 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,105 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,370 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,372 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,433 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,433 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,495 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,495 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,559 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,559 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,621 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,621 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,885 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,885 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:58,947 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:58,947 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,009 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,009 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,073 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,073 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,136 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,136 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,199 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,200 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,262 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,262 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,401 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,402 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,465 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,466 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,528 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,529 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,591 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,591 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,653 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,653 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:35:59,714 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:35:59,715 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,105 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,107 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,168 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,169 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,231 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,231 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,292 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,292 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,353 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:36:00,353 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:36:00,446 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:36:00,448 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:36:00,617 Raw Message: 0a 04 18 28 00 04 76 1a
+2026-07-23 12:36:00,618 Master	-> ID: 10, FC: 0x04, Read address: 6184, Read Quantity: 4
+2026-07-23 12:36:00,648 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:36:00,648 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:36:00,694 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:36:00,695 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:36:00,726 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:36:00,726 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:36:00,758 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,758 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,819 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,820 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,882 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,883 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:00,945 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:00,945 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,272 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,275 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,334 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,334 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,396 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,396 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,458 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,458 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,521 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,521 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,786 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,788 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,849 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,850 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,912 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,912 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:01,974 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:01,974 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,035 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,035 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,098 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,098 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,612 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,615 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,675 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,676 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,738 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,738 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,802 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,802 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,863 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,863 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,926 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,926 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:02,989 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:02,989 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,051 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,052 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,176 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,176 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,239 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,239 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,505 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,507 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,568 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,568 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,631 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,632 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,693 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,693 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,756 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,756 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,818 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,819 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,881 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,881 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:03,943 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:03,943 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:04,005 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:04,005 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:04,068 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:04,068 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:04,130 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:04,130 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:04,570 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:04,570 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:04,632 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:04,632 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:05,565 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:05,567 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:05,767 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:36:05,768 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:36:06,063 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:36:06,065 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:36:06,171 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,172 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,235 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,236 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,298 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,299 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,359 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,359 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,422 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,423 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,485 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,486 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,549 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,549 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,908 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,910 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:06,971 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:06,971 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:07,035 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:07,038 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:07,096 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:07,096 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:07,221 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:07,224 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:07,284 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:07,285 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:07,582 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:07,584 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:07,645 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:07,645 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:08,004 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:08,006 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:08,067 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:08,067 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:08,127 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:08,127 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:08,608 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:08,609 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:08,671 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:08,672 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:08,734 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:08,734 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,029 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,031 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,092 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,092 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,326 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,327 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,388 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,388 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,451 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,452 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,514 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,514 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,578 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,578 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,704 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,706 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,766 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,766 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:09,828 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:09,828 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,002 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,003 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,062 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,062 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,124 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,124 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,186 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,186 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,247 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,247 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,420 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,420 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,483 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,484 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,545 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,545 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,606 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,607 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,914 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,915 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:10,977 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:10,977 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:11,040 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:11,040 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:11,102 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:11,102 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:11,165 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:36:11,165 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:36:11,259 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:36:11,260 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:36:11,323 Raw Message: 0a 04 15 4e 00 02 14 ab
+2026-07-23 12:36:11,324 Master	-> ID: 10, FC: 0x04, Read address: 5454, Read Quantity: 2
+2026-07-23 12:36:11,354 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:36:11,354 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:36:11,433 Raw Message: 0a 04 18 28 00 04 76 1a
+2026-07-23 12:36:11,434 Master	-> ID: 10, FC: 0x04, Read address: 6184, Read Quantity: 4
+2026-07-23 12:36:11,480 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:36:11,480 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:36:11,510 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:36:11,510 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:36:11,542 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:36:11,542 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:36:11,573 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:11,573 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:11,635 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:11,635 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:11,698 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:11,698 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:11,761 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:11,761 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,150 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,150 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,213 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,213 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,275 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,275 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,336 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,336 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,399 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,399 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,462 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,463 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,524 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,524 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,587 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,587 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,650 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,650 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,714 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,715 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,778 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,778 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,843 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,843 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,906 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,906 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:12,970 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:12,970 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,034 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,034 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,099 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,099 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,162 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,162 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,239 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,239 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,302 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,302 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,365 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,365 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,428 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,429 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,492 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,492 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,554 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,554 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,616 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,617 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:13,743 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:13,743 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,133 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,137 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,196 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,198 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,259 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,260 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,648 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,651 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,709 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,711 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,772 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,772 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,834 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,835 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:14,896 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:14,896 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,160 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,162 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,222 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,222 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,284 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,286 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,346 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,346 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,408 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,409 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,733 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,737 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:15,795 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:15,795 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:16,184 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:16,184 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:16,246 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:16,246 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:16,307 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:16,309 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:16,754 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:36:16,758 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:36:16,834 Raw Message: 0a 04 18 28 00 04 76 1a
+2026-07-23 12:36:16,834 Master	-> ID: 10, FC: 0x04, Read address: 6184, Read Quantity: 4
+2026-07-23 12:36:16,880 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:36:16,880 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:36:16,911 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:36:16,914 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:36:16,941 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:36:16,941 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:36:16,971 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:16,973 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,035 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,036 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,097 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,097 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,298 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,302 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,360 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,360 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,422 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,426 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,749 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,752 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,812 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,812 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,875 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,875 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:17,937 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:17,937 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,000 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,000 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,201 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,201 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,264 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,266 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,326 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,327 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,390 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,390 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,453 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,455 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,516 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,516 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,578 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,581 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,640 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,640 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:18,965 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:18,968 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,027 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,027 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,090 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,093 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,153 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,153 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,215 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,217 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,466 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,466 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,529 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,529 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,593 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,593 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,666 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,666 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,727 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,727 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,789 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,789 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,850 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,851 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,909 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,909 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:19,974 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:19,974 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,036 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,036 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,101 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,101 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,166 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,166 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,230 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,230 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,293 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,293 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,357 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,357 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,421 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,421 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,675 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,677 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,738 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,738 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,803 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,803 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,867 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,867 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,934 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,936 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:20,995 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:20,995 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,196 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,199 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,248 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,248 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,312 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,312 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,377 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,377 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,441 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,441 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,696 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,696 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,760 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,760 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,823 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,823 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,891 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:21,891 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:21,955 Raw Message: 0a 04 15 0a 00 1e 55 77
+2026-07-23 12:36:21,955 Master	-> ID: 10, FC: 0x04, Read address: 5386, Read Quantity: 30
+2026-07-23 12:36:22,049 Raw Message: 0a 04 15 28 00 0e f4 b1
+2026-07-23 12:36:22,049 Master	-> ID: 10, FC: 0x04, Read address: 5416, Read Quantity: 14
+2026-07-23 12:36:22,113 Raw Message: 0a 04 15 4e 00 02 14 ab
+2026-07-23 12:36:22,114 Master	-> ID: 10, FC: 0x04, Read address: 5454, Read Quantity: 2
+2026-07-23 12:36:22,144 Raw Message: 0a 04 18 0a 00 16 56 1d
+2026-07-23 12:36:22,146 Master	-> ID: 10, FC: 0x04, Read address: 6154, Read Quantity: 22
+2026-07-23 12:36:22,221 Raw Message: 0a 04 18 28 00 04 76 1a
+2026-07-23 12:36:22,224 Master	-> ID: 10, FC: 0x04, Read address: 6184, Read Quantity: 4
+2026-07-23 12:36:22,269 Raw Message: 0a 03 00 03 00 05 74 b2
+2026-07-23 12:36:22,270 Master	-> ID: 10, FC: 0x03, Read address: 3, Read Quantity: 5
+2026-07-23 12:36:22,300 Raw Message: 0a 03 00 46 00 01 64 a4
+2026-07-23 12:36:22,301 Master	-> ID: 10, FC: 0x03, Read address: 70, Read Quantity: 1
+2026-07-23 12:36:22,332 Raw Message: 0a 03 f1 14 00 02 b7 88
+2026-07-23 12:36:22,332 Master	-> ID: 10, FC: 0x03, Read address: 61716, Read Quantity: 2
+2026-07-23 12:36:22,362 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,364 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,425 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,427 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,487 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,488 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,548 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,548 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,611 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,611 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,874 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,877 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,936 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,936 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:22,991 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:22,993 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,055 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,055 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,119 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,120 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,183 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,183 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,573 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,577 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,636 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,641 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,699 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,699 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,755 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,755 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,820 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,820 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,884 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,884 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:23,950 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:23,950 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:24,203 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:24,203 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:24,267 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:24,267 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:24,331 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:24,331 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:24,402 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:24,403 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16
+2026-07-23 12:36:24,463 Raw Message: 0a 04 15 1c 00 10 35 77
+2026-07-23 12:36:24,463 Master	-> ID: 10, FC: 0x04, Read address: 5404, Read Quantity: 16

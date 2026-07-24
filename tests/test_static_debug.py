@@ -80,16 +80,16 @@ async def test_static_feeder_writes_both_maps_and_keeps_store_fresh():
     pipe.coros[1].close()
 
     values, timestamp = pipe.store.snapshot()
-    assert values["u_l1"] == 9000.0
+    assert values["u_l1"] == 240.0
     assert timestamp is not None
     assert pipe.store.age(asyncio.get_running_loop().time()) < 1.0
 
     classic = registers.dtsu_target.points["u_l1"]
     classic_regs = pipe.context[config.dtsu.slave_id].getValues(3, classic.addr, count=2)
-    assert registers_to_float(classic_regs, "big", "big") == pytest.approx(90000.0)
+    assert registers_to_float(classic_regs, "big", "big") == pytest.approx(2400.0)
     sigen = registers.dtsu_sigen_ext_target.points["u_l1"]
     sigen_regs = pipe.context[config.dtsu.slave_id].getValues(4, sigen.addr, count=2)
-    assert registers_to_float(sigen_regs, "big", "big") == pytest.approx(9000.0)
+    assert registers_to_float(sigen_regs, "big", "big") == pytest.approx(240.0)
 
 
 async def test_static_pipeline_serves_complete_reverse_flow_energy_image():
