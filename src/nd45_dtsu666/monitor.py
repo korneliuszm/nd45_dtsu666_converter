@@ -6,10 +6,12 @@ import asyncio
 import time
 
 from .app import build_pipeline, connect_with_retry
+from .codec import registers_to_float
 from .config import AppConfig, RegisterMap
-from .dtsu_server import RtuActivity
+from .dtsu_server import RtuActivity, encode_target_point
 
 _SEP = "-" * 68
+_READ_FRESH_S = 10.0  # a point is shown as "read" if seen within this many seconds
 
 
 def _fmt(value: float | None, prec: int = 1) -> str:
@@ -85,6 +87,41 @@ def render_dashboard(
     return "\n".join(lines)
 
 
+def render_registers_table(
+    targets,
+    canonical: dict[str, float],
+    activity: RtuActivity,
+    now: float,
+    ct_ratio: float = 1.0,
+    read_window: float = _READ_FRESH_S,
+) -> str:
+    """Render every DTSU666 output register with its current value and a
+    read-activity indicator ('*' if Sigenergy has read it within `read_window` s)."""
+    lines = [
+        f" DTSU666 output registers (served to Sigenergy)   "
+        f"'*' = read in last {read_window:.0f}s",
+        f"   {'point':<20}{'FC':>3}{'addr':>7}{'SI value':>14}{'reg raw':>14}   rd",
+        "-" * 68,
+    ]
+    for side in targets:
+        for pt in sorted(side.points.values(), key=lambda p: p.addr):
+            si = canonical.get(pt.from_)
+            if si is None:
+                si_txt, raw_txt = "-", "-"
+            else:
+                regs = encode_target_point(si, pt, side, ct_ratio=ct_ratio)
+                si_txt = f"{si:.3f}"
+                raw_txt = f"{registers_to_float(regs, side.word_order, side.byte_order):.1f}"
+            seen = activity.last_seen(side.function_code, pt.addr)
+            read_mark = "*" if seen is not None and now - seen <= read_window else " "
+            lines.append(
+                f"   {pt.from_:<20}{side.function_code:>3}{pt.addr:>7}"
+                f"{si_txt:>14}{raw_txt:>14}    {read_mark}"
+            )
+    lines.append(_SEP)
+    return "\n".join(lines)
+
+
 async def run_monitor(
     config: AppConfig, registers: RegisterMap, stop_event: asyncio.Event, refresh: float = 1.0
 ) -> None:
@@ -100,16 +137,27 @@ async def run_monitor(
         pipe.client.close()
         return
 
+    # Same target set the served datastore was built from (app.build_pipeline).
+    targets = [
+        registers.dtsu_target,
+        registers.dtsu_sigen_ext_target,
+        registers.dtsu_sigen_ext_energy,
+    ]
+
     async def _display() -> None:
         loop = asyncio.get_running_loop()
         while not stop_event.is_set():
             age = pipe.store.age(loop.time())
             healthy = age <= config.safety.max_data_age_s
             values, _ = pipe.store.snapshot()
+            now = time.monotonic()
             print("\033[2J\033[H", end="")  # clear screen
             print(
-                render_dashboard(
-                    values, age, healthy, activity, config.dtsu.slave_id, time.monotonic()
+                render_dashboard(values, age, healthy, activity, config.dtsu.slave_id, now)
+            )
+            print(
+                render_registers_table(
+                    targets, values, activity, now, ct_ratio=config.dtsu.identity.ir_at
                 )
             )
             try:

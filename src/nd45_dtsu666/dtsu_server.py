@@ -109,6 +109,7 @@ class RtuActivity:
         self._recent: deque[tuple[float, int, int, int]] = deque(maxlen=recent_maxlen)
         self._times: deque[float] = deque()
         self._rate_window = rate_window
+        self._addr_last_seen: dict[tuple[int, int], float] = {}
 
     def record(self, fc: int, address: int, count: int, ts: float) -> None:
         self.total += 1
@@ -123,6 +124,14 @@ class RtuActivity:
         self._times.append(ts)
         while self._times and ts - self._times[0] > self._rate_window:
             self._times.popleft()
+        # per-register freshness, so the monitor can flag which individual
+        # DTSU points Sigenergy is actually polling vs. never touching
+        for a in range(address, address + count):
+            self._addr_last_seen[(fc, a)] = ts
+
+    def last_seen(self, fc: int, address: int) -> float | None:
+        """Timestamp a single register address was last covered by a read, or None."""
+        return self._addr_last_seen.get((fc, address))
 
     def summary(self, now: float) -> dict:
         recent_times = [t for t in self._times if now - t <= self._rate_window]
