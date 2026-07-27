@@ -6,9 +6,11 @@ import asyncio
 import time
 from dataclasses import dataclass
 
+from . import metrics
 from .canonical import CanonicalStore, HealthGate
 from .config import AppConfig, RegisterMap
 from .dtsu_server import RtuActivity, build_context, supervise_server, update_datastore
+from .metrics import MetricsSource, PollStats, ServerStatus
 from .monitor import render_dashboard
 
 
@@ -19,6 +21,7 @@ class StaticPipeline:
     store: CanonicalStore
     context: object
     coros: list
+    metrics: MetricsSource | None = None
 
 
 def expand_static_values(
@@ -64,11 +67,13 @@ def build_static_pipeline(
     """Build a static feeder plus the normal output server supervisor."""
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
-    targets = [
-        registers.dtsu_target,
-        registers.dtsu_sigen_ext_target,
-        registers.dtsu_sigen_ext_energy,
+    named_targets = [
+        ("dtsu_target", registers.dtsu_target),
+        ("dtsu_sigen_ext_target", registers.dtsu_sigen_ext_target),
+        ("dtsu_sigen_ext_energy", registers.dtsu_sigen_ext_energy),
     ]
+    targets = [side for _name, side in named_targets]
+    server_status = ServerStatus()
     context = build_context(
         targets,
         config.dtsu.slave_id,
@@ -111,8 +116,23 @@ def build_static_pipeline(
         config.safety.check_interval_s,
         stop_event,
         min_restart_interval=config.safety.min_restart_interval_s,
+        status=server_status,
     )
-    return StaticPipeline(store=store, context=context, coros=[feeder(), supervisor])
+    # No ND45 client and no poller here, so the poll counters stay at zero and
+    # `nd45_connected` is omitted entirely -- build_info's mode="static" is what
+    # tells a scraper the served values are synthetic.
+    source = MetricsSource(
+        config=config,
+        store=store,
+        activity=activity,
+        poll_stats=PollStats(),
+        server_status=server_status,
+        targets=named_targets,
+        mode="static",
+    )
+    return StaticPipeline(
+        store=store, context=context, coros=[feeder(), supervisor], metrics=source
+    )
 
 
 async def run_static_debug(
@@ -124,6 +144,7 @@ async def run_static_debug(
     """Serve static data and show Sigenergy request activity until stopped."""
     activity = RtuActivity()
     pipe = build_static_pipeline(config, registers, stop_event, activity)
+    metrics_task = metrics.start(config, pipe.metrics, stop_event)
 
     async def display() -> None:
         loop = asyncio.get_running_loop()
@@ -149,4 +170,7 @@ async def run_static_debug(
             except asyncio.TimeoutError:
                 pass
 
-    await asyncio.gather(*pipe.coros, display())
+    try:
+        await asyncio.gather(*pipe.coros, display())
+    finally:
+        await metrics.stop(metrics_task)

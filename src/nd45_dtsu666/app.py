@@ -10,9 +10,11 @@ from dataclasses import dataclass
 
 from pymodbus.client import AsyncModbusTcpClient
 
+from . import metrics
 from .canonical import CanonicalStore, HealthGate
 from .config import AppConfig, RegisterMap
 from .dtsu_server import RtuActivity, build_context, supervise_server, update_datastore
+from .metrics import MetricsSource, PollStats, ServerStatus
 from .nd45_poller import run_poller, validate_source_coverage
 from .watchdog import Heartbeat, notify_ready, watchdog_loop, watchdog_seconds
 
@@ -28,6 +30,7 @@ class Pipeline:
     client: object
     coros: list
     heartbeat: Heartbeat
+    metrics: MetricsSource | None = None
 
 
 def build_on_update(
@@ -109,16 +112,23 @@ def build_pipeline(
     stop_event: asyncio.Event,
     activity: RtuActivity | None = None,
     client=None,
+    mode: str = "run",
 ) -> Pipeline:
     """Wire poller + DTSU output server + fail-safe. Pass `activity` to record read requests."""
     validate_source_coverage(registers.nd45_source)
     store = CanonicalStore()
     gate = HealthGate(config.safety.max_data_age_s)
-    targets = [
-        registers.dtsu_target,
-        registers.dtsu_sigen_ext_target,
-        registers.dtsu_sigen_ext_energy,
+    named_targets = [
+        ("dtsu_target", registers.dtsu_target),
+        ("dtsu_sigen_ext_target", registers.dtsu_sigen_ext_target),
+        ("dtsu_sigen_ext_energy", registers.dtsu_sigen_ext_energy),
     ]
+    targets = [side for _name, side in named_targets]
+    # The metrics endpoint reports what Sigenergy actually reads, which only the
+    # recording context can see -- so `run` needs an RtuActivity too, not just
+    # the debug modes. An explicit `activity=` (monitor/rtudebug) still wins.
+    if activity is None and config.prometheus.enabled:
+        activity = RtuActivity()
     context = build_context(
         targets,
         config.dtsu.slave_id,
@@ -131,15 +141,21 @@ def build_pipeline(
     )
     reporter = FaultReporter()
     heartbeat = Heartbeat()
+    poll_stats = PollStats()
+    server_status = ServerStatus()
 
     def on_update(values: dict[str, float], ts: float) -> None:
         heartbeat.touch(time.monotonic())
         reporter.success()  # a good poll clears any active fault state
         base_on_update(values, ts)
+        # after base_on_update: a datastore write failure raises out of it and
+        # lands in the poller's except -> on_error, so it must not count as OK
+        poll_stats.record_ok(time.monotonic())
 
     def on_error(exc: Exception) -> None:
         heartbeat.touch(time.monotonic())
         reporter.failure(exc)
+        poll_stats.record_error(exc, time.monotonic())
 
     client = client or AsyncModbusTcpClient(
         config.nd45.host, port=config.nd45.port, timeout=config.nd45.timeout_s
@@ -152,9 +168,26 @@ def build_pipeline(
         config.dtsu, context, store, gate,
         config.safety.check_interval_s, stop_event,
         min_restart_interval=config.safety.min_restart_interval_s,
+        status=server_status,
+    )
+    metrics_source = (
+        MetricsSource(
+            config=config,
+            store=store,
+            activity=activity,
+            poll_stats=poll_stats,
+            server_status=server_status,
+            targets=named_targets,
+            heartbeat=heartbeat,
+            client=client,
+            mode=mode,
+        )
+        if activity is not None
+        else None
     )
     return Pipeline(
-        store=store, context=context, client=client, coros=[poller, supervisor], heartbeat=heartbeat
+        store=store, context=context, client=client, coros=[poller, supervisor],
+        heartbeat=heartbeat, metrics=metrics_source,
     )
 
 
@@ -177,6 +210,9 @@ async def run_app(
         if watchdog_sec is not None
         else None
     )
+    # Same reason: pipe.coros only start once connected, and a metrics endpoint
+    # that is down while ND45 is unreachable is down exactly when it is needed.
+    metrics_task = metrics.start(config, pipe.metrics, stop_event)
 
     connected = await connect_with_retry(
         pipe.client, stop_event,
@@ -192,10 +228,12 @@ async def run_app(
                 await watchdog_task
             except asyncio.CancelledError:
                 pass
+        await metrics.stop(metrics_task)
         pipe.client.close()
         return
     try:
         coros = [*pipe.coros, watchdog_task] if watchdog_task is not None else pipe.coros
         await asyncio.gather(*coros)
     finally:
+        await metrics.stop(metrics_task)
         pipe.client.close()

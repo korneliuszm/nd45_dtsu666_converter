@@ -76,12 +76,27 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
         coro.close()
 
 
-def test_build_pipeline_default_context_not_recording(monkeypatch):
+def test_build_pipeline_records_activity_for_metrics_without_explicit_activity(monkeypatch):
+    """`run` passes no activity=, but the metrics endpoint still needs read stats."""
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
+    assert config.prometheus.enabled
+    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
+    assert isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
+    assert pipe.metrics is not None
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_build_pipeline_default_context_not_recording_without_prometheus(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = load_config("config/config.json")
+    config.prometheus.enabled = False
+    registers = load_registers("config/registers.json")
     pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
     assert not isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
+    assert pipe.metrics is None
     for coro in pipe.coros:
         coro.close()
 

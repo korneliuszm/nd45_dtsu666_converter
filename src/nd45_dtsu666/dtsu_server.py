@@ -312,9 +312,15 @@ async def supervise_server(
     now: Callable[[], float] | None = None,
     min_restart_interval: float = 0.0,
     dead_start_grace: float = 5.0,
+    status=None,
 ) -> None:
     """Start the DTSU output server (RTU or TCP, per cfg.transport) while data is
-    fresh; stop it (silence) while stale."""
+    fresh; stop it (silence) while stale.
+
+    `status` (duck-typed `metrics.ServerStatus`, optional) records the up/down
+    transitions. Server state is otherwise loop-local and unobservable from
+    outside, and it cannot be re-derived from the freshness gate: a server whose
+    transport never opened still looks 'should serve'."""
     factory = server_factory or (lambda: make_server(cfg, context))
     clock = now or time.monotonic
     server = None
@@ -344,6 +350,10 @@ async def supervise_server(
         except Exception as exc:  # noqa: BLE001 - cleanup must not kill the fail-safe
             log.warning("Error closing DTSU server (best-effort): %r", exc)
 
+    def _mark_down() -> None:
+        if status is not None:
+            status.stopped()
+
     try:
         while not stop_event.is_set():
             t = clock()
@@ -360,6 +370,7 @@ async def supervise_server(
                 # failure over a long-running deployment.
                 await _shutdown_quietly(server)
                 server, serve_task = None, None
+                _mark_down()
             elif (
                 server is not None
                 and serve_task is not None
@@ -373,6 +384,7 @@ async def supervise_server(
                 await _shutdown_quietly(server)
                 await _cancel_and_await(serve_task)
                 server, serve_task = None, None
+                _mark_down()
             action = _server_action(
                 gate.should_serve(age), server is not None, t, last_start, min_restart_interval
             )
@@ -380,6 +392,8 @@ async def supervise_server(
                 server = factory()
                 serve_task = asyncio.create_task(server.serve_forever())
                 last_start = t
+                if status is not None:
+                    status.started(t)
                 log.info(
                     "DTSU server started (transport=%s, data fresh, age=%.2fs)",
                     cfg.transport, age,
@@ -389,6 +403,7 @@ async def supervise_server(
                 if serve_task:
                     await _cancel_and_await(serve_task)
                 server, serve_task = None, None
+                _mark_down()
                 log.warning(
                     "DTSU server stopped (transport=%s, data stale, age=%.2fs) -> fail-safe",
                     cfg.transport, age,
@@ -402,3 +417,4 @@ async def supervise_server(
             await _shutdown_quietly(server)
             if serve_task:
                 await _cancel_and_await(serve_task)
+        _mark_down()

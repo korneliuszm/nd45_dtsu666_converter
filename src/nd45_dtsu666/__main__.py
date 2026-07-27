@@ -11,6 +11,19 @@ from .app import run_app
 from .config import load_config, load_registers
 
 
+def _load_config(args):
+    """Load config.json and apply the metrics command-line overrides."""
+    config = load_config(args.config)
+    # getattr: callers other than main()'s parser (tests, diag) build args
+    # namespaces without these optional flags.
+    if getattr(args, "no_metrics", False):
+        config.prometheus.enabled = False
+    port = getattr(args, "metrics_port", None)
+    if port is not None:
+        config.prometheus.port = port
+    return config
+
+
 def _install_signal_handlers(loop, stop_event) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
@@ -20,7 +33,7 @@ def _install_signal_handlers(loop, stop_event) -> None:
 
 
 def _cmd_run(args) -> int:
-    config = load_config(args.config)
+    config = _load_config(args)
     registers = load_registers(args.registers)
 
     async def _main() -> None:
@@ -36,7 +49,7 @@ def _cmd_run(args) -> int:
 
 
 def _cmd_monitor(args) -> int:
-    config = load_config(args.config)
+    config = _load_config(args)
     registers = load_registers(args.registers)
     from .monitor import run_monitor
 
@@ -53,7 +66,7 @@ def _cmd_monitor(args) -> int:
 
 
 def _cmd_rtudebug(args) -> int:
-    config = load_config(args.config)
+    config = _load_config(args)
     registers = load_registers(args.registers)
     from .rtudebug import run_rtudebug
 
@@ -70,7 +83,7 @@ def _cmd_rtudebug(args) -> int:
 
 
 def _cmd_static(args) -> int:
-    config = load_config(args.config)
+    config = _load_config(args)
     registers = load_registers(args.registers)
     from .static_debug import run_static_debug
 
@@ -90,6 +103,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nd45-dtsu666")
     parser.add_argument("--config", default="config/config.json")
     parser.add_argument("--registers", default="config/registers.json")
+    parser.add_argument(
+        "--metrics-port", type=int, default=None,
+        help="override prometheus.port from config.json",
+    )
+    parser.add_argument(
+        "--no-metrics", action="store_true", help="disable the Prometheus endpoint"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("run", help="run the bridge")
     sub.add_parser("monitor", help="run the bridge with a live commissioning dashboard")

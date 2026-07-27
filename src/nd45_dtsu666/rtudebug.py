@@ -14,6 +14,7 @@ import asyncio
 import logging
 from collections.abc import Iterable
 
+from . import metrics
 from .app import build_pipeline, connect_with_retry
 from .config import (
     AppConfig,
@@ -120,7 +121,8 @@ async def run_rtudebug(
         registers.dtsu_sigen_identity,
     )
     activity = LoggingRtuActivity(index)
-    pipe = build_pipeline(config, registers, stop_event, activity=activity)
+    pipe = build_pipeline(config, registers, stop_event, activity=activity, mode="rtudebug")
+    metrics_task = metrics.start(config, pipe.metrics, stop_event)
 
     dtsu = config.dtsu
     where = dtsu.rtu.port if dtsu.transport == "rtu" and dtsu.rtu else str(dtsu.tcp)
@@ -140,10 +142,12 @@ async def run_rtudebug(
     ):
         for coro in pipe.coros:
             coro.close()
+        await metrics.stop(metrics_task)
         pipe.client.close()
         return
 
     try:
         await asyncio.gather(*pipe.coros)
     finally:
+        await metrics.stop(metrics_task)
         pipe.client.close()
