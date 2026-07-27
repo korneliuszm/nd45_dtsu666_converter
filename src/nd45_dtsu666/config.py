@@ -257,17 +257,52 @@ class StaticDebugConf(BaseModel):
         return validated
 
 
+class PrometheusConf(BaseModel):
+    """Read-only Prometheus scrape endpoint (see metrics.py)."""
+
+    enabled: bool = True
+    host: str = "0.0.0.0"
+    port: int = Field(default=9090, ge=1, le=65535)
+    # Per-register gauges (one series per DTSU output point). Cheap for this
+    # map size, but switchable off if the scrape ever needs to be minimal.
+    include_registers: bool = True
+
+
 class AppConfig(BaseModel):
     nd45: Nd45Conf
     dtsu: DtsuConf
     safety: SafetyConf = SafetyConf()
     static_debug: StaticDebugConf = StaticDebugConf()
+    prometheus: PrometheusConf = PrometheusConf()
 
     @model_validator(mode="after")
     def _check_static_debug_freshness(self) -> "AppConfig":
         if self.static_debug.feed_interval_s >= self.safety.max_data_age_s:
             raise ValueError(
                 "static_debug.feed_interval_s must be shorter than safety.max_data_age_s"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_metrics_port_free(self) -> "AppConfig":
+        """Reject a metrics port that collides with the Modbus TCP output.
+
+        Without this the DTSU TCP listener simply fails to bind and the bridge
+        sits in fail-safe for a reason that is not obvious from the logs.
+        """
+        if not self.prometheus.enabled or self.dtsu.transport != "tcp" or self.dtsu.tcp is None:
+            return self
+        if self.prometheus.port != self.dtsu.tcp.port:
+            return self
+        wildcards = {"0.0.0.0", "::"}
+        overlap = (
+            self.prometheus.host == self.dtsu.tcp.host
+            or self.prometheus.host in wildcards
+            or self.dtsu.tcp.host in wildcards
+        )
+        if overlap:
+            raise ValueError(
+                f"prometheus.port {self.prometheus.port} collides with dtsu.tcp.port"
             )
         return self
 

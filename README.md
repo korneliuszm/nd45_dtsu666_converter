@@ -45,6 +45,73 @@ Edit `config/config.json`: set ND45 `host`, and under `dtsu` pick the output
 `dtsu.slave_id` applies to both transports (RS-485 slave address for RTU, unit id in
 the MBAP header for TCP) and must match what Sigenergy is configured to poll.
 
+The optional `prometheus` section controls the metrics endpoint (see below); omit it
+to accept the defaults.
+
+## Prometheus metrics
+
+Every mode (`run`, `monitor`, `rtudebug`, `static`) serves a read-only metrics
+endpoint, so the bridge can be checked from Grafana instead of over SSH:
+
+```bash
+curl -s http://<device>:9090/metrics
+curl -s http://<device>:9090/healthz    # "ok" while ND45 data is fresh, 503 when stale
+```
+
+Configured in `config/config.json` (all fields optional):
+
+```json
+"prometheus": {"enabled": true, "host": "0.0.0.0", "port": 9090, "include_registers": true}
+```
+
+- `host` — `0.0.0.0` to allow scraping from the LAN, `127.0.0.1` to require an SSH tunnel.
+- `port` — **9090 is also the default port of the Prometheus server itself.** That is
+  harmless when Prometheus runs on another machine; change this if you ever put
+  Prometheus on the reComputer. A port colliding with `dtsu.tcp.port` is rejected at
+  startup. Open it in `ufw` if the firewall is enabled.
+- `include_registers` — set `false` to drop the per-point value gauges and keep only
+  the health metrics.
+
+`--metrics-port N` and `--no-metrics` override the config, e.g. when running `monitor`
+alongside the service during bring-up:
+
+```bash
+python -m nd45_dtsu666 --metrics-port 9091 monitor
+```
+
+All names are prefixed `nd45_dtsu666_`:
+
+| Metric | Meaning |
+|---|---|
+| `build_info{version,mode,transport,dtsu_slave_id}` | `mode="static"` means the served values are synthetic |
+| `nd45_connected` | 1 while the ND45 Modbus TCP link is up |
+| `nd45_data_age_seconds` / `nd45_data_fresh` | data age and whether the fail-safe threshold is met |
+| `nd45_polls_total{result="ok"\|"error"}` | poll attempts by outcome |
+| `nd45_consecutive_poll_failures` | failures since the last good poll |
+| `nd45_last_poll_error_info{type}` | exception type of the last failure (message stays in the journal) |
+| `watchdog_heartbeat_age_seconds` | poller liveness as systemd's watchdog sees it |
+| `dtsu_server_up` | 1 while the output transport is actually serving (0 = fail-safe or port problem) |
+| `dtsu_requests_total`, `dtsu_request_rate_per_second`, `dtsu_last_request_age_seconds` | whether Sigenergy is polling at all |
+| `dtsu_block_reads_total{fc,addr,count}` | which register blocks it asks for |
+| `canonical_value{point}` | latest ND45 value in SI units |
+| `dtsu_register_value{map,point,fc,addr}` | value currently encoded in each DTSU output register |
+| `dtsu_register_read_age_seconds{map,point,fc,addr}` | seconds since Sigenergy last read that register (`+Inf` = never) |
+
+Useful alert expressions:
+
+```promql
+nd45_dtsu666_nd45_data_fresh == 0                      # ND45 stale -> output silenced
+nd45_dtsu666_dtsu_server_up == 0                       # output server down
+rate(nd45_dtsu666_dtsu_requests_total[5m]) == 0        # Sigenergy stopped asking
+increase(nd45_dtsu666_nd45_polls_total{result="error"}[5m]) > 0
+```
+
+The endpoint starts before the ND45 connection is attempted, so it is reachable
+during a startup outage — `nd45_connected 0` with `data_age +Inf` is the expected
+picture then. It is read-only and unauthenticated; keep it on a trusted network.
+
+Design notes: `docs/superpowers/specs/2026-07-27-prometheus-metrics-design.md`.
+
 ## Bench test before connecting Sigenergy
 Run the configured transport with synthetic data and read it with mbpoll.
 
@@ -190,7 +257,14 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
    Fields omitted keep their default. See `DtsuIdentityConf` in `config.py` for the full
    field list and `_IDENTITY_REGISTER_ADDRS` in `dtsu_server.py` for the register mapping
    (background: `docs/superpowers/specs/2026-07-23-dtsu-sigen-ct-ratio-design.md`).
-9. **Sigen OEM registers** — confirm the storage reads FC04 `0x151C` for total active
+9. **Metrics endpoint** — `curl http://<device>:9090/metrics` from the machine that
+   will scrape it (not just from the device itself, so the firewall is covered too).
+   Confirm `nd45_dtsu666_nd45_data_fresh 1`, `nd45_dtsu666_dtsu_server_up 1`, and a
+   rising `nd45_dtsu666_dtsu_requests_total`. Check that
+   `nd45_dtsu666_dtsu_register_read_age_seconds` is small for the registers Sigenergy
+   actually polls — a stuck `+Inf` on a register you expect it to read means the map
+   or the function code is wrong.
+10. **Sigen OEM registers** — confirm the storage reads FC04 `0x151C` for total active
    power (in kW, not W) and periodically reads FC03 `0xF114` for the identity handshake.
    The configured FC04 current and per-phase power positions follow the confirmed
    `-0x0AF6` block offset. The reverse-flow scan also confirms the physical energy image:

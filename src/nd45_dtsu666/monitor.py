@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+from . import metrics
 from .app import build_pipeline, connect_with_retry
 from .codec import registers_to_float
 from .config import AppConfig, RegisterMap
@@ -127,13 +128,15 @@ async def run_monitor(
 ) -> None:
     """Run the live bridge with a commissioning dashboard refreshed every `refresh` s."""
     activity = RtuActivity()
-    pipe = build_pipeline(config, registers, stop_event, activity=activity)
+    pipe = build_pipeline(config, registers, stop_event, activity=activity, mode="monitor")
+    metrics_task = metrics.start(config, pipe.metrics, stop_event)
     if not await connect_with_retry(
         pipe.client, stop_event,
         config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
     ):
         for coro in pipe.coros:
             coro.close()
+        await metrics.stop(metrics_task)
         pipe.client.close()
         return
 
@@ -168,4 +171,5 @@ async def run_monitor(
     try:
         await asyncio.gather(*pipe.coros, _display())
     finally:
+        await metrics.stop(metrics_task)
         pipe.client.close()

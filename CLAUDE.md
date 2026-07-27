@@ -25,6 +25,7 @@ python -m nd45_dtsu666 monitor                     # bridge + live commissioning
 python -m nd45_dtsu666 rtudebug                     # bridge + log every register block Sigenergy reads (debug)
 python -m nd45_dtsu666 diag                        # standalone ND45 poll table (no output serving)
 python -m nd45_dtsu666 selftest                    # serve synthetic DTSU data for mbpoll bench test
+curl -s localhost:9090/metrics                     # Prometheus scrape (served by run/monitor/rtudebug/static)
 ```
 
 CI (`.github/workflows/ci.yml`) runs `ruff check` + `pytest` on Python 3.10/3.11/3.12. There is no separate build step — it's a pure Python package.
@@ -41,11 +42,12 @@ ND45 (TCP slave) --FC03--> nd45_poller --decode--> canonical SI store  --+--> dt
 Sigenergy (RTU or TCP master) --FC03--> DTSU output server (serves instantly from datastore, never waits on ND45 TCP poll)
 ```
 
-- `app.build_pipeline()` wires everything and is shared by both `run` (`run_app`) and `monitor` (`monitor.run_monitor`). It returns a `Pipeline` of store, context, client, and the poller+supervisor coroutines. When editing the wiring, change `build_pipeline`, not the two callers.
+- `app.build_pipeline()` wires everything and is shared by `run` (`run_app`), `monitor` (`monitor.run_monitor`), and `rtudebug`. It returns a `Pipeline` of store, context, client, the poller+supervisor coroutines, and a `MetricsSource`. When editing the wiring, change `build_pipeline`, not the callers.
 - `codec.py` is a **`struct`-based** float32 ↔ register codec. Do **not** use pymodbus `BinaryPayloadBuilder`/`Decoder` (removed in newer pymodbus, and the version is pinned to `>=3.6,<3.7`).
 - `canonical.py` (`CanonicalStore`, `HealthGate`) holds the latest SI values + a timestamp and is the single source of truth. `dtsu_server.update_datastore` mirrors those values into the pymodbus datastore.
 - **Fail-safe** (`dtsu_server.supervise_server`): when ND45 data is older than `safety.max_data_age_s`, the DTSU output server (RTU or TCP, per `dtsu.transport`) is **stopped** (goes silent) so Sigenergy detects a timeout and enters its own safe mode. It restarts automatically when data returns.
 - **Watchdog** (`watchdog.py`): the systemd unit's `WatchdogSec=` (read from the `WATCHDOG_USEC` env var, no duplication in `config.json`) drives a heartbeat tied to real ND45-poller progress (`Heartbeat`, touched by `connect_with_retry` and by `build_pipeline`'s `on_update`/`on_error`) — a genuine poller hang stops the pings and lets systemd restart the service; a normal ND45 outage does not, since the poller is still cycling through its error path. See `docs/superpowers/specs/2026-07-06-systemd-watchdog-design.md`.
+- **Metrics** (`metrics.py`): a read-only Prometheus endpoint on `asyncio.start_server` (no `prometheus_client` -- its `start_http_server` uses a thread, and this process is one loop with no locks). It reads existing state at scrape time (`CanonicalStore`, `RtuActivity`, `Heartbeat`) plus two new holders, `PollStats` (fed by `build_pipeline`'s `on_update`/`on_error`; the poller is untouched) and `ServerStatus` (set by `supervise_server`'s optional `status=`, since server state is otherwise loop-local and cannot be re-derived from the freshness gate). Two things are easy to get wrong: the task is created **before** `connect_with_retry` in every runner -- `pipe.coros` only start after the ND45 connects, and an endpoint that is down during an ND45 outage is useless -- and `build_pipeline` now creates an `RtuActivity` itself when the endpoint is enabled, so `run` gets read stats too. See `docs/superpowers/specs/2026-07-27-prometheus-metrics-design.md`.
 - `monitor.py` shows a two-panel dashboard. Read requests from Sigenergy (over either transport) are captured via `RecordingSlaveContext` (a `ModbusSlaveContext` subclass logging every `getValues` into an `RtuActivity` tracker) — enabled by passing `activity=` to `build_context`.
 
 ## Register maps and translation (the crux)
@@ -60,8 +62,8 @@ Sigenergy (RTU or TCP master) --FC03--> DTSU output server (serves instantly fro
 
 ## Things that only make sense across files
 
-- **Two clocks in `monitor`/`poller` are intentional:** data-age uses the asyncio loop clock (`loop.time()`, what the poller stamps into the store); output-request timing uses `time.monotonic()` (what `RecordingSlaveContext` stamps). Keep each metric on its own clock.
-- **Tests never open a real serial port or TCP socket.** The poller is tested with a fake duck-typed client; the DTSU output server (either transport) is tested at the datastore level (`getValues`/`setValues`) and the supervisor with an injected `server_factory` + fake clock. Real RS-485, real TCP sockets, and live Sigenergy behavior are out of scope for the suite.
+- **Two clocks in `monitor`/`poller`/`metrics` are intentional:** data-age uses the asyncio loop clock (`loop.time()`, what the poller stamps into the store); output-request timing uses `time.monotonic()` (what `RecordingSlaveContext` stamps). Keep each metric on its own clock -- `metrics.render()` takes both clocks as arguments and never calls one itself.
+- **Tests never open a real serial port or TCP socket.** The poller is tested with a fake duck-typed client; the DTSU output server (either transport) is tested at the datastore level (`getValues`/`setValues`) and the supervisor with an injected `server_factory` + fake clock. Real RS-485, real TCP sockets, and live Sigenergy behavior are out of scope for the suite. The metrics endpoint follows this too: its HTTP layer is covered through the pure `parse_request`/`route`/`_response` functions, never a real listener.
 - **On-hardware verification is deliberately deferred to bring-up** (see `README.md` on-site checklist): sign convention (import/export), phase order L1/L2/L3→A/B/C, scaling, word/byte order, RS-485 direction control (RTU transport only), and whether Sigenergy actually enters safe-mode on meter timeout. These cannot be confirmed by the test suite; don't treat them as code bugs.
 
 ## Reference
