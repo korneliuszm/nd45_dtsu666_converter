@@ -11,8 +11,9 @@ from nd45_dtsu666.config import (
     DtsuIdentityConf,
     DtsuRtuConf,
     DtsuTcpConf,
-    HuaweiConf,
+    HuaweiSourceConf,
     Nd45Conf,
+    Nd45SourceConf,
     ReadGroup,
     RegisterMap,
     SafetyConf,
@@ -362,37 +363,6 @@ def test_dtsu_conf_identity_accepts_overrides():
 # --- Huawei SmartLogger source ----------------------------------------------
 
 
-def test_huawei_defaults_to_disabled_so_existing_configs_are_unchanged():
-    config = load_config("config/config.json")
-    assert config.huawei.enabled is False
-    # a config file with no "huawei" key at all must still validate
-    bare = AppConfig.model_validate(
-        {"nd45": {"host": "1.2.3.4"}, "dtsu": {"rtu": {"port": "/dev/null"}}}
-    )
-    assert bare.huawei.enabled is False
-    assert bare.huawei.plant_unit_id == 0
-    assert bare.huawei.meter_unit_id is None
-
-
-def test_huawei_conf_defaults_match_the_devices_own_timing():
-    conf = HuaweiConf()
-    assert conf.poll_interval_s == 5.0
-    assert conf.timeout_s == 6.0  # the manual allows a 5s Modbus timeout
-    # deliberately much looser than safety.max_data_age_s (3.0): a concentrator
-    # aggregating over RS485 cannot keep up with a directly wired analyser
-    assert conf.max_data_age_s == 60.0
-
-
-def test_huawei_enabled_requires_a_host():
-    with pytest.raises(ValidationError, match="huawei.host is required"):
-        HuaweiConf(enabled=True)
-
-
-def test_huawei_enabled_requires_at_least_one_unit_id():
-    with pytest.raises(ValidationError, match="at least one of plant_unit_id"):
-        HuaweiConf(enabled=True, host="10.0.0.5", plant_unit_id=None, meter_unit_id=None)
-
-
 def test_shipped_registers_load_both_huawei_sources():
     registers = load_registers("config/registers.json")
     plant = registers.huawei_plant_source
@@ -400,17 +370,17 @@ def test_shipped_registers_load_both_huawei_sources():
 
     # plant: SmartLogger's own aggregated registers, one block on logic device 0
     assert [(g.base, g.count) for g in plant.read_groups] == [(40521, 57)]
-    assert plant.points["pv_p_total"].addr == 40525
-    assert plant.points["pv_p_total"].dtype == "i32"
-    assert plant.points["pv_p_total"].scale == 1.0  # gain 1000 kW -> SI watts
-    assert plant.points["pv_pf_total"].dtype == "i16"
-    assert plant.points["pv_pf_total"].scale == pytest.approx(0.001)
-    assert plant.points["pv_u_l12"].scale == pytest.approx(0.1)
+    assert plant.points["p_total"].addr == 40525
+    assert plant.points["p_total"].dtype == "i32"
+    assert plant.points["p_total"].scale == 1.0  # gain 1000 kW -> SI watts
+    assert plant.points["pf_total"].dtype == "i16"
+    assert plant.points["pf_total"].scale == pytest.approx(0.001)
+    assert plant.points["u_l12"].scale == pytest.approx(0.1)
 
     # meter: table 2-5, two blocks, addressed by the meter's RS485 address
     assert [(g.base, g.count) for g in meter.read_groups] == [(32260, 30), (32335, 30)]
-    assert meter.points["mtr_imp_energy_total"].dtype == "i64"
-    assert meter.points["mtr_imp_energy_total"].scale == pytest.approx(0.01)
+    assert meter.points["imp_energy_total"].dtype == "i64"
+    assert meter.points["imp_energy_total"].scale == pytest.approx(0.01)
 
 
 def test_register_map_huawei_sections_are_optional():
@@ -507,3 +477,162 @@ def test_derive_op_accepts_the_shipped_plant_and_meter_rules():
     assert "constant" in plant_ops and "constant" in meter_ops
     assert "phase_from_line" in plant_ops  # plant publishes line voltages only
     assert "ratio_split" in meter_ops  # meter has per-phase P but not per-phase Q
+
+
+# --- multi-bridge configuration ---------------------------------------------
+
+
+def _with_bridges(*bridges) -> dict:
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    raw["bridges"] = list(bridges)
+    return raw
+
+
+SECOND_BRIDGE = {
+    "name": "smartlogger",
+    "source": {"type": "huawei", "host": "10.0.0.5"},
+    "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA3"}},
+    "safety": {"max_data_age_s": 30.0},
+}
+
+
+def test_legacy_keys_become_the_first_bridge():
+    """Config files written before multi-bridge support must load untouched."""
+    config = load_config("config/config.json")
+    specs = config.bridge_specs
+    assert specs[0].name == "nd45"
+    assert specs[0].source.type == "nd45"
+    assert specs[0].source.host == config.nd45.host
+    assert specs[0].source.poll_interval_s == config.nd45.poll_interval_s
+    assert specs[0].dtsu is config.dtsu
+    assert specs[0].safety is config.safety
+
+
+def test_a_config_with_no_bridges_key_at_all_still_loads():
+    bare = AppConfig.model_validate(
+        {"nd45": {"host": "1.2.3.4"}, "dtsu": {"rtu": {"port": "/dev/null"}}}
+    )
+    assert bare.bridges == []
+    assert len(bare.bridge_specs) == 1
+
+
+def test_disabled_bridges_are_left_out_of_bridge_specs():
+    """The shipped smartlogger entry is a disabled template."""
+    config = load_config("config/config.json")
+    assert [b.name for b in config.bridges] == ["smartlogger"]
+    assert config.bridges[0].enabled is False
+    assert [b.name for b in config.bridge_specs] == ["nd45"]
+
+
+def test_an_enabled_bridge_appears_in_bridge_specs():
+    config = AppConfig.model_validate(_with_bridges(SECOND_BRIDGE))
+    assert [b.name for b in config.bridge_specs] == ["nd45", "smartlogger"]
+
+
+def test_a_disabled_bridge_may_ship_with_an_empty_host():
+    """So the entry can be pre-wired and turned on once the address is known."""
+    template = {**SECOND_BRIDGE, "enabled": False,
+                "source": {"type": "huawei", "host": ""}}
+    config = AppConfig.model_validate(_with_bridges(template))
+    assert len(config.bridge_specs) == 1
+
+
+def test_an_enabled_bridge_with_an_empty_host_is_rejected():
+    enabled = {**SECOND_BRIDGE, "source": {"type": "huawei", "host": "   "}}
+    with pytest.raises(ValidationError, match="enabled but source.host is empty"):
+        AppConfig.model_validate(_with_bridges(enabled))
+
+
+def test_two_bridges_may_not_share_a_serial_port():
+    """The most dangerous misconfiguration -- pymodbus hides the bind failure."""
+    clash = {**SECOND_BRIDGE,
+             "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA2"}}}
+    with pytest.raises(ValidationError, match="both serve RTU on /dev/ttyAMA2"):
+        AppConfig.model_validate(_with_bridges(clash))
+
+
+def test_two_bridges_may_not_share_a_tcp_bind():
+    raw = _with_bridges(
+        {**SECOND_BRIDGE,
+         "dtsu": {"transport": "tcp", "slave_id": 11,
+                  "tcp": {"host": "0.0.0.0", "port": 5020}}},
+        {**SECOND_BRIDGE, "name": "third",
+         "dtsu": {"transport": "tcp", "slave_id": 12,
+                  "tcp": {"host": "0.0.0.0", "port": 5020}}},
+    )
+    with pytest.raises(ValidationError, match="both listen on 0.0.0.0:5020"):
+        AppConfig.model_validate(raw)
+
+
+def test_two_bridges_may_share_a_slave_id_on_separate_buses():
+    """Electrically independent RS-485 buses, so slave 10 twice is fine."""
+    config = AppConfig.model_validate(_with_bridges(SECOND_BRIDGE))
+    ids = [b.dtsu.slave_id for b in config.bridge_specs]
+    assert ids == [10, 10]
+
+
+def test_bridge_names_must_be_unique():
+    raw = _with_bridges(SECOND_BRIDGE, {**SECOND_BRIDGE, "dtsu": {
+        "transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA4"}}})
+    with pytest.raises(ValidationError, match="duplicate bridge name"):
+        AppConfig.model_validate(raw)
+
+
+def test_the_primary_bridge_name_is_reserved():
+    raw = _with_bridges({**SECOND_BRIDGE, "name": "nd45"})
+    with pytest.raises(ValidationError, match="reserved"):
+        AppConfig.model_validate(raw)
+
+
+def test_a_metrics_port_colliding_with_any_bridge_is_rejected():
+    raw = _with_bridges(
+        {**SECOND_BRIDGE,
+         "dtsu": {"transport": "tcp", "slave_id": 11,
+                  "tcp": {"host": "0.0.0.0", "port": 9090}}}
+    )
+    with pytest.raises(ValidationError, match="collides with bridge 'smartlogger'"):
+        AppConfig.model_validate(raw)
+
+
+def test_a_freshness_threshold_below_two_poll_intervals_is_rejected():
+    """Otherwise the bridge sits in permanent fail-safe and looks like a dead source.
+
+    The trap this catches: reusing the ND45's 3.0s on a source polled every 5s.
+    """
+    raw = _with_bridges({**SECOND_BRIDGE, "safety": {"max_data_age_s": 3.0}})
+    with pytest.raises(ValidationError, match="at least twice"):
+        AppConfig.model_validate(raw)
+
+
+def test_the_shipped_thresholds_leave_room_for_a_poll_cycle():
+    config = AppConfig.model_validate(_with_bridges(SECOND_BRIDGE))
+    for spec in config.bridge_specs:
+        assert spec.safety.max_data_age_s >= spec.source.poll_interval_s * 2
+
+
+def test_a_stall_timeout_at_the_poll_interval_is_rejected():
+    """It would fire mid-cycle and rebuild the client of a healthy source forever."""
+    with pytest.raises(ValidationError, match="must exceed twice"):
+        HuaweiSourceConf(
+            host="10.0.0.5", type="huawei", poll_interval_s=5.0, stall_timeout_s=8.0
+        )
+
+
+def test_source_defaults_reflect_each_device_s_own_timing():
+    nd45 = Nd45SourceConf(host="1.2.3.4")
+    huawei = HuaweiSourceConf(host="1.2.3.4", type="huawei")
+    assert (nd45.poll_interval_s, nd45.timeout_s) == (0.3, 1.0)
+    # the SmartLogger manual allows a 5s Modbus timeout (section 4.2.4)
+    assert (huawei.poll_interval_s, huawei.timeout_s) == (5.0, 6.0)
+    assert nd45.register_map == "nd45_source"
+    assert huawei.register_map == "huawei_plant_source"
+    assert huawei.unit_id == 0  # the SmartLogger's own aggregated registers
+
+
+def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():
+    config = load_config("config/config.json")
+    bridge = config.bridges[0]
+    assert bridge.dtsu.rtu.port == "/dev/ttyAMA3"
+    assert bridge.dtsu.rtu.port != config.dtsu.rtu.port
+    assert bridge.source.register_map == "huawei_plant_source"
+    assert bridge.safety.max_data_age_s == 30.0

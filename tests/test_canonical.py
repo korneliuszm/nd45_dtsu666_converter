@@ -5,7 +5,6 @@ import pytest
 from nd45_dtsu666.canonical import (
     CanonicalStore,
     HealthGate,
-    MergedStore,
     apply_derive,
     compute_derived,
 )
@@ -48,80 +47,6 @@ def test_health_gate():
     assert gate.should_serve(age=1.0) is True
     assert gate.should_serve(age=3.0) is True
     assert gate.should_serve(age=3.1) is False
-
-
-# --- MergedStore -------------------------------------------------------------
-
-
-def _stamped(values, ts):
-    store = CanonicalStore()
-    store.update(values, ts)
-    return store
-
-
-def test_merged_store_snapshot_is_the_union():
-    primary = _stamped({"p_total": -60000.0}, 100.0)
-    secondary = _stamped({"pv_p_total": 1234500.0}, 100.0)
-    merged = MergedStore(primary, {"huawei": secondary})
-
-    values, ts = merged.snapshot()
-    assert values == {"p_total": -60000.0, "pv_p_total": 1234500.0}
-    assert ts == 100.0  # the timestamp is the primary's
-
-
-def test_merged_store_primary_wins_a_name_collision():
-    """A stray secondary point name must never displace a grid-tie measurement."""
-    primary = _stamped({"p_total": -60000.0}, 100.0)
-    secondary = _stamped({"p_total": 999.0}, 100.0)
-    merged = MergedStore(primary, {"huawei": secondary})
-
-    assert merged.snapshot()[0]["p_total"] == -60000.0
-
-
-def test_merged_store_freshness_follows_the_primary_only():
-    """The safety property: a stale secondary cannot silence a healthy bridge.
-
-    The DTSU output is gated on this store's age, so a SmartLogger that has been
-    dark for an hour must leave a 0.5s-old ND45 sample looking perfectly fresh.
-    """
-    primary = _stamped({"p_total": 1.0}, 999.5)
-    secondary = _stamped({"pv_p_total": 2.0}, 0.0)  # ~1000s stale
-    merged = MergedStore(primary, {"huawei": secondary})
-
-    assert merged.age(now=1000.0) == pytest.approx(0.5)
-    assert merged.is_fresh(now=1000.0, max_age=3.0) is True
-    # ...while the secondary's own age is still reportable for metrics
-    assert merged.source_age("huawei", now=1000.0) == pytest.approx(1000.0)
-
-
-def test_merged_store_goes_stale_when_the_primary_does_despite_a_fresh_secondary():
-    """The converse: a live SmartLogger must not mask a dead ND45."""
-    primary = _stamped({"p_total": 1.0}, 0.0)
-    secondary = _stamped({"pv_p_total": 2.0}, 999.9)
-    merged = MergedStore(primary, {"huawei": secondary})
-
-    assert merged.age(now=1000.0) == pytest.approx(1000.0)
-    assert merged.is_fresh(now=1000.0, max_age=3.0) is False
-
-
-def test_merged_store_with_no_secondary_behaves_like_the_primary():
-    primary = _stamped({"p_total": 1.0}, 100.0)
-    merged = MergedStore(primary)
-    assert merged.snapshot() == primary.snapshot()
-    assert merged.age(now=101.0) == pytest.approx(1.0)
-
-
-def test_merged_store_reports_infinite_age_for_an_unknown_source():
-    merged = MergedStore(_stamped({}, 100.0))
-    assert merged.source_age("nope", now=100.0) == math.inf
-
-
-def test_merged_store_is_infinitely_old_before_the_first_primary_poll():
-    """A fresh secondary must not make a never-polled primary look alive."""
-    merged = MergedStore(CanonicalStore(), {"huawei": _stamped({"pv_p_total": 1.0}, 100.0)})
-    assert merged.age(now=100.0) == math.inf
-    assert merged.is_fresh(now=100.0, max_age=3.0) is False
-    assert merged.snapshot()[0] == {"pv_p_total": 1.0}
 
 
 # --- compute_derived ---------------------------------------------------------

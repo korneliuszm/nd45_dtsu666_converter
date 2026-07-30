@@ -9,8 +9,10 @@ from nd45_dtsu666.canonical import CanonicalStore, HealthGate
 from nd45_dtsu666.config import AppConfig, load_config, load_registers
 from nd45_dtsu666.dtsu_server import RtuActivity, supervise_server
 from nd45_dtsu666.metrics import (
+    BridgeMetrics,
     MetricsSource,
     PollStats,
+    RecoveryStats,
     ServerStatus,
     parse_request,
     render,
@@ -21,28 +23,48 @@ from nd45_dtsu666.watchdog import Heartbeat
 P = metrics.PREFIX
 
 
+def _bridge(config=None, spec=None, **overrides) -> BridgeMetrics:
+    """A BridgeMetrics for the first configured bridge, with keyword overrides."""
+    config = config or load_config("config/config.json")
+    spec = spec or config.bridge_specs[0]
+    kwargs = dict(
+        name=spec.name,
+        spec=spec,
+        store=CanonicalStore(),
+        poll_stats=PollStats(),
+        server_status=ServerStatus(),
+        recovery=RecoveryStats(),
+        activity=RtuActivity(),
+        heartbeat=Heartbeat(),
+        client_ref=None,
+    )
+    kwargs.update(overrides)
+    return BridgeMetrics(**kwargs)
+
+
 def _source(**overrides) -> MetricsSource:
     config = overrides.pop("config", None) or load_config("config/config.json")
     registers = load_registers("config/registers.json")
-    named_targets = [
-        ("dtsu_target", registers.dtsu_target),
-        ("dtsu_sigen_ext_target", registers.dtsu_sigen_ext_target),
-        ("dtsu_sigen_ext_energy", registers.dtsu_sigen_ext_energy),
-    ]
+    bridges = overrides.pop("bridges", None)
+    if bridges is None:
+        bridges = [_bridge(config=config)]
     kwargs = dict(
         config=config,
-        store=CanonicalStore(),
-        activity=RtuActivity(),
-        poll_stats=PollStats(),
-        server_status=ServerStatus(),
-        targets=named_targets,
-        heartbeat=Heartbeat(),
-        client=None,
+        bridges=bridges,
+        targets=registers.targets,
+        loop_heartbeat=Heartbeat(),
         mode="run",
         started_at=0.0,
     )
     kwargs.update(overrides)
     return MetricsSource(**kwargs)
+
+
+class _ClientRef:
+    """Stands in for a BridgeRuntime: BridgeMetrics reads `.client` off it."""
+
+    def __init__(self, client):
+        self.client = client
 
 
 def _samples(text: str, name: str) -> list[tuple[str, str]]:
@@ -104,7 +126,7 @@ def test_empty_store_reports_infinite_age_and_not_fresh():
 
 def test_fresh_store_reports_age_and_freshness():
     source = _source()
-    source.store.update({"p_total": -60000.0}, ts=98.0)
+    source.primary.store.update({"p_total": -60000.0}, ts=98.0)
     text = render(source, loop_now=100.0, mono_now=100.0)
     assert _value(text, f"{P}_nd45_data_age_seconds") == "2"
     assert _value(text, f"{P}_nd45_data_fresh") == "1"  # max_data_age_s = 3.0
@@ -115,36 +137,37 @@ def test_fresh_store_reports_age_and_freshness():
 def test_data_age_and_request_age_use_separate_clocks():
     """Data age is on the loop clock, request age on time.monotonic()."""
     source = _source()
-    source.store.update({"p_total": 1.0}, ts=1000.0)  # loop clock
-    source.activity.record(3, 0x2000, 2, ts=5.0)  # monotonic clock
+    source.primary.store.update({"p_total": 1.0}, ts=1000.0)  # loop clock
+    source.primary.activity.record(3, 0x2000, 2, ts=5.0)  # monotonic clock
     text = render(source, loop_now=1001.0, mono_now=7.0)
     assert _value(text, f"{P}_nd45_data_age_seconds") == "1"
     assert _value(text, f"{P}_dtsu_last_request_age_seconds") == "2"
 
 
 def test_nd45_connected_omitted_without_a_client_and_reported_with_one():
-    text = render(_source(client=None), loop_now=1.0, mono_now=1.0)
+    text = render(_source(), loop_now=1.0, mono_now=1.0)
     assert f"{P}_nd45_connected" not in text
 
     class _Client:
         connected = True
 
-    text = render(_source(client=_Client()), loop_now=1.0, mono_now=1.0)
+    source = _source(bridges=[_bridge(client_ref=_ClientRef(_Client()))])
+    text = render(source, loop_now=1.0, mono_now=1.0)
     assert _value(text, f"{P}_nd45_connected") == "1"
 
 
-def test_build_info_carries_version_mode_and_transport():
+def test_build_info_carries_version_mode_and_bridge_count():
     text = render(_source(mode="static"), loop_now=1.0, mono_now=1.0)
     line = next(ln for ln in text.splitlines() if ln.startswith(f"{P}_build_info"))
     assert 'mode="static"' in line
-    assert 'transport="rtu"' in line
-    assert 'dtsu_slave_id="10"' in line
+    assert 'bridges="1"' in line
     assert line.endswith(" 1")
 
 
 def test_heartbeat_age_exported():
+    """The alias family now reports event-loop liveness, not poller progress."""
     source = _source()
-    source.heartbeat.touch(50.0)
+    source.loop_heartbeat.touch(50.0)
     text = render(source, loop_now=1.0, mono_now=52.5)
     assert _value(text, f"{P}_watchdog_heartbeat_age_seconds") == "2.5"
 
@@ -168,7 +191,8 @@ def test_poll_stats_rendered_with_error_type_but_no_message():
     stats = PollStats()
     stats.record_ok(10.0)
     stats.record_error(ValueError("secret 192.168.1.10 detail"), 12.0)
-    text = render(_source(poll_stats=stats), loop_now=1.0, mono_now=14.0)
+    source = _source(bridges=[_bridge(poll_stats=stats)])
+    text = render(source, loop_now=1.0, mono_now=14.0)
     assert _value(text, f"{P}_nd45_polls_total", '{result="ok"}') == "1"
     assert _value(text, f"{P}_nd45_polls_total", '{result="error"}') == "1"
     assert _value(text, f"{P}_nd45_consecutive_poll_failures") == "1"
@@ -215,7 +239,7 @@ async def test_build_pipeline_counts_polls_through_the_existing_callbacks(monkey
     supervisor.close()
     await asyncio.wait_for(poller, timeout=5)
 
-    stats = pipe.metrics.poll_stats
+    stats = pipe.metrics.primary.poll_stats
     assert stats.polls_ok >= 1
     assert stats.polls_failed >= 1
     assert stats.last_error_type == "OSError"
@@ -226,9 +250,9 @@ async def test_build_pipeline_counts_polls_through_the_existing_callbacks(monkey
 
 def test_request_counters_and_blocks_rendered():
     source = _source()
-    source.activity.record(3, 8192, 10, ts=1.0)
-    source.activity.record(3, 8192, 10, ts=1.5)
-    source.activity.record(4, 6144, 2, ts=2.0)
+    source.primary.activity.record(3, 8192, 10, ts=1.0)
+    source.primary.activity.record(3, 8192, 10, ts=1.5)
+    source.primary.activity.record(4, 6144, 2, ts=2.0)
     text = render(source, loop_now=1.0, mono_now=3.0)
     assert _value(text, f"{P}_dtsu_requests_total") == "3"
     assert _value(text, f"{P}_dtsu_last_request_age_seconds") == "1"
@@ -287,7 +311,7 @@ async def test_server_status_follows_the_supervisor():
 
 def test_canonical_values_exported_by_point():
     source = _source()
-    source.store.update({"p_total": -60000.0, "freq": 50.0}, ts=1.0)
+    source.primary.store.update({"p_total": -60000.0, "freq": 50.0}, ts=1.0)
     text = render(source, loop_now=1.0, mono_now=1.0)
     assert _value(text, f"{P}_canonical_value", '{point="p_total"}') == "-60000"
     assert _value(text, f"{P}_canonical_value", '{point="freq"}') == "50"
@@ -298,7 +322,7 @@ def test_dtsu_register_value_matches_the_encoded_register():
     source = _source()
     registers = load_registers("config/registers.json")
     point = registers.dtsu_sigen_ext_target.points["u_l1"]
-    source.store.update({"u_l1": 240.0}, ts=1.0)
+    source.primary.store.update({"u_l1": 240.0}, ts=1.0)
     text = render(source, loop_now=1.0, mono_now=1.0)
     labels = (
         f'{{map="dtsu_sigen_ext_target",point="u_l1",'
@@ -319,7 +343,7 @@ def test_register_read_age_is_infinite_until_read_then_finite():
     text = render(source, loop_now=1.0, mono_now=10.0)
     assert _value(text, f"{P}_dtsu_register_read_age_seconds", labels) == "+Inf"
 
-    source.activity.record(side.function_code, point.addr, 2, ts=8.0)
+    source.primary.activity.record(side.function_code, point.addr, 2, ts=8.0)
     text = render(source, loop_now=1.0, mono_now=10.0)
     assert _value(text, f"{P}_dtsu_register_read_age_seconds", labels) == "2"
 
@@ -328,7 +352,7 @@ def test_include_registers_false_drops_the_value_gauges():
     config = load_config("config/config.json")
     config.prometheus.include_registers = False
     source = _source(config=config)
-    source.store.update({"p_total": 1.0}, ts=1.0)
+    source.primary.store.update({"p_total": 1.0}, ts=1.0)
     text = render(source, loop_now=1.0, mono_now=1.0)
     assert f"{P}_canonical_value" not in text
     assert f"{P}_dtsu_register_value" not in text
@@ -338,7 +362,7 @@ def test_include_registers_false_drops_the_value_gauges():
 def test_unencodable_value_skips_only_that_register():
     """An out-of-float32-range SI value must not break the whole scrape."""
     source = _source()
-    source.store.update({"p_total": 1e300, "freq": 50.0}, ts=1.0)
+    source.primary.store.update({"p_total": 1e300, "freq": 50.0}, ts=1.0)
     text = render(source, loop_now=1.0, mono_now=1.0)
     assert _value(text, f"{P}_canonical_value", '{point="freq"}') == "50"
     assert not [lbl for lbl, _ in _samples(text, f"{P}_dtsu_register_value")
@@ -374,7 +398,7 @@ def test_route_metrics_returns_exposition():
 def test_route_healthz_reflects_freshness():
     source = _source()
     assert route("/healthz", source, 1.0, 1.0)[0] == 503
-    source.store.update({}, ts=1.0)
+    source.primary.store.update({}, ts=1.0)
     status, _, body = route("/healthz", source, 1.0, 1.0)
     assert status == 200
     assert body.startswith("ok")
@@ -485,112 +509,201 @@ def test_shipped_config_files_load():
         load_config(path)
 
 
-# --- secondary source (Huawei SmartLogger) ----------------------------------
+# --- multiple independent bridges ------------------------------------------
 
 
-def _huawei_source(**overrides):
-    """A MetricsSource with the SmartLogger source active."""
-    config = load_config("config/config.json")
-    config = config.model_copy(
-        update={
-            "huawei": config.huawei.model_copy(
-                update={"enabled": True, "host": "10.0.0.5"}
-            )
-        }
-    )
-    store = CanonicalStore()
-    kwargs = dict(
-        config=config,
-        huawei_store=store,
-        huawei_poll_stats=PollStats(),
-        huawei_client=None,
-    )
-    kwargs.update(overrides)
-    return _source(**kwargs)
+SMARTLOGGER_BRIDGE = {
+    "name": "smartlogger",
+    "enabled": True,
+    "source": {
+        "type": "huawei", "host": "10.0.0.5", "register_map": "huawei_plant_source",
+    },
+    "dtsu": {
+        "transport": "rtu", "slave_id": 10,
+        "rtu": {"port": "/dev/ttyAMA3"},
+    },
+    "safety": {"max_data_age_s": 30.0},
+}
 
 
-def test_no_secondary_families_when_huawei_is_disabled():
-    """A single-source scrape must stay byte-identical to before this source existed."""
+def _two_bridge_config() -> AppConfig:
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    raw["bridges"] = [SMARTLOGGER_BRIDGE]
+    return AppConfig.model_validate(raw)
+
+
+def _two_bridge_source(**overrides) -> MetricsSource:
+    config = _two_bridge_config()
+    bridges = [_bridge(config=config, spec=spec) for spec in config.bridge_specs]
+    return _source(config=config, bridges=bridges, **overrides)
+
+
+def test_single_bridge_emits_no_second_bridge_series():
+    """A one-bridge scrape must stay as it was before multi-bridge support."""
     text = render(_source(), loop_now=10.0, mono_now=10.0)
-    assert f"{P}_source_data_age_seconds" not in text
-    assert f"{P}_source_polls_total" not in text
-    assert f"{P}_source_connected" not in text
+    assert _samples(text, f"{P}_bridge_data_age_seconds") == [('{bridge="nd45"}', "+Inf")]
+    assert 'bridge="smartlogger"' not in text
 
 
-def test_secondary_families_are_labelled_by_source():
-    source = _huawei_source()
-    source.huawei_store.update({"pv_p_total": 1234500.0}, ts=9.5)
-    source.huawei_poll_stats.record_ok(10.0)
+def test_each_bridge_gets_its_own_labelled_series():
+    source = _two_bridge_source()
+    nd45, smart = source.bridges
+    nd45.store.update({"p_total": -60000.0}, ts=9.5)
+    smart.store.update({"p_total": 1234500.0}, ts=8.0)
 
     text = render(source, loop_now=10.0, mono_now=10.0)
 
-    assert _samples(text, f"{P}_source_data_age_seconds") == [('{source="huawei"}', "0.5")]
-    assert _samples(text, f"{P}_source_polls_total") == [
-        ('{source="huawei",result="ok"}', "1"),
-        ('{source="huawei",result="error"}', "0"),
+    assert _samples(text, f"{P}_bridge_data_age_seconds") == [
+        ('{bridge="nd45"}', "0.5"),
+        ('{bridge="smartlogger"}', "2"),
     ]
 
 
-def test_secondary_freshness_uses_its_own_threshold_not_the_safety_gate():
-    """20s stale is fine for a SmartLogger (60s) but far past safety.max_data_age_s (3s)."""
-    source = _huawei_source()
-    source.huawei_store.update({"pv_p_total": 1.0}, ts=0.0)
+def test_each_bridge_is_judged_against_its_own_freshness_threshold():
+    """20s stale is fine for a 5s-polled SmartLogger (30s) but not for the ND45 (3s)."""
+    source = _two_bridge_source()
+    nd45, smart = source.bridges
+    nd45.store.update({"p_total": 1.0}, ts=0.0)
+    smart.store.update({"p_total": 1.0}, ts=0.0)
 
     text = render(source, loop_now=20.0, mono_now=20.0)
 
-    assert _samples(text, f"{P}_source_data_fresh") == [('{source="huawei"}', "1")]
-    assert _samples(text, f"{P}_source_max_data_age_seconds") == [
-        ('{source="huawei"}', "60")
+    assert _samples(text, f"{P}_bridge_data_fresh") == [
+        ('{bridge="nd45"}', "0"),
+        ('{bridge="smartlogger"}', "1"),
     ]
-    # the primary gate is untouched and still reports the ND45's own threshold
+    assert _samples(text, f"{P}_bridge_max_data_age_seconds") == [
+        ('{bridge="nd45"}', "3"),
+        ('{bridge="smartlogger"}', "30"),
+    ]
+
+
+def test_bridge_info_names_the_source_and_the_output_it_serves():
+    text = render(_two_bridge_source(), loop_now=1.0, mono_now=1.0)
+    labels = [labels for labels, _v in _samples(text, f"{P}_bridge_info")]
+    assert 'bridge="nd45"' in labels[0]
+    assert 'source_type="nd45"' in labels[0]
+    assert 'output="/dev/ttyAMA2"' in labels[0]
+    assert 'bridge="smartlogger"' in labels[1]
+    assert 'source_type="huawei"' in labels[1]
+    assert 'register_map="huawei_plant_source"' in labels[1]
+    assert 'output="/dev/ttyAMA3"' in labels[1]
+
+
+def test_output_server_state_is_reported_per_bridge():
+    """The whole point of two bridges: one can be silenced while the other serves."""
+    source = _two_bridge_source()
+    nd45, smart = source.bridges
+    nd45.server_status.started(5.0)
+
+    text = render(source, loop_now=10.0, mono_now=10.0)
+
+    assert _samples(text, f"{P}_bridge_dtsu_server_up") == [
+        ('{bridge="nd45"}', "1"),
+        ('{bridge="smartlogger"}', "0"),
+    ]
+
+
+def test_poller_restarts_counter_is_per_bridge():
+    source = _two_bridge_source()
+    source.bridges[1].recovery.record(7.0)
+    source.bridges[1].recovery.record(9.0)
+
+    text = render(source, loop_now=10.0, mono_now=10.0)
+
+    assert _samples(text, f"{P}_bridge_poller_restarts_total") == [
+        ('{bridge="nd45"}', "0"),
+        ('{bridge="smartlogger"}', "2"),
+    ]
+    assert _samples(text, f"{P}_bridge_last_poller_restart_age_seconds") == [
+        ('{bridge="nd45"}', "+Inf"),
+        ('{bridge="smartlogger"}', "1"),
+    ]
+
+
+def test_canonical_values_are_labelled_by_bridge():
+    """Both bridges use plain canonical names, so the label is what separates them."""
+    source = _two_bridge_source()
+    source.bridges[0].store.update({"p_total": -60000.0}, ts=9.0)
+    source.bridges[1].store.update({"p_total": 1234500.0}, ts=9.0)
+
+    text = render(source, loop_now=10.0, mono_now=10.0)
+
+    assert _samples(text, f"{P}_bridge_canonical_value") == [
+        ('{bridge="nd45",point="p_total"}', "-60000"),
+        ('{bridge="smartlogger",point="p_total"}', "1234500"),
+    ]
+
+
+def test_primary_aliases_keep_the_original_unlabelled_families():
+    """Existing dashboards scrape these; adding a bridge must not break them."""
+    source = _two_bridge_source()
+    source.bridges[0].store.update({"p_total": -60000.0}, ts=9.5)
+
+    text = render(source, loop_now=10.0, mono_now=10.0)
+
+    assert _samples(text, f"{P}_nd45_data_age_seconds") == [("", "0.5")]
+    assert _samples(text, f"{P}_nd45_data_fresh") == [("", "1")]
+    assert _samples(text, f"{P}_dtsu_server_up") == [("", "0")]
+    assert _samples(text, f"{P}_canonical_value") == [('{point="p_total"}', "-60000")]
+    # ...and they describe the FIRST bridge only, never a mix
     assert _samples(text, f"{P}_nd45_max_data_age_seconds") == [("", "3")]
 
 
-def test_secondary_data_fresh_goes_zero_past_its_own_threshold():
-    source = _huawei_source()
-    source.huawei_store.update({"pv_p_total": 1.0}, ts=0.0)
-    text = render(source, loop_now=61.0, mono_now=61.0)
-    assert _samples(text, f"{P}_source_data_fresh") == [('{source="huawei"}', "0")]
+def test_healthz_is_ok_only_when_every_bridge_is_fresh():
+    source = _two_bridge_source()
+    nd45, smart = source.bridges
+    nd45.store.update({"p_total": 1.0}, ts=9.9)
+    smart.store.update({"p_total": 1.0}, ts=9.9)
+
+    status, _ct, body = route("/healthz", source, loop_now=10.0, mono_now=10.0)
+    assert status == 200
+    assert "nd45=" in body and "smartlogger=" in body
+
+    # one stale bridge is enough to fail the check, and it is named
+    status, _ct, body = route("/healthz", source, loop_now=45.0, mono_now=45.0)
+    assert status == 503
+    assert "stale: nd45, smartlogger" in body
+
+    # ...and a bridge within its own looser threshold is not blamed
+    nd45.store.update({"p_total": 1.0}, ts=44.9)
+    status, _ct, body = route("/healthz", source, loop_now=45.0, mono_now=45.0)
+    assert status == 503
+    assert "stale: smartlogger" in body
 
 
-def test_secondary_age_is_infinite_before_the_first_poll():
-    text = render(_huawei_source(), loop_now=10.0, mono_now=10.0)
-    assert _samples(text, f"{P}_source_data_age_seconds") == [('{source="huawei"}', "+Inf")]
-
-
-def test_secondary_connected_gauge_only_when_the_client_exposes_it():
-    class _Connected:
-        connected = True
-
-    text = render(_huawei_source(huawei_client=_Connected()), loop_now=1.0, mono_now=1.0)
-    assert _samples(text, f"{P}_source_connected") == [('{source="huawei"}', "1")]
-    # a client without the attribute (a test fake) simply omits the gauge
-    text = render(_huawei_source(huawei_client=object()), loop_now=1.0, mono_now=1.0)
-    assert f"{P}_source_connected" not in text
-
-
-def test_secondary_last_error_type_is_reported():
-    source = _huawei_source()
-    source.huawei_poll_stats.record_error(TimeoutError("no reply"), 5.0)
+def test_event_loop_heartbeat_is_exported():
+    """The watchdog now tracks loop liveness, not poller progress."""
+    source = _source()
+    source.loop_heartbeat.touch(9.0)
     text = render(source, loop_now=10.0, mono_now=10.0)
-    assert _samples(text, f"{P}_source_last_poll_error_info") == [
-        ('{source="huawei",type="TimeoutError"}', "1")
-    ]
-    assert _samples(text, f"{P}_source_consecutive_poll_failures") == [
-        ('{source="huawei"}', "1")
-    ]
+    assert _samples(text, f"{P}_event_loop_heartbeat_age_seconds") == [("", "1")]
 
 
-def test_every_secondary_family_declares_a_type():
-    source = _huawei_source(huawei_client=None)
-    source.huawei_poll_stats.record_error(RuntimeError("x"), 1.0)
+def test_bridge_heartbeat_and_stall_timeout_are_exported():
+    source = _two_bridge_source()
+    source.bridges[1].heartbeat.touch(4.0)
     text = render(source, loop_now=10.0, mono_now=10.0)
-    declared = {
-        line.split()[2] for line in text.splitlines() if line.startswith("# TYPE ")
-    }
+    assert _samples(text, f"{P}_bridge_heartbeat_age_seconds") == [
+        ('{bridge="nd45"}', "+Inf"),
+        ('{bridge="smartlogger"}', "6"),
+    ]
+    assert _samples(text, f"{P}_bridge_stall_timeout_seconds") == [
+        ('{bridge="nd45"}', "30"),
+        ('{bridge="smartlogger"}', "60"),
+    ]
+
+
+def test_every_bridge_family_declares_a_type():
+    source = _two_bridge_source()
+    for bridge in source.bridges:
+        bridge.poll_stats.record_error(RuntimeError("x"), 1.0)
+        bridge.recovery.record(1.0)
+    text = render(source, loop_now=10.0, mono_now=10.0)
+    declared = {line.split()[2] for line in text.splitlines() if line.startswith("# TYPE ")}
     emitted = {
         line.split("{")[0].split(" ")[0]
         for line in text.splitlines()
         if line and not line.startswith("#")
     }
-    assert {name for name in emitted if "_source_" in name} <= declared
+    assert emitted <= declared

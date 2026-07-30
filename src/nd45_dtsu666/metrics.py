@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from . import __version__
 from .canonical import CanonicalStore
 from .codec import registers_to_float
-from .config import AppConfig, PrometheusConf, TargetSide
+from .config import AppConfig, BridgeConf, PrometheusConf, TargetSide
 from .dtsu_server import RtuActivity, encode_target_point
 from .watchdog import Heartbeat
 
@@ -95,28 +95,61 @@ class ServerStatus:
         self.running = False
 
 
+class RecoveryStats:
+    """How often a bridge's poll loop had to be torn down and rebuilt.
+
+    A rising counter is the signal that in-process stall recovery is looping
+    instead of fixing anything -- the case the systemd watchdog used to catch
+    before a restart started taking sibling bridges down with it. Worth an alert.
+    """
+
+    def __init__(self) -> None:
+        self.restarts = 0
+        self.last_restart_ts: float | None = None
+
+    def record(self, ts: float) -> None:
+        self.restarts += 1
+        self.last_restart_ts = ts
+
+
+@dataclass
+class BridgeMetrics:
+    """One bridge's readable state. Holds references, never copies."""
+
+    name: str
+    spec: BridgeConf
+    store: CanonicalStore
+    poll_stats: PollStats
+    server_status: ServerStatus
+    recovery: RecoveryStats
+    activity: RtuActivity | None = None
+    heartbeat: Heartbeat | None = None
+    # The BridgeRuntime itself, read for `.client` at scrape time: a stall
+    # recovery replaces the client object, so caching it here would report the
+    # connection state of a client that is no longer in use.
+    client_ref: object | None = None
+
+    @property
+    def client(self) -> object | None:
+        return getattr(self.client_ref, "client", None)
+
+
 @dataclass
 class MetricsSource:
     """Everything the exporter reads. Holds references, never copies of state."""
 
     config: AppConfig
-    store: CanonicalStore
-    activity: RtuActivity
-    poll_stats: PollStats
-    server_status: ServerStatus
-    # (map name, side) pairs -- the map name becomes a metric label
+    bridges: list[BridgeMetrics] = field(default_factory=list)
+    # (map name, side) pairs shared by every bridge -- the name becomes a label
     targets: list[tuple[str, TargetSide]] = field(default_factory=list)
-    heartbeat: Heartbeat | None = None
-    client: object | None = None
+    # Proves the event loop is turning; drives the systemd watchdog.
+    loop_heartbeat: Heartbeat | None = None
     mode: str = "run"
     started_at: float = field(default_factory=time.monotonic)
-    # Secondary Huawei SmartLogger source; all None unless huawei.enabled.
-    # Reported under separate `source`-labelled families and judged against
-    # huawei.max_data_age_s, never safety.max_data_age_s -- this source does not
-    # gate the DTSU output.
-    huawei_store: CanonicalStore | None = None
-    huawei_poll_stats: PollStats | None = None
-    huawei_client: object | None = None
+
+    @property
+    def primary(self) -> BridgeMetrics:
+        return self.bridges[0]
 
 
 def _fmt(value: float) -> str:
@@ -174,8 +207,6 @@ def _age(last: float | None, now: float) -> float:
 def render(source: MetricsSource, loop_now: float, mono_now: float) -> str:
     """Render the full exposition text. Pure: both clocks are passed in."""
     out = _Out()
-    cfg = source.config
-    dtsu = cfg.dtsu
 
     out.family(f"{PREFIX}_build_info", "gauge", "Bridge build and mode identification.")
     out.sample(
@@ -184,33 +215,362 @@ def render(source: MetricsSource, loop_now: float, mono_now: float) -> str:
         [
             ("version", __version__),
             ("mode", source.mode),
-            ("transport", dtsu.transport),
-            ("dtsu_slave_id", str(dtsu.slave_id)),
+            ("bridges", str(len(source.bridges))),
         ],
     )
     out.family(f"{PREFIX}_uptime_seconds", "gauge", "Seconds since the exporter started.")
     out.sample(f"{PREFIX}_uptime_seconds", mono_now - source.started_at)
 
-    _render_nd45(out, source, loop_now, mono_now)
-    _render_secondary_sources(out, source, loop_now, mono_now)
-    _render_dtsu(out, source, mono_now)
-    if cfg.prometheus.include_registers:
-        _render_values(out, source, mono_now)
+    if source.loop_heartbeat is not None:
+        out.family(
+            f"{PREFIX}_event_loop_heartbeat_age_seconds",
+            "gauge",
+            "Seconds since the event loop last ticked (drives the systemd watchdog). "
+            "A stuck poller is recovered per bridge and does not show up here.",
+        )
+        out.sample(
+            f"{PREFIX}_event_loop_heartbeat_age_seconds",
+            source.loop_heartbeat.age(mono_now),
+        )
+
+    for bridge in source.bridges:
+        _render_bridge(out, source, bridge, loop_now, mono_now)
+    if source.bridges:
+        _render_primary_aliases(out, source, loop_now, mono_now)
     return out.text()
 
 
-def _render_nd45(out: _Out, source: MetricsSource, loop_now: float, mono_now: float) -> None:
-    cfg = source.config
-    stats = source.poll_stats
-    age = source.store.age(loop_now)  # loop clock: the poller stamps loop.time()
+def _render_bridge(
+    out: _Out,
+    source: MetricsSource,
+    bridge: BridgeMetrics,
+    loop_now: float,
+    mono_now: float,
+) -> None:
+    """Every family for one bridge, labelled with its name."""
+    label = [("bridge", bridge.name)]
+    spec = bridge.spec
+    dtsu = spec.dtsu
 
-    connected = getattr(source.client, "connected", None)
+    out.family(
+        f"{PREFIX}_bridge_info", "gauge", "Per-bridge identification: source and output."
+    )
+    out.sample(
+        f"{PREFIX}_bridge_info",
+        1,
+        [
+            *label,
+            ("source_type", spec.source.type),
+            ("register_map", spec.source.register_map),
+            ("transport", dtsu.transport),
+            ("slave_id", str(dtsu.slave_id)),
+            ("output", _output_desc(dtsu)),
+        ],
+    )
+
+    _render_bridge_source(out, bridge, label, loop_now, mono_now)
+    _render_bridge_dtsu(out, bridge, label, mono_now)
+    if source.config.prometheus.include_registers:
+        _render_bridge_values(out, source, bridge, label, mono_now)
+
+
+def _output_desc(dtsu) -> str:
+    if dtsu.transport == "rtu" and dtsu.rtu is not None:
+        return dtsu.rtu.port
+    if dtsu.tcp is not None:
+        return f"{dtsu.tcp.host}:{dtsu.tcp.port}"
+    return "unknown"
+
+
+def _render_bridge_source(
+    out: _Out,
+    bridge: BridgeMetrics,
+    label: list[tuple[str, str]],
+    loop_now: float,
+    mono_now: float,
+) -> None:
+    spec = bridge.spec
+    stats = bridge.poll_stats
+    age = bridge.store.age(loop_now)  # loop clock: the poller stamps loop.time()
+
+    connected = getattr(bridge.client, "connected", None)
+    if connected is not None:
+        out.family(
+            f"{PREFIX}_bridge_source_connected",
+            "gauge",
+            "1 if this bridge's upstream Modbus TCP link is up.",
+        )
+        out.sample(f"{PREFIX}_bridge_source_connected", 1 if connected else 0, label)
+
+    out.family(
+        f"{PREFIX}_bridge_data_age_seconds",
+        "gauge",
+        "Age of this bridge's newest decoded sample. +Inf until the first poll.",
+    )
+    out.sample(f"{PREFIX}_bridge_data_age_seconds", age, label)
+    out.family(
+        f"{PREFIX}_bridge_data_fresh",
+        "gauge",
+        "1 while this bridge's data is within its own safety.max_data_age_s. "
+        "0 means its output is silenced -- which affects only this bridge.",
+    )
+    out.sample(
+        f"{PREFIX}_bridge_data_fresh",
+        1 if age <= spec.safety.max_data_age_s else 0,
+        label,
+    )
+    out.family(
+        f"{PREFIX}_bridge_max_data_age_seconds",
+        "gauge",
+        "This bridge's configured safety.max_data_age_s threshold.",
+    )
+    out.sample(f"{PREFIX}_bridge_max_data_age_seconds", spec.safety.max_data_age_s, label)
+    out.family(
+        f"{PREFIX}_bridge_poll_interval_seconds",
+        "gauge",
+        "This bridge's configured source poll interval.",
+    )
+    out.sample(
+        f"{PREFIX}_bridge_poll_interval_seconds", spec.source.poll_interval_s, label
+    )
+
+    out.family(
+        f"{PREFIX}_bridge_polls_total", "counter", "Poll attempts by outcome, per bridge."
+    )
+    out.sample(f"{PREFIX}_bridge_polls_total", stats.polls_ok, [*label, ("result", "ok")])
+    out.sample(
+        f"{PREFIX}_bridge_polls_total", stats.polls_failed, [*label, ("result", "error")]
+    )
+    out.family(
+        f"{PREFIX}_bridge_consecutive_poll_failures",
+        "gauge",
+        "Failed polls since this bridge's last successful one.",
+    )
+    out.sample(f"{PREFIX}_bridge_consecutive_poll_failures", stats.consecutive_failures, label)
+    out.family(
+        f"{PREFIX}_bridge_last_successful_poll_age_seconds",
+        "gauge",
+        "Seconds since this bridge's last successful poll. +Inf if there was none.",
+    )
+    out.sample(
+        f"{PREFIX}_bridge_last_successful_poll_age_seconds",
+        _age(stats.last_ok_ts, mono_now),
+        label,
+    )
+    out.family(
+        f"{PREFIX}_bridge_last_poll_error_age_seconds",
+        "gauge",
+        "Seconds since this bridge's last failed poll. +Inf if there was none.",
+    )
+    out.sample(
+        f"{PREFIX}_bridge_last_poll_error_age_seconds",
+        _age(stats.last_error_ts, mono_now),
+        label,
+    )
+    if stats.last_error_type is not None:
+        out.family(
+            f"{PREFIX}_bridge_last_poll_error_info",
+            "gauge",
+            "Exception type of this bridge's last failed poll (message stays in the journal).",
+        )
+        out.sample(
+            f"{PREFIX}_bridge_last_poll_error_info",
+            1,
+            [*label, ("type", stats.last_error_type)],
+        )
+
+    out.family(
+        f"{PREFIX}_bridge_poller_restarts_total",
+        "counter",
+        "Times this bridge's poll loop was torn down and rebuilt after stalling. "
+        "A rising value means in-process recovery is looping -- alert on it, since "
+        "the systemd watchdog no longer covers a hung poller.",
+    )
+    out.sample(f"{PREFIX}_bridge_poller_restarts_total", bridge.recovery.restarts, label)
+    out.family(
+        f"{PREFIX}_bridge_last_poller_restart_age_seconds",
+        "gauge",
+        "Seconds since this bridge's poll loop was last rebuilt. +Inf if never.",
+    )
+    out.sample(
+        f"{PREFIX}_bridge_last_poller_restart_age_seconds",
+        _age(bridge.recovery.last_restart_ts, mono_now),
+        label,
+    )
+    if bridge.heartbeat is not None:
+        out.family(
+            f"{PREFIX}_bridge_heartbeat_age_seconds",
+            "gauge",
+            "Seconds since this bridge's poll loop last made progress (monotonic clock). "
+            "Exceeding source.stall_timeout_s triggers an in-process rebuild.",
+        )
+        out.sample(
+            f"{PREFIX}_bridge_heartbeat_age_seconds",
+            bridge.heartbeat.age(mono_now),
+            label,
+        )
+        out.family(
+            f"{PREFIX}_bridge_stall_timeout_seconds",
+            "gauge",
+            "Progress-free interval after which this bridge's poll loop is rebuilt.",
+        )
+        out.sample(
+            f"{PREFIX}_bridge_stall_timeout_seconds", spec.source.stall_timeout_s, label
+        )
+
+
+def _render_bridge_dtsu(
+    out: _Out, bridge: BridgeMetrics, label: list[tuple[str, str]], mono_now: float
+) -> None:
+    status = bridge.server_status
+
+    out.family(
+        f"{PREFIX}_bridge_dtsu_server_up",
+        "gauge",
+        "1 while this bridge's DTSU666 output server is running "
+        "(0 = fail-safe silence or transport down).",
+    )
+    out.sample(f"{PREFIX}_bridge_dtsu_server_up", 1 if status.running else 0, label)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_server_starts_total",
+        "counter",
+        "This bridge's DTSU output server starts.",
+    )
+    out.sample(f"{PREFIX}_bridge_dtsu_server_starts_total", status.starts, label)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_server_stops_total",
+        "counter",
+        "This bridge's DTSU output server stops (fail-safe silencing or transport failure).",
+    )
+    out.sample(f"{PREFIX}_bridge_dtsu_server_stops_total", status.stops, label)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_server_last_start_age_seconds",
+        "gauge",
+        "Seconds since this bridge's output server was last started. +Inf if never.",
+    )
+    out.sample(
+        f"{PREFIX}_bridge_dtsu_server_last_start_age_seconds",
+        _age(status.last_start_ts, mono_now),
+        label,
+    )
+
+    if bridge.activity is None:
+        return
+    summary = bridge.activity.summary(mono_now)  # monotonic clock: request timing
+    out.family(
+        f"{PREFIX}_bridge_dtsu_requests_total",
+        "counter",
+        "Modbus read requests received from Sigenergy on this bridge.",
+    )
+    out.sample(f"{PREFIX}_bridge_dtsu_requests_total", summary["total"], label)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_request_rate_per_second",
+        "gauge",
+        "Sigenergy read requests per second on this bridge, over the sliding window.",
+    )
+    out.sample(f"{PREFIX}_bridge_dtsu_request_rate_per_second", summary["rate"], label)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_last_request_age_seconds",
+        "gauge",
+        "Seconds since the last Sigenergy read on this bridge. +Inf if there was none.",
+    )
+    last_age = summary["last_seen_age"]
+    out.sample(
+        f"{PREFIX}_bridge_dtsu_last_request_age_seconds",
+        math.inf if last_age is None else last_age,
+        label,
+    )
+    out.family(
+        f"{PREFIX}_bridge_dtsu_block_reads_total",
+        "counter",
+        "Sigenergy reads by register block on this bridge (capped at 64 distinct blocks).",
+    )
+    for (fc, addr, count), hits in summary["blocks"]:
+        out.sample(
+            f"{PREFIX}_bridge_dtsu_block_reads_total",
+            hits,
+            [*label, ("fc", str(fc)), ("addr", str(addr)), ("count", str(count))],
+        )
+
+
+def _render_bridge_values(
+    out: _Out,
+    source: MetricsSource,
+    bridge: BridgeMetrics,
+    label: list[tuple[str, str]],
+    mono_now: float,
+) -> None:
+    values, _ = bridge.store.snapshot()
+    ct_ratio = bridge.spec.dtsu.identity.ir_at
+
+    out.family(
+        f"{PREFIX}_bridge_canonical_value",
+        "gauge",
+        "Latest canonical SI measurement by point name, per bridge "
+        "(mixed units; see registers.json).",
+    )
+    for name in sorted(values):
+        out.sample(f"{PREFIX}_bridge_canonical_value", values[name], [*label, ("point", name)])
+
+    out.family(
+        f"{PREFIX}_bridge_dtsu_register_value",
+        "gauge",
+        "Value currently encoded in each DTSU output register, in that register's own scale.",
+    )
+    out.family(
+        f"{PREFIX}_bridge_dtsu_register_read_age_seconds",
+        "gauge",
+        "Seconds since Sigenergy last read a register on this bridge. +Inf if it never has.",
+    )
+    for map_name, side in source.targets:
+        for point_name, pt in sorted(side.points.items(), key=lambda kv: kv[1].addr):
+            labels = [
+                *label,
+                ("map", map_name),
+                ("point", point_name),
+                ("fc", str(side.function_code)),
+                ("addr", str(pt.addr)),
+            ]
+            if bridge.activity is not None:
+                out.sample(
+                    f"{PREFIX}_bridge_dtsu_register_read_age_seconds",
+                    _age(bridge.activity.last_seen(side.function_code, pt.addr), mono_now),
+                    labels,
+                )
+            si = values.get(pt.from_)
+            if si is None:
+                continue
+            try:
+                regs = encode_target_point(si, pt, side, ct_ratio=ct_ratio)
+            except ValueError:
+                # unrepresentable float32: the datastore kept its previous image,
+                # so there is no current value to report for this point
+                continue
+            raw = registers_to_float(regs, side.word_order, side.byte_order)
+            out.sample(f"{PREFIX}_bridge_dtsu_register_value", raw, labels)
+
+
+def _render_primary_aliases(
+    out: _Out, source: MetricsSource, loop_now: float, mono_now: float
+) -> None:
+    """Re-emit the first bridge's state under the original unlabelled names.
+
+    Deliberate duplication: these are the families the deployed Grafana boards and
+    alert rules scrape, and they predate multi-bridge support. Keeping them as
+    aliases means adding a second bridge cannot break existing monitoring. New
+    dashboards should use the `bridge`-labelled families above.
+    """
+    bridge = source.primary
+    stats = bridge.poll_stats
+    status = bridge.server_status
+    age = bridge.store.age(loop_now)
+
+    connected = getattr(bridge.client, "connected", None)
     if connected is not None:
         out.family(
             f"{PREFIX}_nd45_connected", "gauge", "1 if the ND45 Modbus TCP link is up."
         )
         out.sample(f"{PREFIX}_nd45_connected", 1 if connected else 0)
-
     out.family(
         f"{PREFIX}_nd45_data_age_seconds",
         "gauge",
@@ -222,18 +582,19 @@ def _render_nd45(out: _Out, source: MetricsSource, loop_now: float, mono_now: fl
         "gauge",
         "1 while ND45 data is within safety.max_data_age_s (fail-safe not tripped).",
     )
-    out.sample(f"{PREFIX}_nd45_data_fresh", 1 if age <= cfg.safety.max_data_age_s else 0)
+    out.sample(
+        f"{PREFIX}_nd45_data_fresh", 1 if age <= bridge.spec.safety.max_data_age_s else 0
+    )
     out.family(
         f"{PREFIX}_nd45_max_data_age_seconds",
         "gauge",
         "Configured safety.max_data_age_s threshold.",
     )
-    out.sample(f"{PREFIX}_nd45_max_data_age_seconds", cfg.safety.max_data_age_s)
+    out.sample(f"{PREFIX}_nd45_max_data_age_seconds", bridge.spec.safety.max_data_age_s)
     out.family(
         f"{PREFIX}_nd45_poll_interval_seconds", "gauge", "Configured ND45 poll interval."
     )
-    out.sample(f"{PREFIX}_nd45_poll_interval_seconds", cfg.nd45.poll_interval_s)
-
+    out.sample(f"{PREFIX}_nd45_poll_interval_seconds", bridge.spec.source.poll_interval_s)
     out.family(f"{PREFIX}_nd45_polls_total", "counter", "ND45 poll attempts by outcome.")
     out.sample(f"{PREFIX}_nd45_polls_total", stats.polls_ok, [("result", "ok")])
     out.sample(f"{PREFIX}_nd45_polls_total", stats.polls_failed, [("result", "error")])
@@ -268,110 +629,17 @@ def _render_nd45(out: _Out, source: MetricsSource, loop_now: float, mono_now: fl
         out.sample(
             f"{PREFIX}_nd45_last_poll_error_info", 1, [("type", stats.last_error_type)]
         )
-
-    if source.heartbeat is not None:
+    if source.loop_heartbeat is not None:
         out.family(
             f"{PREFIX}_watchdog_heartbeat_age_seconds",
             "gauge",
-            "Seconds since the poller last made progress (drives the systemd watchdog).",
+            "Seconds since the watchdog heartbeat last advanced. Now tracks event-loop "
+            "liveness: a hung poller is recovered per bridge instead of restarting.",
         )
         out.sample(
-            f"{PREFIX}_watchdog_heartbeat_age_seconds", source.heartbeat.age(mono_now)
+            f"{PREFIX}_watchdog_heartbeat_age_seconds",
+            source.loop_heartbeat.age(mono_now),
         )
-
-
-def _render_secondary_sources(
-    out: _Out, source: MetricsSource, loop_now: float, mono_now: float
-) -> None:
-    """Emit `source`-labelled families for non-primary data sources.
-
-    A separate labelled family set rather than more `nd45_*` metrics: the
-    existing families are what the deployed dashboards scrape, and a secondary
-    source must not change their meaning. Nothing is emitted at all unless
-    huawei.enabled, so a single-source bridge's scrape is byte-identical to before.
-    """
-    if source.huawei_store is None or source.huawei_poll_stats is None:
-        return
-    cfg = source.config
-    label = [("source", "huawei")]
-    age = source.huawei_store.age(loop_now)  # loop clock, as the poller stamps it
-    stats = source.huawei_poll_stats
-
-    connected = getattr(source.huawei_client, "connected", None)
-    if connected is not None:
-        out.family(
-            f"{PREFIX}_source_connected",
-            "gauge",
-            "1 if the secondary source's Modbus TCP link is up.",
-        )
-        out.sample(f"{PREFIX}_source_connected", 1 if connected else 0, label)
-
-    out.family(
-        f"{PREFIX}_source_data_age_seconds",
-        "gauge",
-        "Age of the newest sample from a secondary source. +Inf until the first poll.",
-    )
-    out.sample(f"{PREFIX}_source_data_age_seconds", age, label)
-    out.family(
-        f"{PREFIX}_source_data_fresh",
-        "gauge",
-        "1 while a secondary source is within its own max_data_age_s. "
-        "Does NOT gate the DTSU output -- only the primary source does.",
-    )
-    out.sample(
-        f"{PREFIX}_source_data_fresh", 1 if age <= cfg.huawei.max_data_age_s else 0, label
-    )
-    out.family(
-        f"{PREFIX}_source_max_data_age_seconds",
-        "gauge",
-        "Configured staleness threshold for a secondary source.",
-    )
-    out.sample(f"{PREFIX}_source_max_data_age_seconds", cfg.huawei.max_data_age_s, label)
-    out.family(
-        f"{PREFIX}_source_poll_interval_seconds",
-        "gauge",
-        "Configured poll interval for a secondary source.",
-    )
-    out.sample(f"{PREFIX}_source_poll_interval_seconds", cfg.huawei.poll_interval_s, label)
-    out.family(
-        f"{PREFIX}_source_polls_total", "counter", "Secondary-source poll attempts by outcome."
-    )
-    out.sample(f"{PREFIX}_source_polls_total", stats.polls_ok, [*label, ("result", "ok")])
-    out.sample(
-        f"{PREFIX}_source_polls_total", stats.polls_failed, [*label, ("result", "error")]
-    )
-    out.family(
-        f"{PREFIX}_source_consecutive_poll_failures",
-        "gauge",
-        "Failed secondary-source polls since the last successful one.",
-    )
-    out.sample(f"{PREFIX}_source_consecutive_poll_failures", stats.consecutive_failures, label)
-    out.family(
-        f"{PREFIX}_source_last_successful_poll_age_seconds",
-        "gauge",
-        "Seconds since the last successful secondary-source poll. +Inf if there was none.",
-    )
-    out.sample(
-        f"{PREFIX}_source_last_successful_poll_age_seconds",
-        _age(stats.last_ok_ts, mono_now),
-        label,
-    )
-    if stats.last_error_type is not None:
-        out.family(
-            f"{PREFIX}_source_last_poll_error_info",
-            "gauge",
-            "Exception type of the last failed secondary-source poll.",
-        )
-        out.sample(
-            f"{PREFIX}_source_last_poll_error_info",
-            1,
-            [*label, ("type", stats.last_error_type)],
-        )
-
-
-def _render_dtsu(out: _Out, source: MetricsSource, mono_now: float) -> None:
-    status = source.server_status
-    summary = source.activity.summary(mono_now)  # monotonic clock: request timing
 
     out.family(
         f"{PREFIX}_dtsu_server_up",
@@ -398,6 +666,9 @@ def _render_dtsu(out: _Out, source: MetricsSource, mono_now: float) -> None:
         f"{PREFIX}_dtsu_server_last_start_age_seconds", _age(status.last_start_ts, mono_now)
     )
 
+    if bridge.activity is None:
+        return
+    summary = bridge.activity.summary(mono_now)
     out.family(
         f"{PREFIX}_dtsu_requests_total",
         "counter",
@@ -419,7 +690,6 @@ def _render_dtsu(out: _Out, source: MetricsSource, mono_now: float) -> None:
     out.sample(
         f"{PREFIX}_dtsu_last_request_age_seconds", math.inf if last_age is None else last_age
     )
-
     out.family(
         f"{PREFIX}_dtsu_block_reads_total",
         "counter",
@@ -432,11 +702,10 @@ def _render_dtsu(out: _Out, source: MetricsSource, mono_now: float) -> None:
             [("fc", str(fc)), ("addr", str(addr)), ("count", str(count))],
         )
 
-
-def _render_values(out: _Out, source: MetricsSource, mono_now: float) -> None:
-    values, _ = source.store.snapshot()
-    ct_ratio = source.config.dtsu.identity.ir_at
-
+    if not source.config.prometheus.include_registers:
+        return
+    values, _ = bridge.store.snapshot()
+    ct_ratio = bridge.spec.dtsu.identity.ir_at
     out.family(
         f"{PREFIX}_canonical_value",
         "gauge",
@@ -444,7 +713,6 @@ def _render_values(out: _Out, source: MetricsSource, mono_now: float) -> None:
     )
     for name in sorted(values):
         out.sample(f"{PREFIX}_canonical_value", values[name], [("point", name)])
-
     out.family(
         f"{PREFIX}_dtsu_register_value",
         "gauge",
@@ -465,7 +733,7 @@ def _render_values(out: _Out, source: MetricsSource, mono_now: float) -> None:
             ]
             out.sample(
                 f"{PREFIX}_dtsu_register_read_age_seconds",
-                _age(source.activity.last_seen(side.function_code, pt.addr), mono_now),
+                _age(bridge.activity.last_seen(side.function_code, pt.addr), mono_now),
                 labels,
             )
             si = values.get(pt.from_)
@@ -474,8 +742,6 @@ def _render_values(out: _Out, source: MetricsSource, mono_now: float) -> None:
             try:
                 regs = encode_target_point(si, pt, side, ct_ratio=ct_ratio)
             except ValueError:
-                # unrepresentable float32: the datastore kept its previous image,
-                # so there is no current value to report for this point
                 continue
             raw = registers_to_float(regs, side.word_order, side.byte_order)
             out.sample(f"{PREFIX}_dtsu_register_value", raw, labels)
@@ -512,10 +778,25 @@ def route(
     if path == "/metrics":
         return 200, CONTENT_TYPE, render(source, loop_now, mono_now)
     if path == "/healthz":
-        age = source.store.age(loop_now)
-        if age <= source.config.safety.max_data_age_s:
-            return 200, "text/plain; charset=utf-8", f"ok (data age {age:.2f}s)\n"
-        return 503, "text/plain; charset=utf-8", f"stale (data age {age:.2f}s)\n"
+        # Healthy only when *every* bridge is serving. Each bridge is judged
+        # against its own threshold, so a 5s-polled SmartLogger bridge is not
+        # held to the ND45 bridge's 3s.
+        parts, stale = [], []
+        for bridge in source.bridges:
+            age = bridge.store.age(loop_now)
+            fresh = age <= bridge.spec.safety.max_data_age_s
+            shown = "never polled" if age == math.inf else f"{age:.2f}s"
+            parts.append(f"{bridge.name}={shown}{'' if fresh else ' STALE'}")
+            if not fresh:
+                stale.append(bridge.name)
+        detail = " ".join(parts)
+        if stale:
+            return (
+                503,
+                "text/plain; charset=utf-8",
+                f"stale: {', '.join(stale)} ({detail})\n",
+            )
+        return 200, "text/plain; charset=utf-8", f"ok ({detail})\n"
     if path == "/":
         return 200, "text/plain; charset=utf-8", _INDEX
     return 404, "text/plain; charset=utf-8", "not found\n"

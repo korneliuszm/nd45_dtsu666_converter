@@ -1,9 +1,8 @@
-"""Interactive commissioning dashboard: live ND45 table + output read activity."""
+"""Interactive commissioning dashboard: per-bridge source table + output read activity."""
 
 from __future__ import annotations
 
 import asyncio
-import math
 import time
 
 from . import metrics
@@ -30,38 +29,6 @@ def _direction(p_total: float | None) -> str:
     return "ZERO"
 
 
-def _render_pv_panel(canonical, pv_age: float) -> list[str]:
-    """PV production panel fed by the Huawei SmartLogger (telemetry only).
-
-    Labelled "telemetry" on purpose: these values never gate the DTSU output, so
-    a stale PV panel next to a healthy bridge is expected, not a fault.
-    """
-    stale = "" if math.isfinite(pv_age) else "   (never polled)"
-    lines = [
-        f" PV production (SmartLogger, telemetry)   data age: {_fmt(pv_age, 2)}s{stale}"
-    ]
-    p_total = canonical.get("pv_p_total")
-    if p_total is None:
-        lines.append("   (no data yet)")
-        return lines
-    lines.append(
-        f"   P={_fmt(p_total):>12} W   Q={_fmt(canonical.get('pv_q_total')):>12} var"
-        f"   PF={_fmt(canonical.get('pv_pf_total'), 3)}"
-    )
-    lines.append(
-        f"   E_total={_fmt(canonical.get('pv_exp_energy_total'))} kWh"
-        f"   E_daily={_fmt(canonical.get('pv_e_daily'))} kWh"
-        f"   P_dc={_fmt(canonical.get('pv_dc_power'))} W"
-    )
-    lines.append(
-        f"   I: {_fmt(canonical.get('pv_i_l1'), 1)} / {_fmt(canonical.get('pv_i_l2'), 1)}"
-        f" / {_fmt(canonical.get('pv_i_l3'), 1)} A"
-        f"   U_ll: {_fmt(canonical.get('pv_u_l12'))} / {_fmt(canonical.get('pv_u_l23'))}"
-        f" / {_fmt(canonical.get('pv_u_l31'))} V"
-    )
-    return lines
-
-
 def render_dashboard(
     canonical,
     age,
@@ -70,19 +37,20 @@ def render_dashboard(
     slave_id,
     now,
     source_label: str = "ND45",
-    pv_age: float | None = None,
+    output_label: str = "",
 ) -> str:
-    """Render the dashboard (source values + Sigenergy read activity).
+    """Render one bridge's panel pair: its source values + its Sigenergy activity.
 
-    A third PV panel appears when `pv_age` is given (huawei.enabled), showing the
-    SmartLogger's production alongside the grid-tie measurement.
+    `output_label` names where this bridge serves (serial port or host:port), which
+    is what tells two bridges apart at a glance when both are on screen.
     """
     state = "SERVING" if healthy else "FAIL-SAFE SILENT"
     poll = "OK" if healthy else "STALE"
+    where = f"  [{output_label}]" if output_label else ""
     lines = [
-        f" {source_label} -> DTSU666  monitor                     state: {state}",
+        f" {source_label} -> DTSU666{where}                state: {state}",
         _SEP,
-        f" {source_label} (source)                    data age: {age:.2f}s   poll: {poll}",
+        f" source                                data age: {age:.2f}s   poll: {poll}",
         f"   {'Phase':<7}{'U [V]':>9}{'I [A]':>9}{'P [W]':>10}{'Q [var]':>10}{'PF':>8}",
     ]
     for phase, suf in (("L1", "l1"), ("L2", "l2"), ("L3", "l3")):
@@ -107,10 +75,6 @@ def render_dashboard(
     )
     lines.append(_SEP)
 
-    if pv_age is not None:
-        lines.extend(_render_pv_panel(canonical, pv_age))
-        lines.append(_SEP)
-
     s = activity.summary(now)
     last = "never" if s["last_seen_age"] is None else f"{s['last_seen_age']:.1f}s ago"
     lines.append(f" Sigenergy  (slave {slave_id})                     state: {state}")
@@ -126,7 +90,6 @@ def render_dashboard(
         recent = "  ".join(f"@{addr}x{cnt}" for (_ts, _fc, addr, cnt) in list(s["recent"])[-4:])
         lines.append(f"   recent:  {recent}")
     lines.append(_SEP)
-    lines.append(" Ctrl-C to quit")
     return "\n".join(lines)
 
 
@@ -168,55 +131,60 @@ def render_registers_table(
 async def run_monitor(
     config: AppConfig, registers: RegisterMap, stop_event: asyncio.Event, refresh: float = 1.0
 ) -> None:
-    """Run the live bridge with a commissioning dashboard refreshed every `refresh` s."""
+    """Run every enabled bridge with a commissioning dashboard, refreshed every `refresh` s.
+
+    One panel pair per bridge (source values + that bridge's Sigenergy activity),
+    plus the register table for each. Bridges are independent, so each shows its
+    own SERVING / FAIL-SAFE SILENT state.
+    """
     activity = RtuActivity()
     pipe = build_pipeline(config, registers, stop_event, activity=activity, mode="monitor")
     metrics_task = metrics.start(config, pipe.metrics, stop_event)
-    if not await connect_with_retry(
-        pipe.client, stop_event,
-        config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
-    ):
-        for coro in pipe.coros:
-            coro.close()
-        await metrics.stop(metrics_task)
-        pipe.client.close()
-        return
 
-    # Same target set the served datastore was built from (app.build_pipeline).
-    targets = [
-        registers.dtsu_target,
-        registers.dtsu_sigen_ext_target,
-        registers.dtsu_sigen_ext_energy,
+    # Bridges connect concurrently: an unreachable source must not hold up a
+    # sibling bridge's dashboard or its output.
+    connects = [
+        asyncio.create_task(
+            connect_with_retry(
+                bridge.client, stop_event,
+                bridge.spec.source.reconnect_delay_s,
+                bridge.spec.source.reconnect_delay_max_s,
+                heartbeat=bridge.heartbeat,
+            )
+        )
+        for bridge in pipe.bridges
     ]
 
-    # Read through the merged store when a secondary source is active, so the PV
-    # panel and the register table see its points too. `age`/`healthy` still come
-    # from the primary source alone -- MergedStore.age delegates to it.
-    view = pipe.merged_store if pipe.merged_store is not None else pipe.store
+    # Same target set the served datastore was built from (app.build_pipeline).
+    targets = [side for _name, side in registers.targets]
 
     async def _display() -> None:
         loop = asyncio.get_running_loop()
         while not stop_event.is_set():
             loop_now = loop.time()
-            age = view.age(loop_now)
-            healthy = age <= config.safety.max_data_age_s
-            values, _ = view.snapshot()
-            pv_age = (
-                pipe.huawei_store.age(loop_now) if pipe.huawei_store is not None else None
-            )
             now = time.monotonic()
+            panels = []
+            for bridge in pipe.bridges:
+                age = bridge.store.age(loop_now)
+                healthy = age <= bridge.spec.safety.max_data_age_s
+                values, _ = bridge.store.snapshot()
+                bridge_activity = bridge.activity or activity
+                panels.append(
+                    render_dashboard(
+                        values, age, healthy, bridge_activity,
+                        bridge.spec.dtsu.slave_id, now,
+                        source_label=_source_label(bridge),
+                        output_label=_output_label(bridge),
+                    )
+                )
+                panels.append(
+                    render_registers_table(
+                        targets, values, bridge_activity, now,
+                        ct_ratio=bridge.spec.dtsu.identity.ir_at,
+                    )
+                )
             print("\033[2J\033[H", end="")  # clear screen
-            print(
-                render_dashboard(
-                    values, age, healthy, activity, config.dtsu.slave_id, now,
-                    pv_age=pv_age,
-                )
-            )
-            print(
-                render_registers_table(
-                    targets, values, activity, now, ct_ratio=config.dtsu.identity.ir_at
-                )
-            )
+            print("\n".join(panels))
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=refresh)
             except asyncio.TimeoutError:
@@ -225,5 +193,31 @@ async def run_monitor(
     try:
         await asyncio.gather(*pipe.coros, _display())
     finally:
+        for task in connects:
+            task.cancel()
+        for task in connects:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001 - shutdown must not mask the exit reason
+                pass
         await metrics.stop(metrics_task)
-        pipe.client.close()
+        for bridge in pipe.bridges:
+            close = getattr(bridge.client, "close", None)
+            if close is not None:
+                close()
+
+
+def _source_label(bridge) -> str:
+    kind = "ND45" if bridge.spec.source.type == "nd45" else "SmartLogger"
+    return f"{bridge.name} ({kind})"
+
+
+def _output_label(bridge) -> str:
+    dtsu = bridge.spec.dtsu
+    if dtsu.transport == "rtu" and dtsu.rtu is not None:
+        return dtsu.rtu.port
+    if dtsu.tcp is not None:
+        return f"{dtsu.tcp.host}:{dtsu.tcp.port}"
+    return dtsu.transport

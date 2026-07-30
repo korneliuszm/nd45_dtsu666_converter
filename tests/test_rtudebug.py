@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 import nd45_dtsu666.rtudebug as rtudebug_mod
-from nd45_dtsu666.config import load_config, load_registers
+from nd45_dtsu666.config import AppConfig, load_config, load_registers
 from nd45_dtsu666.rtudebug import LoggingRtuActivity, RegisterNameIndex
 
 
@@ -98,13 +98,43 @@ def test_logging_activity_marks_unmapped(caplog):
     assert any("(unmapped)" in r.message for r in caplog.records)
 
 
-async def test_run_rtudebug_returns_cleanly_when_never_connected(monkeypatch):
-    async def _never_connect(client, stop_event, *args, **kwargs):
-        return False
-
-    monkeypatch.setattr(rtudebug_mod, "connect_with_retry", _never_connect)
+async def test_run_rtudebug_returns_cleanly_when_stopped_immediately():
+    """No connect gate any more: bridges connect concurrently and stop on the event."""
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
+    stop = asyncio.Event()
+    stop.set()
     await asyncio.wait_for(
-        rtudebug_mod.run_rtudebug(config, registers, asyncio.Event()), timeout=1.0
+        rtudebug_mod.run_rtudebug(config, registers, stop), timeout=5.0
     )
+
+
+async def test_run_rtudebug_traces_the_named_bridge(monkeypatch, caplog):
+    """--bridge picks which bus is traced; the others still run."""
+    config = load_config("config/config.json")
+    raw = config.model_dump(mode="json", by_alias=True)
+    raw["bridges"] = [
+        {
+            "name": "smartlogger",
+            "source": {
+                "type": "huawei", "host": "10.0.0.5",
+                "register_map": "huawei_plant_source",
+            },
+            "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA3"}},
+            "safety": {"max_data_age_s": 30.0},
+        }
+    ]
+    config = AppConfig.model_validate(raw)
+    registers = load_registers("config/registers.json")
+    stop = asyncio.Event()
+    stop.set()
+    with caplog.at_level("INFO", logger="nd45_dtsu666.rtudebug"):
+        await asyncio.wait_for(
+            rtudebug_mod.run_rtudebug(
+                config, registers, stop, bridge_name="smartlogger"
+            ),
+            timeout=5.0,
+        )
+    messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "tracing bridge 'smartlogger'" in messages
+    assert "also running (untraced): nd45" in messages

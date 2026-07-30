@@ -3,6 +3,7 @@ import socket
 
 import pytest
 
+import nd45_dtsu666.watchdog as watchdog
 from nd45_dtsu666.watchdog import (
     Heartbeat,
     notify_ready,
@@ -129,3 +130,72 @@ async def test_watchdog_loop_withholds_ping_when_heartbeat_stale(tmp_path, monke
     with pytest.raises(BlockingIOError):
         server.recvfrom(1024)  # no datagram sent -- stale heartbeat withheld the ping
     server.close()
+
+
+# --- event-loop liveness (replaces poller-progress tracking) -----------------
+
+
+async def test_loop_ticker_touches_the_heartbeat_until_stopped():
+    from nd45_dtsu666.app import loop_ticker
+
+    beat = Heartbeat()
+    stop = asyncio.Event()
+    clock = {"t": 100.0}
+    task = asyncio.create_task(
+        loop_ticker(beat, 0.01, stop, now=lambda: clock["t"])
+    )
+    await asyncio.sleep(0.05)
+    assert beat.age(clock["t"]) == 0.0
+    clock["t"] = 200.0
+    await asyncio.sleep(0.05)
+    assert beat.age(clock["t"]) == 0.0  # kept advancing
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+
+
+async def test_watchdog_keeps_pinging_while_the_loop_lives_despite_a_stalled_poller(
+    monkeypatch,
+):
+    """Deliberate semantic change: a hung poller no longer restarts the process.
+
+    Restarting takes every bridge down at once, so a stalled poll loop is rebuilt
+    in-process by app.supervise_poller and the watchdog only watches the loop
+    itself. The cost is that stall recovery has no external safety net -- which is
+    why bridge_poller_restarts_total is the metric to alert on.
+    """
+    from nd45_dtsu666.app import loop_ticker
+
+    sent = []
+    monkeypatch.setattr(watchdog, "notify_watchdog", lambda: sent.append(1))
+    loop_beat = Heartbeat()
+    stalled_poller_beat = Heartbeat()
+    stalled_poller_beat.touch(0.0)  # last progress long ago
+    clock = {"t": 1000.0}
+    stop = asyncio.Event()
+
+    ticker = asyncio.create_task(loop_ticker(loop_beat, 0.01, stop, now=lambda: clock["t"]))
+    pinger = asyncio.create_task(
+        watchdog.watchdog_loop(loop_beat, 0.04, stop, now=lambda: clock["t"])
+    )
+    await asyncio.sleep(0.08)
+    stop.set()
+    await asyncio.gather(ticker, pinger)
+
+    assert sent, "the watchdog kept pinging"
+    # the stalled poller's own heartbeat is 1000s old and did not matter here
+    assert stalled_poller_beat.age(clock["t"]) == 1000.0
+
+
+async def test_watchdog_withholds_the_ping_when_the_loop_ticker_stops(monkeypatch):
+    sent = []
+    monkeypatch.setattr(watchdog, "notify_watchdog", lambda: sent.append(1))
+    beat = Heartbeat()
+    beat.touch(0.0)
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        watchdog.watchdog_loop(beat, 0.02, stop, now=lambda: 1000.0)
+    )
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert sent == []

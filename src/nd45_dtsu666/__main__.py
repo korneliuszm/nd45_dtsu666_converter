@@ -73,7 +73,7 @@ def _cmd_rtudebug(args) -> int:
     async def _main() -> None:
         stop_event = asyncio.Event()
         _install_signal_handlers(asyncio.get_running_loop(), stop_event)
-        await run_rtudebug(config, registers, stop_event)
+        await run_rtudebug(config, registers, stop_event, bridge_name=args.bridge)
 
     try:
         asyncio.run(_main())
@@ -90,7 +90,7 @@ def _cmd_static(args) -> int:
     async def _main() -> None:
         stop_event = asyncio.Event()
         _install_signal_handlers(asyncio.get_running_loop(), stop_event)
-        await run_static_debug(config, registers, stop_event)
+        await run_static_debug(config, registers, stop_event, bridge_name=args.bridge)
 
     try:
         asyncio.run(_main())
@@ -110,15 +110,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-metrics", action="store_true", help="disable the Prometheus endpoint"
     )
-    sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("run", help="run the bridge")
-    sub.add_parser("monitor", help="run the bridge with a live commissioning dashboard")
-    sub.add_parser(
-        "rtudebug", help="run the bridge and log every register read requested by Sigenergy"
+    parser.add_argument(
+        "--bridge", default=None,
+        help="bridge to target in the single-bridge modes (rtudebug/static/diag/selftest); "
+             "defaults to the first configured bridge. `run` and `monitor` always use all.",
     )
-    sub.add_parser("static", help="serve stable JSON-configured values without connecting ND45")
-    sub.add_parser("diag", help="diagnostic table (Task 9)")
-    sub.add_parser("selftest", help="serve synthetic data (Task 9)")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("run", help="run every configured bridge")
+    sub.add_parser("monitor", help="run every bridge with a live commissioning dashboard")
+    sub.add_parser(
+        "rtudebug", help="run every bridge, tracing register reads on one of them"
+    )
+    sub.add_parser(
+        "static", help="serve stable JSON-configured values without connecting a source"
+    )
+    sub.add_parser("diag", help="poll one bridge's source and print the decoded table")
+    sub.add_parser("selftest", help="serve synthetic data on one bridge for an mbpoll bench")
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

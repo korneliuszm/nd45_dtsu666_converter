@@ -30,47 +30,6 @@ class CanonicalStore:
         return self.age(now) <= max_age
 
 
-class MergedStore:
-    """Union of several per-source stores; freshness follows the primary only.
-
-    Drop-in for CanonicalStore at every read site (`supervise_server`, metrics,
-    monitor all use only `age`/`snapshot`/`is_fresh`).
-
-    The primary-only freshness rule is the safety property of this class. The
-    DTSU output is silenced when primary (ND45) data goes stale, because that is
-    the measurement Sigenergy regulates on. A secondary source is telemetry --
-    the SmartLogger's PV production refreshes far more slowly and may drop out
-    for minutes -- and must never be able to silence a healthy bridge.
-    """
-
-    def __init__(
-        self, primary: CanonicalStore, secondaries: dict[str, CanonicalStore] | None = None
-    ) -> None:
-        self.primary = primary
-        self.secondaries = dict(secondaries or {})
-
-    def snapshot(self) -> tuple[dict[str, float], float]:
-        values: dict[str, float] = {}
-        for store in self.secondaries.values():
-            values.update(store.snapshot()[0])
-        # primary last: its keys win any collision, so a stray secondary point
-        # name can never displace a grid-tie measurement.
-        primary_values, ts = self.primary.snapshot()
-        values.update(primary_values)
-        return values, ts
-
-    def age(self, now: float) -> float:
-        return self.primary.age(now)
-
-    def is_fresh(self, now: float, max_age: float) -> bool:
-        return self.primary.is_fresh(now, max_age)
-
-    def source_age(self, name: str, now: float) -> float:
-        """Age of one secondary source, for metrics and the dashboard."""
-        store = self.secondaries.get(name)
-        return math.inf if store is None else store.age(now)
-
-
 def compute_derived(values: dict[str, float]) -> None:
     """Fill canonical physical-meter energy aliases in place.
 

@@ -41,14 +41,14 @@ Rejestry zagregowane przez SmartLogger ze wszystkich falowników.
 
 | kanoniczny | rejestr | typ | Gain | scale w mapie |
 |---|---|---|---|---|
-| `pv_p_total` | 40525 Active power | I32 | 1000 (kW) | 1.0 → W |
-| `pv_q_total` | 40544 Reactive power | I32 | 1000 (kVar) | 1.0 → var |
-| `pv_pf_total` | 40532 Power factor | I16 | 1000 | 0.001 |
-| `pv_u_l12/l23/l31` | 40575/76/77 Uab/Ubc/Uca | U16 | 10 (V) | 0.1 |
-| `pv_i_l1/l2/l3` | 40572/73/74 Phase A/B/C current | I16 | **1** (A) | 1.0 |
-| `pv_exp_energy_total` | 40560 E‑Total | U32 | 10 (kWh) | 0.1 |
-| `pv_e_daily` | 40562 E‑Daily | U32 | 10 (kWh) | 0.1 (bonus) |
-| `pv_dc_power` | 40521 Input power | U32 | 1000 (kW) | 1.0 (bonus) |
+| `p_total` | 40525 Active power | I32 | 1000 (kW) | 1.0 → W |
+| `q_total` | 40544 Reactive power | I32 | 1000 (kVar) | 1.0 → var |
+| `pf_total` | 40532 Power factor | I16 | 1000 | 0.001 |
+| `u_l12/l23/l31` | 40575/76/77 Uab/Ubc/Uca | U16 | 10 (V) | 0.1 |
+| `i_l1/l2/l3` | 40572/73/74 Phase A/B/C current | I16 | **1** (A) | 1.0 |
+| `exp_energy_total` | 40560 E‑Total | U32 | 10 (kWh) | 0.1 |
+| `e_daily` | 40562 E‑Daily | U32 | 10 (kWh) | 0.1 (bonus, poza mapą DTSU) |
+| `dc_power` | 40521 Input power | U32 | 1000 (kW) | 1.0 (bonus, poza mapą DTSU) |
 
 Braki: napięcia fazowe, moce per‑faza, moc pozorna, PF per‑faza, energia pobrana,
 energia bierna, częstotliwość.
@@ -59,18 +59,18 @@ Tablica 2‑5. Semantycznie najbliższa roli ND45 (punkt przyłączenia).
 
 | kanoniczny | rejestr | typ | Gain | scale |
 |---|---|---|---|---|
-| `mtr_u_l1/l2/l3` | 32260/62/64 | U32 | 100 | 0.01 |
-| `mtr_u_l12/l23/l31` | 32266/68/70 | U32 | 100 | 0.01 |
-| `mtr_i_l1/l2/l3` | 32272/74/76 | I32 | 10 | 0.1 |
-| `mtr_p_total` | 32278 | I32 | 1000 (kW) | 1.0 |
-| `mtr_q_total` | 32280 | I32 | 1000 (kVar) | 1.0 |
-| `mtr_pf_total` | 32284 | I16 | 1000 | 0.001 |
-| `mtr_s_total` | 32287 Apparent power | I32 | 1000 (kVA) | 1.0 |
-| `mtr_p_l1/l2/l3` | 32335/37/39 | I32 | 1000 (kW) | 1.0 |
-| `mtr_imp_energy_total` | 32357 Positive active | I64 | 100 (kWh) | 0.01 |
-| `mtr_exp_energy_total` | 32349 Negative active | I64 | 100 (kWh) | 0.01 |
-| `mtr_reactive_imp_energy_total` | 32361 Positive reactive | I64 | 100 | 0.01 |
-| `mtr_reactive_exp_energy_total` | 32353 Negative reactive | I64 | 100 | 0.01 |
+| `u_l1/l2/l3` | 32260/62/64 | U32 | 100 | 0.01 |
+| `u_l12/l23/l31` | 32266/68/70 | U32 | 100 | 0.01 |
+| `i_l1/l2/l3` | 32272/74/76 | I32 | 10 | 0.1 |
+| `p_total` | 32278 | I32 | 1000 (kW) | 1.0 |
+| `q_total` | 32280 | I32 | 1000 (kVar) | 1.0 |
+| `pf_total` | 32284 | I16 | 1000 | 0.001 |
+| `s_total` | 32287 Apparent power | I32 | 1000 (kVA) | 1.0 |
+| `p_l1/l2/l3` | 32335/37/39 | I32 | 1000 (kW) | 1.0 |
+| `imp_energy_total` | 32357 Positive active | I64 | 100 (kWh) | 0.01 |
+| `exp_energy_total` | 32349 Negative active | I64 | 100 (kWh) | 0.01 |
+| `reactive_imp_energy_total` | 32361 Positive reactive | I64 | 100 | 0.01 |
+| `reactive_exp_energy_total` | 32353 Negative reactive | I64 | 100 | 0.01 |
 
 Braki: Q/S/PF per‑faza, energia per‑faza, częstotliwość.
 
@@ -82,6 +82,10 @@ ani w rejestrach plant, ani w tablicy licznika, ani w remapowanych rejestrach
 falowników (2.7). To jedyna wielkość, której nie da się ani odczytać, ani
 policzyć z innych. Podajemy stałą 50.0 Hz przez regułę `constant`.
 
+Punkty w obu tabelach noszą **zwykłe nazwy kanoniczne**, bez prefiksów: mostek
+SmartLoggera jest pełnoprawnym DTSU666 i wypełnia własny model. W metrykach
+rozdziela je etykieta `bridge`.
+
 ### „Gain" nie wymaga nowego pojęcia
 
 Huawei dokumentuje Gain jako dzielnik (`wartość = raw / Gain`). Istniejący
@@ -89,111 +93,169 @@ Huawei dokumentuje Gain jako dzielnik (`wartość = raw / Gain`). Istniejący
 jedną liczbę. Dla mocy wychodzi szczególnie czysto: I32 Gain 1000 w kW → SI w
 watach to `raw/1000 × 1000` = `raw`, czyli `scale: 1.0`.
 
+## Architektura: dwa niezależne mostki w jednym procesie
+
+Klient potrzebuje **dwóch osobnych liczników**, każdego na własnym sprzętowym
+porcie RS485, a nie jednego licznika łączącego dwa źródła:
+
+| | mostek `nd45` | mostek `smartlogger` |
+|---|---|---|
+| źródło | Lumel ND45 (Modbus TCP, float32) | Huawei SmartLogger (Modbus TCP, logic ID 0) |
+| wyjście | DTSU666 / RS485 `/dev/ttyAMA2` | DTSU666 / RS485 `/dev/ttyAMA3` |
+| co widzi Sigenergy | bilans przyłącza | produkcja farmy PV |
+| `safety.max_data_age_s` | 3.0 s (poll 0,3 s) | 30.0 s (poll 5 s) |
+
+```
+                      ┌─ bridge "nd45" ──────────────────────────────────┐
+ND45 (TCP) ──FC03──>  │ poller → CanonicalStore → datastore → RTU server │──> Sigenergy A
+                      │              │                          ▲        │    /dev/ttyAMA2
+                      │        HealthGate(3.0s) ─────────────────┘        │
+                      └──────────────────────────────────────────────────┘
+                      ┌─ bridge "smartlogger" ───────────────────────────┐
+SmartLogger ──FC03──> │ poller → CanonicalStore → datastore → RTU server │──> Sigenergy B
+                      │              │                          ▲        │    /dev/ttyAMA3
+                      │        HealthGate(30.0s) ────────────────┘        │
+                      └──────────────────────────────────────────────────┘
+proces: jeden event loop · jeden endpoint Prometheusa · watchdog na żywotność loopa
+```
+
+Mostki nie dzielą **niczego**: osobny klient, `CanonicalStore`, datastore, bramka
+świeżości, transport, licznik pollów, stan serwera. Kod warstwy serwera
+(`supervise_server`, `build_context`, `make_server`, `update_datastore`) był już w
+pełni sparametryzowany, więc dwa mostki to zmiana w wiring, nie w tej warstwie.
+
 ## Decyzje projektowe
 
-### 1. ND45 pozostaje jedynym źródłem rejestrów DTSU
+### 1. Fail-safe jest per mostek
 
-Rejestr 40525 to **produkcja PV**, nie bilans przyłącza. Sigenergy czyta licznik
-jako *Power Sensor* w punkcie przyłączenia (import +, eksport −) i na tej
-podstawie reguluje baterię. Podanie produkcji tam, gdzie oczekiwany jest bilans,
-zafałszowałoby regulację.
+Zestarzenie danych mostka wycisza **wyłącznie jego** RS485, żeby Sigenergy po tej
+szynie zobaczyło timeout i weszło we własny safe mode. Zweryfikowane na żywo w
+obie strony (`tests/test_bridge_isolation.py` + przebieg na prawdziwych socketach):
+zabicie SmartLoggera zostawia port A serwujący −60000 W, a zabicie ND45 zostawia
+port B serwujący 1,2345 MW.
 
-Dane z SmartLoggera wchodzą więc jako **osobne punkty kanoniczne** z prefiksami
-`pv_*` (plant) i `mtr_*` (licznik), widoczne w Prometheusie i w `monitor`, ale
-domyślnie bez celu w mapach DTSU. Mechanizm `from` w `registers.json` i tak je
-rozwiąże, gdyby na miejscu trzeba było przekierować `p_total` na `pv_p_total` —
-bez zmiany kodu.
+To odwraca decyzję z wcześniejszej iteracji tego dokumentu, gdzie dane z Huawei
+były telemetrią, która celowo *nie* bramkowała wyjścia. Przy dwóch niezależnych
+licznikach właściwym zachowaniem jest normalny fail-safe każdego z nich.
 
-### 2. Świeżość bramkowana per źródło (własność bezpieczeństwa)
+### 2. Progi świeżości muszą być osobne
 
-`canonical.MergedStore` trzyma po jednym `CanonicalStore` na źródło i **deleguje
-`age()`/`is_fresh()` wyłącznie do primary (ND45)**. Wyjście DTSU jest wyciszane
-tylko wtedy, gdy zestarzeją się dane, na których Sigenergy reguluje.
+`safety.max_data_age_s` = 3.0 s jest właściwe dla ND45 (poll 0,3 s), ale dla
+SmartLoggera odpytywanego co 5 s oznaczałoby permanentny fail-safe. Stąd walidator
+`AppConfig._check_freshness_threshold_allows_polling`: **`max_data_age_s ≥ 2 ×
+poll_interval_s`** dla każdego mostka. Łapie dokładnie ten błąd, który w polu
+wygląda jak awaria źródła.
 
-Powód: SmartLogger to koncentrator agregujący dane z falowników po RS485.
-Odświeżanie liczone jest w sekundach, a dokument (4.2.4) dopuszcza 5 s timeout
-Modbus. Przy `safety.max_data_age_s: 3.0` wspólna bramka zrobiłaby z mostka
-permanentny fail‑safe. Dlatego `huawei.max_data_age_s` jest osobne i domyślnie
-60 s — i **nigdy** nie bramkuje wyjścia.
+### 3. Kolizja portów RS485 odrzucana przy starcie
 
-Zweryfikowane na żywo: przy całkowicie nieosiągalnym SmartLoggerze
-(`source_connected 0`, `source_data_age_seconds +Inf`, 6 nieudanych pollów)
-`nd45_data_fresh` = 1, `dtsu_server_up` = 1, a Sigenergy nadal czyta poprawne
-−60000 W.
+Najgroźniejsza pomyłka konfiguracyjna: dwa mostki na tym samym `/dev/tty*` biłyby
+się o urządzenie, a `listen()` w pymodbus 3.6.9 zjada `OSError` — przegrywający
+zawiesiłby się w ciszy, zamiast paść. `_check_output_transports_do_not_collide`
+odrzuca to przy wczytaniu configu (i analogicznie kolizję `host:port` dla TCP).
+`slave_id` **może** się powtarzać, bo szyny są elektrycznie niezależne.
 
-### 3. Watchdog karmi wyłącznie poller ND45
+### 4. Zawieszony poller naprawiany w procesie, bez restartu usługi
 
-Callback SmartLoggera świadomie **nie** dotyka `Heartbeat`. Gdyby dotykał, żywy
-poller SmartLoggera utrzymywałby watchdoga zadowolonym przy genuinie zawieszonym
-pollerze ND45 i systemd nigdy by nie zrestartował usługi.
+Restart przez systemd ubiłby oba mostki. Dlatego `app.supervise_poller` nadzoruje
+poller każdego mostka osobno: gdy `heartbeat` nie ruszy się dłużej niż
+`source.stall_timeout_s`, anuluje task, zamyka klienta, buduje nowego przez
+`client_factory`, łączy i startuje poller od nowa. Licznik `recovery.restarts` idzie
+do Prometheusa.
 
-### 4. Kolejność scalania: primary zawsze wygrywa
+Ważne rozróżnienie: **źródło nieosiągalne to nie zawieszenie**. `run_poller`
+przechodzi wtedy przez swoją ścieżkę błędu, dotyka heartbeatu i kręci się dalej —
+dane się starzeją, `supervise_server` wycisza wyjście, i nic nie jest odbudowywane.
+Odzysk dotyczy tylko `await`, który nigdy nie wraca. Pilnuje tego test
+`test_a_healthy_poll_loop_is_never_rebuilt`.
 
-Każdy poll zapisuje do datastore **sumę** wszystkich źródeł, żeby poller, który
-właśnie się odpalił, nie wyzerował punktów drugiego. `build_on_update` przyjmuje
-`beneath=` (wartości scalane pod naszymi) i `above=` (scalane na nasze); poller
-SmartLoggera dostaje `above=(store_nd45,)`, więc nie jest w stanie przesłonić
-pomiaru z przyłącza nawet przy kolizji nazw.
+**Trade-off do świadomego przyjęcia:** wcześniej zawieszony poller ND45 powodował
+restart usługi przez systemd. Teraz nie powoduje. Zysk: awaria jednego mostka nie
+zrzuca drugiego. Koszt: jeśli sam odzysk okaże się niewystarczający, nie ma już
+zewnętrznej siatki bezpieczeństwa dla tego przypadku — dlatego
+`nd45_dtsu666_bridge_poller_restarts_total` **musi** być w alertach. Rosnący licznik
+oznacza, że odzysk kręci się w kółko.
 
-### 5. `compute_derived` NIE jest wołane w pollerze Huawei
+`watchdog_loop` śledzi teraz **żywotność event loopa** (ticker `app.loop_ticker`), a
+nie postęp pollera. Do systemd eskaluje wyłącznie zaklinowany loop albo martwy
+proces. `WatchdogSec=90` bez zmian.
 
-`compute_derived` czyta nieprefiksowane `imp_energy_total`/`exp_energy_total`,
-których mapa Huawei nie ma — wpisałoby zera w `active_energy_total` i `net_*` na
-miejsce prawdziwej energii z ND45. Test
-`test_huawei_poll_never_emits_unprefixed_canonical_names` tego pilnuje.
+### 5. Konfiguracja: lista mostków bez migracji istniejących plików
 
-Sama funkcja przeniosła się z `nd45_poller.py` do `canonical.py` (to logika
-modelu kanonicznego wspólna dla wszystkich źródeł, nie logika ND45);
-w `nd45_poller` został re‑export dla istniejących importerów.
+Klucze `nd45`/`dtsu`/`safety` **zostają na wierzchu** jako pierwszy mostek
+(`AppConfig.PRIMARY_BRIDGE_NAME = "nd45"`), więc `config.json` i wszystkie 6 plików
+`config_debug_*.json` walidują bez zmian. Kolejne mostki dochodzą w liście
+`bridges`. Kod czyta wyłącznie `AppConfig.bridge_specs`, które składa jedno z
+drugim, więc jest jedna ścieżka wykonania niezależnie od formatu pliku.
 
-### 6. Nieprawidłowe wartości nie odrzucają całej próbki
+Nazwa `nd45` jest zarezerwowana, nazwy muszą być unikalne, a wpis wyłączony
+(`enabled: false`) może mieć puste `host` — dzięki temu mostek B jest wysłany
+gotowy do włączenia jednym polem.
+
+### 6. Nazwy kanoniczne bez prefiksów
+
+Mostek B jest pełnoprawnym DTSU666, więc wypełnia **własne 36 punktów** zwykłymi
+nazwami (`p_total`, `u_l1`, …) — żadnych `pv_*`/`mtr_*`. Rozdziela je etykieta
+`bridge` w metrykach, nie nazwa punktu. Mapy celu (`dtsu_target`,
+`dtsu_sigen_ext_target`, `dtsu_sigen_ext_energy`, `dtsu_sigen_identity`) są
+**wspólne** dla obu mostków; różnicuje je tylko `ct_ratio` z własnego
+`dtsu.identity.ir_at`, przekazywany do `update_datastore` jako parametr runtime.
+
+Poller Huawei **wywołuje** `compute_derived` — ma własny model kanoniczny i musi
+wypełnić `active_energy_total` oraz `net_*`, do których odwołują się mapy wyjściowe.
+
+### 7. Nieprawidłowe wartości nie odrzucają całej próbki
 
 ND45 przy niepoprawnym krytycznym kanale odrzuca cały sample (`PollError`).
-SmartLogger — nie: to źródło telemetryczne, które nie bramkuje wyjścia, więc
-sentinel „wartość nieprawidłowa" (max typu: `0x7FFF`, `0xFFFF`, `0x7FFFFFFF`, …)
-zeruje jeden punkt, loguje raz na epizod, a reszta poll'a ląduje normalnie.
-`codec.decode_int_point` zwraca dla sentinela NaN, więc wołający używa tego
-samego `math.isfinite`, co ścieżka float32.
+SmartLogger — nie: sentinel „wartość nieprawidłowa" (max typu: `0x7FFF`, `0xFFFF`,
+`0x7FFFFFFF`, …) zeruje jeden punkt, loguje raz na epizod, a reszta poll'a ląduje.
+Przy źródle odświeżanym co 5 s utrata całej próbki z powodu jednego odłączonego
+falownika byłaby zbyt kosztowna. Źródło faktycznie nieosiągalne nadal rzuca z
+`read_groups`, więc dane się starzeją i wyjście jest wyciszane jak należy.
+`codec.decode_int_point` zwraca dla sentinela NaN, więc wołający używa tego samego
+`math.isfinite`, co ścieżka float32.
 
-### 7. Reguły pochodne deklaratywnie w `registers.json`
+### 8. Reguły pochodne deklaratywnie w `registers.json`
 
 Zgodnie z zasadą projektu „mapy edytuje się bez ruszania kodu". Operacje
 (`canonical.apply_derive`, wykonywane w kolejności listy):
 
 | `op` | znaczenie | użycie |
 |---|---|---|
-| `constant` | wartość stała | `pv_freq: 50.0`, zerowe liczniki |
-| `copy` | jeden punkt do wielu | PF per‑faza z PF total |
-| `split_equal` | `from / n` | P/Q/S per‑faza z totali |
+| `constant` | wartość stała | `freq: 50.0`, zerowe liczniki |
+| `copy` | jeden punkt do wielu | PF per-faza z PF total |
+| `split_equal` | `from / n` | P/Q/S per-faza z totali |
 | `phase_from_line` | `U_line / √3` | napięcia fazowe z międzyfazowych |
 | `hypot` | `√(a² + b²)` | moc pozorna z P i Q |
-| `ratio_split` | rozdział wg wag | Q per‑faza proporcjonalnie do P per‑faza |
-| `pf_from_p_s` | `P/S`, `S=0 → 1.0` | PF per‑faza |
+| `ratio_split` | rozdział wg wag | Q per-faza proporcjonalnie do P per-faza |
+| `pf_from_p_s` | `P/S`, `S=0 → 1.0` | PF per-faza |
 
-`ratio_split` dla licznika przy sumie wag ≈ 0 (noc, brak produkcji) spada na
-równy podział — proporcje nie niosą wtedy informacji.
+`ratio_split` przy sumie wag ≈ 0 (noc, brak produkcji) spada na równy podział —
+proporcje nie niosą wtedy informacji.
 
 ## Nowe/zmienione moduły
 
 | Plik | Zmiana |
 |---|---|
 | `codec.py` | `INT_DTYPES`, `register_width`, `registers_to_int`, `int_sentinel`, `int_is_invalid`, `decode_int_point`. Ścieżka float32 nietknięta. |
-| `config.py` | `SourcePoint.dtype`/`.width`, `ReadGroup`, `DeriveOp`, `SourceSide.read_groups/address_offset/derive` + walidator pokrycia, `HuaweiConf`, opcjonalne `huawei_*_source` w `RegisterMap` |
-| `canonical.py` | `MergedStore`, `apply_derive`, przeniesione `compute_derived` |
-| `huawei_poller.py` | **nowy** — `poll_once`, `select_sources`, `read_groups`, `decode_source` |
-| `nd45_poller.py` | `run_poller(..., poll_once_fn=)`; re‑export `compute_derived` |
-| `app.py` | drugi klient/store/poller w `build_pipeline`, `huawei_client=` seam, `FaultReporter(label=)`, `beneath=`/`above=` w `build_on_update` |
-| `metrics.py` | rodzina `*_source_*{source="huawei"}`; istniejące `nd45_*` bez zmian |
-| `monitor.py` | panel „PV production (SmartLogger, telemetry)" |
+| `config.py` | `SourcePoint.dtype`/`.width`, `ReadGroup`, `DeriveOp`, `SourceSide.read_groups/address_offset/derive`, `Nd45SourceConf`/`HuaweiSourceConf`/`BridgeConf`, `AppConfig.bridges` + `bridge_specs`, walidatory kolizji i progów, `RegisterMap.targets`/`source_by_name` |
+| `canonical.py` | `apply_derive`, przeniesione `compute_derived` |
+| `huawei_poller.py` | **nowy** — `poll_once` zgodne sygnaturą z ND45, `read_groups`, `decode_source` |
+| `nd45_poller.py` | `run_poller(..., poll_once_fn=)`; re-export `compute_derived` |
+| `app.py` | `BridgeRuntime`, `Pipeline` z listą mostków + akcesory zgodności, `build_pipeline` w pętli, `supervise_poller` z odzyskiem, `loop_ticker`, `_POLL_ONCE` |
+| `watchdog.py` | `watchdog_loop` na żywotność loopa |
+| `metrics.py` | `BridgeMetrics`, `RecoveryStats`, rodziny `_bridge_*{bridge=...}`, `/healthz` po wszystkich mostkach, aliasy mostka A |
+| `monitor.py` | para paneli na mostek |
+| `rtudebug.py`, `diagnostics.py`, `static_debug.py`, `__main__.py` | wybór mostka przez `--bridge` |
 
 ## Zgodność wstecz
 
-Przy `huawei.enabled: false` (domyślnie) mostek buduje się i zachowuje dokładnie
-jak wcześniej: 2 korutyny, brak `merged_store`, scrape Prometheusa bez żadnej
-rodziny `*_source_*`. Sekcje `huawei_*_source` w `RegisterMap` są opcjonalne,
-więc wszystkie 6 plików `config_debug_*.json` walidują bez zmian. Pilnują tego
-`test_build_pipeline_without_huawei_builds_exactly_two_coros` i
-`test_no_secondary_families_when_huawei_is_disabled`.
+Przy `config.json` bez włączonych dodatkowych mostków proces buduje dokładnie jeden
+mostek i 2 korutyny, a scrape Prometheusa zawiera wszystkie dotychczasowe
+nieetykietowane rodziny `nd45_*`/`dtsu_*` (emitowane jako aliasy pierwszego mostka,
+żeby wdrożone dashboardy nie padły). Pilnują tego
+`test_legacy_config_without_bridges_builds_exactly_one_bridge`,
+`test_single_bridge_emits_no_second_bridge_series` i
+`test_primary_aliases_keep_the_original_unlabelled_families`.
 
 ## Do potwierdzenia przy rozruchu (nie da się z testów)
 
@@ -204,10 +266,19 @@ więc wszystkie 6 plików `config_debug_*.json` walidują bez zmian. Pilnują te
    nieznany, `meter_unit_id: null` i działa tylko ścieżka plant.
 3. **Realne tempo odświeżania.** Jeśli przekroczy `huawei.max_data_age_s: 60.0`,
    podnieść ten próg — a **nie** `safety.max_data_age_s`.
-4. **Znak `pv_p_total`.** Czy 40525 jest dodatni przy produkcji.
+4. **Znak `p_total` na mostku B.** Czy 40525 jest dodatni przy produkcji.
 5. **Rozdzielczość prądów plant.** Gain 1 (I16) to krok 1 A i przepełnienie
    powyżej 32767 A. Przy większej farmie prądy fazowe z device 0 są orientacyjne;
    wiarygodne wartości daje wyłącznie ścieżka licznika.
-6. **Sens biznesowy ścieżki plant.** Produkcja PV ≠ bilans przyłącza. Jeśli
-   Sigenergy ma naprawdę regulować na danych z Huawei, właściwym źródłem jest
-   licznik na przyłączu (wariant B), nie rejestry plant.
+6. **Czy `/dev/ttyAMA3` jest włączony** w device tree reComputera R1000
+   (`ls -l /dev/ttyAMA*`). Jeśli go nie ma, trzeba włączyć overlay — zadanie
+   systemowe, nie kod. Konfiguracja odrzuci start, jeśli oba mostki trafią na ten
+   sam port, ale nie potrafi wyczarować portu, którego nie ma.
+7. **Kierunek RS-485 na drugim porcie** — ten sam sprawdzian co dla `ttyAMA2`.
+8. **Przekładnia CT mostka B** (`ir_at: 200`, skopiowana z mostka A). Mostek B
+   reprezentuje inny licznik i przy 1,2 MW warto sprawdzić, czy Sigenergy po tej
+   szynie czyta sensowne wartości na mapie FC03 (dzielonej przez `ir_at`).
+9. **Sens biznesowy ścieżki plant.** Produkcja PV ≠ bilans przyłącza. Jeśli
+   Sigenergy na szynie B ma regulować, a nie tylko raportować, właściwym źródłem
+   jest licznik na przyłączu (`register_map: "huawei_meter_source"`), nie rejestry
+   plant. Przełączenie to jedno pole w `config.json`.

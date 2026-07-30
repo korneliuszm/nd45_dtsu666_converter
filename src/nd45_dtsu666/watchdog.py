@@ -14,7 +14,12 @@ log = logging.getLogger(__name__)
 
 
 class Heartbeat:
-    """Tracks the last time a monitored loop (ND45 connect/poll) made progress."""
+    """Tracks the last time a monitored loop made progress.
+
+    Used for two distinct jobs: one per bridge, tracking that bridge's poll loop
+    (watched by app.supervise_poller, which rebuilds a stalled loop in-process),
+    and one process-wide, tracking event-loop liveness (watched by watchdog_loop).
+    """
 
     def __init__(self) -> None:
         self._last: float | None = None
@@ -78,6 +83,11 @@ async def watchdog_loop(
     Pings at watchdog_sec/2 (systemd's own recommendation). If the tracked
     loop has stalled longer than the full watchdog_sec, stops pinging so
     systemd's WatchdogSec fires and Restart=always restarts the service.
+
+    `heartbeat` is now the *event-loop liveness* ticker, not a poller's progress.
+    Restarting the process takes every bridge down at once, so a single stalled
+    poll loop is rebuilt in-process by app.supervise_poller and only a wedged
+    event loop escalates this far.
     """
     interval = watchdog_sec / 2
     while not stop_event.is_set():

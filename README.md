@@ -1,8 +1,10 @@
 # nd45_dtsu666_converter
 
-Temporary Modbus bridge: Lumel ND45 (Modbus TCP) → DTSU666 register map, served as
-either Modbus RTU or Modbus TCP (config-selectable) so a Sigenergy storage system can
-read it as a "Power Sensor".
+Temporary Modbus bridge: one or more independent source → DTSU666 translators in a
+single process, each served as Modbus RTU or Modbus TCP (config-selectable) so a
+Sigenergy storage system can read it as a "Power Sensor". The deployment here runs
+two: a Lumel ND45 on `/dev/ttyAMA2` (grid-tie balance) and a Huawei SmartLogger on
+`/dev/ttyAMA3` (PV farm production). See "Multiple bridges in one process".
 
 The output exposes both the standard DTSU666 holding-register map over FC03 (secondary/
 CT side, `0x2000`/`0x101E`) and the Sigenergy OEM map over FC04 (primary side, `0x150A`
@@ -48,56 +50,112 @@ the MBAP header for TCP) and must match what Sigenergy is configured to poll.
 The optional `prometheus` section controls the metrics endpoint (see below); omit it
 to accept the defaults.
 
-## Optional second source: Huawei SmartLogger
+## Multiple bridges in one process
 
-The bridge can additionally poll a **Huawei SmartLogger** over Modbus TCP to report
-the PV farm's production alongside the grid-tie measurement. Disabled by default —
-with `huawei.enabled` false, nothing about the bridge changes.
+The process can run **several fully independent bridges**, each with its own
+upstream source, its own served DTSU666 datastore, and its own output transport.
+The intended deployment here is two:
+
+| | bridge `nd45` | bridge `smartlogger` |
+|---|---|---|
+| source | Lumel ND45 (Modbus TCP, float32) | Huawei SmartLogger (Modbus TCP) |
+| output | RS-485 `/dev/ttyAMA2` | RS-485 `/dev/ttyAMA3` |
+| what Sigenergy sees | grid-tie balance | PV farm production |
+| `safety.max_data_age_s` | 3.0s (polled every 0.3s) | 30.0s (polled every 5s) |
+
+Bridges share the event loop and the Prometheus endpoint and **nothing else**:
+separate client, canonical store, datastore, freshness gate and transport. One
+source going dark silences that bridge's RS-485 alone, so the Sigenergy on that bus
+sees a meter timeout and enters its own safe mode while the other bus keeps serving.
+
+### Configuration
+
+The top-level `nd45` / `dtsu` / `safety` keys **are** the first bridge, so a config
+file written before multi-bridge support loads unchanged. Extra bridges go in
+`bridges`:
 
 ```json
-"huawei": {
-  "enabled": true,
-  "host": "192.168.22.120",
-  "port": 502,
-  "plant_unit_id": 0,        // SmartLogger's own aggregated registers
-  "meter_unit_id": null,     // RS485 address of a power meter behind it, or null
-  "poll_interval_s": 5.0,
-  "timeout_s": 6.0,          // the manual allows a 5s Modbus timeout
-  "max_data_age_s": 60.0     // staleness for telemetry only; never gates the output
-}
+"bridges": [
+  {
+    "name": "smartlogger",
+    "enabled": false,
+    "source": {
+      "type": "huawei", "host": "192.168.22.120", "port": 502, "unit_id": 0,
+      "register_map": "huawei_plant_source",
+      "poll_interval_s": 5.0, "timeout_s": 6.0, "stall_timeout_s": 60.0
+    },
+    "dtsu": {
+      "transport": "rtu", "slave_id": 10,
+      "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10},
+      "rtu": {"port": "/dev/ttyAMA3", "baudrate": 9600, "parity": "N", "stopbits": 1}
+    },
+    "safety": {"max_data_age_s": 30.0, "check_interval_s": 0.5}
+  }
+]
 ```
 
-Two independent register sets are supported, both mapped in `config/registers.json`:
+Shipped with `enabled: false` — fill in `host` and flip it to turn the second bridge
+on. `slave_id` may repeat across bridges (the RS-485 buses are electrically
+independent); the serial port may not. Config load fails fast on:
 
-| | `huawei_plant_source` (logic device 0) | `huawei_meter_source` (logic device = RS485 addr) |
+- two bridges on one serial port (or one TCP bind) — pymodbus 3.6.9's `listen()`
+  swallows the resulting `OSError`, so the loser would hang silently instead of
+  failing
+- `safety.max_data_age_s` below twice `source.poll_interval_s` — that parks a bridge
+  in permanent fail-safe, which in the field looks exactly like a dead source
+- a duplicate or reserved bridge name, or a metrics port colliding with any bridge
+
+### Source types and register maps
+
+`source.type` selects the decoder, `source.register_map` the section of
+`config/registers.json` it decodes:
+
+| `register_map` | source | canonical points read directly |
 |---|---|---|
-| what it measures | PV production, aggregated from all inverters | the power meter behind the SmartLogger |
-| canonical points read directly | 10 of 36 | 20 of 36 |
-| point-name prefix | `pv_` | `mtr_` |
+| `nd45_source` | ND45, float32 | 36 of 36 |
+| `huawei_plant_source` | SmartLogger's own plant registers (logic device 0) | 10 of 36 |
+| `huawei_meter_source` | a power meter behind the SmartLogger (its RS-485 address) | 20 of 36 |
 
-Neither set covers the whole canonical model, so the maps carry declarative
+Neither Huawei set covers the whole canonical model, so those maps carry declarative
 `derive` rules (`split_equal`, `phase_from_line`, `hypot`, `ratio_split`,
 `pf_from_p_s`, `copy`, `constant`) that fill the rest — editable on site without
-touching code, like the register maps themselves. **Grid frequency appears nowhere
-in the SmartLogger manual**, so it is a `constant` (50.0 Hz).
+touching code, like the register maps themselves. **Grid frequency appears nowhere in
+the SmartLogger manual**, so it is a `constant` (50.0 Hz). Every point uses plain
+canonical names; the `bridge` metric label is what separates the two.
 
-Two things worth knowing before relying on this:
+Note that `huawei_plant_source` reports PV *production*, not the grid *balance* a
+Sigenergy Power Sensor normally measures. That is the intent here — bridge B is a
+separate meter reporting the farm — but if the Sigenergy on that bus is meant to
+*regulate* rather than just report, the semantically correct source is a meter at the
+grid-tie point (`"register_map": "huawei_meter_source"` plus that meter's RS-485
+address in `unit_id`).
 
-- **The ND45 remains the only source of the registers Sigenergy reads.** Register
-  40525 is PV *production*, not the grid *balance* Sigenergy regulates on, so PV
-  points are telemetry (Prometheus + `monitor`) rather than DTSU output. If you do
-  want Sigenergy fed from Huawei, the semantically correct source is a meter at the
-  grid-tie point (`meter_unit_id`), and you point the DTSU targets' `from` fields at
-  `mtr_*` in `registers.json` — no code change needed.
-- **A SmartLogger outage never silences the bridge.** Freshness is gated per source:
-  the DTSU output follows the ND45 alone, so a SmartLogger that has been dark for an
-  hour leaves a healthy bridge serving. A stale PV panel next to a `SERVING` state is
-  expected, not a fault.
+### Observability
 
-Per-source health is exported as `nd45_dtsu666_source_*{source="huawei"}` (the existing
-`nd45_*` families are unchanged), and `monitor` grows a PV production panel.
+Per-bridge series carry a `bridge` label:
+`nd45_dtsu666_bridge_data_age_seconds{bridge="smartlogger"}`,
+`_bridge_dtsu_server_up`, `_bridge_polls_total`, `_bridge_poller_restarts_total`,
+`_bridge_canonical_value{point=...}`. The original unlabelled `nd45_*` / `dtsu_*`
+families are still emitted as aliases for the first bridge, so existing dashboards
+keep working. `/healthz` returns 200 only when **every** bridge is fresh and names
+the stale ones. `monitor` shows one panel pair per bridge.
 
-Design notes and the full coverage matrix:
+### Hung-poller recovery, and what changed in the watchdog
+
+A restart by systemd would take **every** bridge down, so a poll loop that stops
+making progress for `source.stall_timeout_s` is now torn down and rebuilt in place
+(fresh client, reconnect, restart) by `app.supervise_poller`, per bridge. The
+systemd watchdog therefore watches **event-loop liveness** instead of poller
+progress, and only a wedged loop or a dead process escalates to a restart.
+
+An unreachable source is *not* a stall: the poller keeps cycling through its error
+path, the data goes stale, and `supervise_server` silences that bridge — no rebuild.
+
+The trade-off to accept: a hung poller no longer has an external safety net. Alert on
+`nd45_dtsu666_bridge_poller_restarts_total` — a rising counter means recovery is
+looping rather than fixing anything.
+
+Design notes and the full register-coverage matrix:
 [`docs/superpowers/specs/2026-07-30-huawei-smartlogger-source-design.md`](docs/superpowers/specs/2026-07-30-huawei-smartlogger-source-design.md).
 
 ## Prometheus metrics
@@ -323,20 +381,27 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
    combined active energy, distinct Q+/Q- counters, and non-zero total and per-phase
    export energy. Continue to capture the installation under load to verify its sign,
    phase order, and scaling against the connected ND45.
-11. **Huawei SmartLogger source** (only if `huawei.enabled`) — five checks the test suite
+11. **Second bridge** (only if a `bridges` entry is enabled) — checks the test suite
     cannot cover:
-    - **Address base.** Huawei documents "40525"; some Modbus clients need `40524`
-      (0- vs 1-based). Probe with `mbpoll` *before* enabling the bridge, and correct via
-      `address_offset` on the source in `registers.json` — no code change needed.
-    - **Meter RS485 address.** Read it from the SmartLogger LCD/WebUI. Until it is known,
-      leave `meter_unit_id: null`; only the plant path runs.
-    - **Refresh rate.** Watch `nd45_dtsu666_source_data_age_seconds{source="huawei"}`. If
-      it regularly exceeds 60s, raise `huawei.max_data_age_s` — **not**
-      `safety.max_data_age_s`, which gates the DTSU output.
-    - **Production sign.** Confirm `pv_p_total` is positive while generating.
-    - **Plant current resolution.** Registers 40572-74 have Gain 1 (I16): a 1 A step and
-      overflow past 32767 A. On a larger farm treat those phase currents as indicative;
-      only the meter path gives trustworthy values.
-    Then pull the SmartLogger cable and confirm the bridge keeps serving: `dtsu_server_up`
-    stays 1 and `nd45_data_fresh` stays 1 while `source_connected{source="huawei"}` drops
-    to 0. A secondary source must never be able to silence the output.
+    - **`/dev/ttyAMA3` exists.** `ls -l /dev/ttyAMA*` on the device. If the second
+      UART is not enabled in the device tree it will not be there, and that is a
+      system-level fix (overlay), not a code one. Config load rejects two bridges
+      sharing a port, but it cannot conjure a port that does not exist.
+    - **RS-485 direction on the second port** — same check as item 7 for `ttyAMA2`.
+    - **Address base of the SmartLogger.** Huawei documents "40525"; some Modbus
+      clients need `40524` (0- vs 1-based). Probe with `mbpoll` *before* enabling the
+      bridge, and correct via `address_offset` on the source in `registers.json`.
+    - **CT ratio of bridge B** (`ir_at`, copied from bridge A). Bridge B represents a
+      different meter; at MW-scale production confirm the Sigenergy on that bus reads
+      plausible values on the FC03 map, which divides by `ir_at`.
+    - **Refresh rate.** Watch `bridge_data_age_seconds{bridge="smartlogger"}`. If it
+      regularly exceeds `safety.max_data_age_s`, raise **that bridge's** threshold —
+      never the ND45 bridge's.
+    - **Production sign.** Confirm `p_total` on bridge B is positive while generating.
+    - **Plant current resolution.** Registers 40572-74 have Gain 1 (I16): a 1 A step
+      and overflow past 32767 A. On a larger farm treat those phase currents as
+      indicative; only `huawei_meter_source` gives trustworthy values.
+    Then pull each source cable in turn and confirm the isolation: killing the
+    SmartLogger must leave `bridge_dtsu_server_up{bridge="nd45"}` at 1 with port A
+    still answering, and killing the ND45 must leave bridge B serving. `/healthz`
+    names whichever bridge is stale.

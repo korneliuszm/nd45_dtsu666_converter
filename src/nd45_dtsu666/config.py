@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 
-from typing import Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -284,10 +284,40 @@ class RegisterMap(BaseModel):
     dtsu_sigen_ext_target: TargetSide
     dtsu_sigen_ext_energy: TargetSide
     dtsu_sigen_identity: StaticIdentitySide
-    # Optional so every shipped config_debug_*.json and existing registers.json
-    # keeps validating untouched. Required only when huawei.enabled is set.
+    # Optional so a registers.json written before the SmartLogger source landed
+    # keeps validating. Required only for a bridge whose source names it.
     huawei_plant_source: SourceSide | None = None
     huawei_meter_source: SourceSide | None = None
+
+    # The output maps are shared by every bridge -- they all emulate the same
+    # meter. Only the source section and the runtime CT ratio differ.
+    @property
+    def targets(self) -> list[tuple[str, TargetSide]]:
+        """(map name, side) pairs served by every bridge; name becomes a label."""
+        return [
+            ("dtsu_target", self.dtsu_target),
+            ("dtsu_sigen_ext_target", self.dtsu_sigen_ext_target),
+            ("dtsu_sigen_ext_energy", self.dtsu_sigen_ext_energy),
+        ]
+
+    def source_by_name(self, name: str) -> SourceSide:
+        """Resolve a bridge's `source.register_map` to its SourceSide.
+
+        Raises rather than falling back, so a typo or a missing optional section
+        fails at startup instead of presenting as a bridge that never polls.
+        """
+        side = getattr(self, name, None)
+        if not isinstance(side, SourceSide):
+            available = sorted(
+                key
+                for key, value in vars(self).items()
+                if isinstance(value, SourceSide)
+            )
+            raise ValueError(
+                f"registers.json has no source section {name!r} "
+                f"(available: {', '.join(available)})"
+            )
+        return side
 
 
 class Nd45Conf(BaseModel):
@@ -300,44 +330,68 @@ class Nd45Conf(BaseModel):
     reconnect_delay_max_s: float = 30.0  # max backoff for startup connect retry
 
 
-class HuaweiConf(BaseModel):
-    """Huawei SmartLogger as a secondary data source (Modbus TCP, port 502).
+class _SourceConfBase(BaseModel):
+    """Shared shape of a bridge's upstream Modbus TCP source."""
 
-    Disabled by default: with `enabled` false the bridge builds and behaves
-    exactly as it did before this source existed.
-
-    `max_data_age_s` is deliberately separate from (and much looser than)
-    safety.max_data_age_s. The SmartLogger is a concentrator that aggregates
-    inverter data over RS485, so its registers refresh in seconds, not the
-    ~0.3s of a directly wired analyser -- and its own manual allows a 5s Modbus
-    timeout. This threshold only marks the PV telemetry stale in metrics and the
-    dashboard; it never gates the DTSU output, which follows the ND45 alone.
-    """
-
-    enabled: bool = False
-    host: str = ""
+    host: str
     port: int = 502
-    # SmartLogger's own aggregated plant registers are logic device 0.
-    plant_unit_id: int | None = 0
-    # RS485 address of a power meter behind the SmartLogger; None = don't read.
-    meter_unit_id: int | None = None
-    poll_interval_s: float = Field(default=5.0, gt=0)
-    timeout_s: float = Field(default=6.0, gt=0)  # manual: 5s Modbus timeout
-    max_data_age_s: float = Field(default=60.0, gt=0)
-    reconnect_delay_s: float = 1.0
-    reconnect_delay_max_s: float = 30.0
+    unit_id: int
+    poll_interval_s: float = Field(gt=0)
+    timeout_s: float = Field(gt=0)
+    reconnect_delay_s: float = 1.0  # initial backoff for startup connect retry
+    reconnect_delay_max_s: float = 30.0  # max backoff for startup connect retry
+    # No poller progress for this long => the poll loop is treated as hung and
+    # its client is closed and rebuilt. Distinct from an unreachable source,
+    # which the poller already survives by cycling through its error path.
+    stall_timeout_s: float = Field(gt=0)
+    # Name of the registers.json section this source decodes.
+    register_map: str
 
     @model_validator(mode="after")
-    def _check_enabled_is_usable(self) -> "HuaweiConf":
-        if not self.enabled:
-            return self
-        if not self.host.strip():
-            raise ValueError("huawei.host is required when huawei.enabled is true")
-        if self.plant_unit_id is None and self.meter_unit_id is None:
+    def _check_stall_timeout_exceeds_poll_interval(self) -> "_SourceConfBase":
+        # A stall timeout at or below the poll interval would fire mid-cycle and
+        # rebuild the client forever, on a source that is working fine.
+        if self.stall_timeout_s <= self.poll_interval_s * 2:
             raise ValueError(
-                "huawei.enabled needs at least one of plant_unit_id / meter_unit_id"
+                f"stall_timeout_s ({self.stall_timeout_s}) must exceed twice "
+                f"poll_interval_s ({self.poll_interval_s})"
             )
         return self
+
+
+class Nd45SourceConf(_SourceConfBase):
+    """Lumel ND45 power analyser: float32 registers, sub-second polling."""
+
+    type: Literal["nd45"] = "nd45"
+    unit_id: int = 1
+    poll_interval_s: float = Field(default=0.3, gt=0)
+    timeout_s: float = Field(default=1.0, gt=0)
+    stall_timeout_s: float = Field(default=30.0, gt=0)
+    register_map: str = "nd45_source"
+
+
+class HuaweiSourceConf(_SourceConfBase):
+    """Huawei SmartLogger: sized-integer registers, seconds-scale refresh.
+
+    The SmartLogger is a concentrator that aggregates inverter data over RS485,
+    so its registers refresh far more slowly than a directly wired analyser's,
+    and its own manual (section 4.2.4) allows a 5s Modbus timeout. A bridge fed
+    from it therefore needs a much looser `safety.max_data_age_s` than the ND45
+    bridge -- see AppConfig._check_freshness_threshold_allows_polling.
+
+    `unit_id` selects which device the SmartLogger answers for: 0 is its own
+    aggregated plant registers, 1-247 an attached device's RS485 address.
+    """
+
+    type: Literal["huawei"]
+    unit_id: int = 0
+    poll_interval_s: float = Field(default=5.0, gt=0)
+    timeout_s: float = Field(default=6.0, gt=0)
+    stall_timeout_s: float = Field(default=60.0, gt=0)
+    register_map: str = "huawei_plant_source"
+
+
+SourceConf = Annotated[Nd45SourceConf | HuaweiSourceConf, Field(discriminator="type")]
 
 
 class DtsuRtuConf(BaseModel):
@@ -399,6 +453,32 @@ class SafetyConf(BaseModel):
     min_restart_interval_s: float = 5.0  # min gap between DTSU server (re)starts (anti-flap)
 
 
+class BridgeConf(BaseModel):
+    """One complete, independent source -> DTSU666 bridge.
+
+    Each bridge owns its upstream source, its own canonical store, its own
+    served datastore and its own output transport, and its fail-safe is judged
+    only against its own source. Nothing is shared with a sibling bridge, so one
+    source going dark silences that bridge's output alone.
+    """
+
+    name: str = Field(min_length=1)
+    enabled: bool = True
+    source: SourceConf
+    dtsu: DtsuConf
+    safety: SafetyConf = SafetyConf()
+
+    @model_validator(mode="after")
+    def _check_enabled_is_usable(self) -> "BridgeConf":
+        # Only enforced when enabled, so a bridge can ship pre-wired with an
+        # empty host as a template and be turned on once the address is known.
+        if self.enabled and not self.source.host.strip():
+            raise ValueError(
+                f"bridge {self.name!r} is enabled but source.host is empty"
+            )
+        return self
+
+
 class StaticDebugConf(BaseModel):
     feed_interval_s: float = Field(default=0.5, gt=0)
     values: dict[str, float] = Field(default_factory=dict)
@@ -431,12 +511,47 @@ class PrometheusConf(BaseModel):
 
 
 class AppConfig(BaseModel):
+    """Process configuration: one or more bridges plus process-wide settings.
+
+    The top-level `nd45` / `dtsu` / `safety` keys describe the first bridge and
+    are kept as-is, so every config file written before multi-bridge support
+    still loads unchanged. Additional bridges go in `bridges`. Read the assembled
+    list through `bridge_specs`, never the raw fields.
+    """
+
     nd45: Nd45Conf
     dtsu: DtsuConf
     safety: SafetyConf = SafetyConf()
+    # Bridges beyond the legacy top-level one.
+    bridges: list[BridgeConf] = Field(default_factory=list)
     static_debug: StaticDebugConf = StaticDebugConf()
-    prometheus: PrometheusConf = PrometheusConf()
-    huawei: HuaweiConf = HuaweiConf()
+    prometheus: PrometheusConf = PrometheusConf()  # process-wide, not per bridge
+
+    # Name given to the bridge assembled from the legacy top-level keys.
+    PRIMARY_BRIDGE_NAME: ClassVar[str] = "nd45"
+
+    @property
+    def bridge_specs(self) -> list[BridgeConf]:
+        """Every enabled bridge: the legacy top-level one first, then `bridges`.
+
+        Order matters: the first entry is what single-bridge callers (diag,
+        static, rtudebug) and the back-compat metric aliases refer to.
+        """
+        primary = BridgeConf(
+            name=self.PRIMARY_BRIDGE_NAME,
+            source=Nd45SourceConf(
+                host=self.nd45.host,
+                port=self.nd45.port,
+                unit_id=self.nd45.unit_id,
+                poll_interval_s=self.nd45.poll_interval_s,
+                timeout_s=self.nd45.timeout_s,
+                reconnect_delay_s=self.nd45.reconnect_delay_s,
+                reconnect_delay_max_s=self.nd45.reconnect_delay_max_s,
+            ),
+            dtsu=self.dtsu,
+            safety=self.safety,
+        )
+        return [primary, *(b for b in self.bridges if b.enabled)]
 
     @model_validator(mode="after")
     def _check_static_debug_freshness(self) -> "AppConfig":
@@ -447,26 +562,96 @@ class AppConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _check_bridge_names_unique(self) -> "AppConfig":
+        names = [b.name for b in self.bridges]
+        if self.PRIMARY_BRIDGE_NAME in names:
+            raise ValueError(
+                f"bridge name {self.PRIMARY_BRIDGE_NAME!r} is reserved for the "
+                "bridge built from the top-level nd45/dtsu/safety keys"
+            )
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate bridge name(s): {', '.join(duplicates)}")
+        return self
+
+    @model_validator(mode="after")
+    def _check_output_transports_do_not_collide(self) -> "AppConfig":
+        """Two bridges must not share an output transport.
+
+        The serial case is the dangerous one: two RTU servers on one /dev/tty*
+        would fight over the device, and pymodbus 3.6.9's listen() swallows the
+        resulting OSError, so the loser would hang silently rather than fail.
+        Catch it at load time instead.
+        """
+        serial_ports: dict[str, str] = {}
+        tcp_binds: dict[tuple[str, int], str] = {}
+        for bridge in self.bridge_specs:
+            dtsu = bridge.dtsu
+            if dtsu.transport == "rtu" and dtsu.rtu is not None:
+                owner = serial_ports.get(dtsu.rtu.port)
+                if owner is not None:
+                    raise ValueError(
+                        f"bridges {owner!r} and {bridge.name!r} both serve RTU on "
+                        f"{dtsu.rtu.port}; each bridge needs its own serial port"
+                    )
+                serial_ports[dtsu.rtu.port] = bridge.name
+            elif dtsu.transport == "tcp" and dtsu.tcp is not None:
+                key = (dtsu.tcp.host, dtsu.tcp.port)
+                owner = tcp_binds.get(key)
+                if owner is not None:
+                    raise ValueError(
+                        f"bridges {owner!r} and {bridge.name!r} both listen on "
+                        f"{dtsu.tcp.host}:{dtsu.tcp.port}"
+                    )
+                tcp_binds[key] = bridge.name
+        return self
+
+    @model_validator(mode="after")
     def _check_metrics_port_free(self) -> "AppConfig":
-        """Reject a metrics port that collides with the Modbus TCP output.
+        """Reject a metrics port that collides with any bridge's Modbus TCP output.
 
         Without this the DTSU TCP listener simply fails to bind and the bridge
         sits in fail-safe for a reason that is not obvious from the logs.
         """
-        if not self.prometheus.enabled or self.dtsu.transport != "tcp" or self.dtsu.tcp is None:
-            return self
-        if self.prometheus.port != self.dtsu.tcp.port:
+        if not self.prometheus.enabled:
             return self
         wildcards = {"0.0.0.0", "::"}
-        overlap = (
-            self.prometheus.host == self.dtsu.tcp.host
-            or self.prometheus.host in wildcards
-            or self.dtsu.tcp.host in wildcards
-        )
-        if overlap:
-            raise ValueError(
-                f"prometheus.port {self.prometheus.port} collides with dtsu.tcp.port"
+        for bridge in self.bridge_specs:
+            dtsu = bridge.dtsu
+            if dtsu.transport != "tcp" or dtsu.tcp is None:
+                continue
+            if self.prometheus.port != dtsu.tcp.port:
+                continue
+            overlap = (
+                self.prometheus.host == dtsu.tcp.host
+                or self.prometheus.host in wildcards
+                or dtsu.tcp.host in wildcards
             )
+            if overlap:
+                raise ValueError(
+                    f"prometheus.port {self.prometheus.port} collides with "
+                    f"bridge {bridge.name!r} dtsu.tcp.port"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _check_freshness_threshold_allows_polling(self) -> "AppConfig":
+        """Every bridge's fail-safe threshold must leave room for a poll cycle.
+
+        A max_data_age_s at or near the poll interval parks the bridge in
+        permanent fail-safe, which in the field is indistinguishable from a dead
+        source. This matters most for a SmartLogger bridge: the ND45's 3.0s is
+        ample at 0.3s polling, but reusing it for a source polled every 5s would
+        silence that output forever.
+        """
+        for bridge in self.bridge_specs:
+            floor = bridge.source.poll_interval_s * 2
+            if bridge.safety.max_data_age_s < floor:
+                raise ValueError(
+                    f"bridge {bridge.name!r}: safety.max_data_age_s "
+                    f"({bridge.safety.max_data_age_s}) must be at least twice "
+                    f"source.poll_interval_s ({bridge.source.poll_interval_s})"
+                )
         return self
 
 

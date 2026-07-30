@@ -113,41 +113,63 @@ class LoggingRtuActivity(RtuActivity):
 
 
 async def run_rtudebug(
-    config: AppConfig, registers: RegisterMap, stop_event: asyncio.Event
+    config: AppConfig, registers: RegisterMap, stop_event: asyncio.Event,
+    bridge_name: str | None = None,
 ) -> None:
-    """Run the bridge and log every DTSU register block read by Sigenergy."""
+    """Run every bridge, logging the DTSU register blocks one of them serves.
+
+    The logging recorder attaches to a single bridge (`bridge_name`, default the
+    first): the point of this mode is a readable trace of one Sigenergy master's
+    reads, and interleaving two buses would defeat that. The other bridges still
+    run normally so the process behaves as it does in production.
+    """
     index = RegisterNameIndex.build(
-        [registers.dtsu_target, registers.dtsu_sigen_ext_target, registers.dtsu_sigen_ext_energy],
+        [side for _name, side in registers.targets],
         registers.dtsu_sigen_identity,
     )
     activity = LoggingRtuActivity(index)
     pipe = build_pipeline(config, registers, stop_event, activity=activity, mode="rtudebug")
+    watched = pipe.primary if bridge_name is None else pipe.bridge(bridge_name)
     metrics_task = metrics.start(config, pipe.metrics, stop_event)
 
-    dtsu = config.dtsu
+    dtsu = watched.spec.dtsu
     where = dtsu.rtu.port if dtsu.transport == "rtu" and dtsu.rtu else str(dtsu.tcp)
     log.info(
-        "rtudebug: serving DTSU666 as slave %d over %s (%s); logging Sigenergy reads",
-        dtsu.slave_id,
-        dtsu.transport,
-        where,
+        "rtudebug: tracing bridge %r -- serving DTSU666 as slave %d over %s (%s)",
+        watched.name, dtsu.slave_id, dtsu.transport, where,
     )
+    others = [b.name for b in pipe.bridges if b.name != watched.name]
+    if others:
+        log.info("also running (untraced): %s", ", ".join(others))
     log.info("DTSU/Sigen register map (function / addr / words / name):")
     for line in index.reference_lines():
         log.info("%s", line)
 
-    if not await connect_with_retry(
-        pipe.client, stop_event,
-        config.nd45.reconnect_delay_s, config.nd45.reconnect_delay_max_s,
-    ):
-        for coro in pipe.coros:
-            coro.close()
-        await metrics.stop(metrics_task)
-        pipe.client.close()
-        return
-
+    connects = [
+        asyncio.create_task(
+            connect_with_retry(
+                bridge.client, stop_event,
+                bridge.spec.source.reconnect_delay_s,
+                bridge.spec.source.reconnect_delay_max_s,
+                heartbeat=bridge.heartbeat,
+            )
+        )
+        for bridge in pipe.bridges
+    ]
     try:
         await asyncio.gather(*pipe.coros)
     finally:
+        for task in connects:
+            task.cancel()
+        for task in connects:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001 - shutdown must not mask the exit reason
+                pass
         await metrics.stop(metrics_task)
-        pipe.client.close()
+        for bridge in pipe.bridges:
+            close = getattr(bridge.client, "close", None)
+            if close is not None:
+                close()

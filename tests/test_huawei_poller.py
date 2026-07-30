@@ -14,15 +14,13 @@ import pytest
 from nd45_dtsu666 import huawei_poller
 from nd45_dtsu666.codec import INT_DTYPES, int_sentinel
 from nd45_dtsu666.config import (
-    AppConfig,
+    STATIC_DEBUG_VALUE_KEYS,
     RegisterMap,
     SourceSide,
-    load_config,
     load_registers,
 )
 
 REGISTERS = load_registers("config/registers.json")
-CONFIG = load_config("config/config.json")
 
 
 def _regs(value: int, dtype: str) -> list[int]:
@@ -80,53 +78,51 @@ def _plant_image(overrides: dict[int, tuple[str, int]] | None = None) -> dict[in
 
 async def _poll_plant(overrides=None, **kwargs):
     client = FakeClient(_plant_image(overrides))
-    sources = [("huawei_plant", REGISTERS.huawei_plant_source, 0)]
-    values = await huawei_poller.poll_once(client, sources, **kwargs)
+    values = await huawei_poller.poll_once(
+        client, REGISTERS.huawei_plant_source, 0, **kwargs
+    )
     return client, values
 
 
 async def test_plant_decodes_documented_registers():
     _client, v = await _poll_plant()
-    assert v["pv_p_total"] == pytest.approx(1_234_500.0)
-    assert v["pv_q_total"] == pytest.approx(-50_000.0)
-    assert v["pv_pf_total"] == pytest.approx(0.999)
-    assert v["pv_u_l12"] == pytest.approx(400.1)
-    assert v["pv_u_l23"] == pytest.approx(400.2)
-    assert v["pv_u_l31"] == pytest.approx(400.3)
-    assert v["pv_i_l1"] == pytest.approx(100.0)
-    assert v["pv_i_l3"] == pytest.approx(102.0)
-    assert v["pv_exp_energy_total"] == pytest.approx(12_345.6)
-    assert v["pv_e_daily"] == pytest.approx(456.7)
-    assert v["pv_dc_power"] == pytest.approx(1_250_000.0)
+    assert v["p_total"] == pytest.approx(1_234_500.0)
+    assert v["q_total"] == pytest.approx(-50_000.0)
+    assert v["pf_total"] == pytest.approx(0.999)
+    assert v["u_l12"] == pytest.approx(400.1)
+    assert v["u_l23"] == pytest.approx(400.2)
+    assert v["u_l31"] == pytest.approx(400.3)
+    assert v["i_l1"] == pytest.approx(100.0)
+    assert v["i_l3"] == pytest.approx(102.0)
+    assert v["exp_energy_total"] == pytest.approx(12_345.6)
+    assert v["e_daily"] == pytest.approx(456.7)
+    assert v["dc_power"] == pytest.approx(1_250_000.0)
 
 
 async def test_plant_derives_everything_the_smartlogger_omits():
     _client, v = await _poll_plant()
     # phase voltages: the plant table exposes line voltages only
-    assert v["pv_u_l1"] == pytest.approx(400.1 / math.sqrt(3.0))
+    assert v["u_l1"] == pytest.approx(400.1 / math.sqrt(3.0))
     # per-phase power: only totals are published
-    assert v["pv_p_l1"] == pytest.approx(1_234_500.0 / 3)
-    assert v["pv_q_l2"] == pytest.approx(-50_000.0 / 3)
+    assert v["p_l1"] == pytest.approx(1_234_500.0 / 3)
+    assert v["q_l2"] == pytest.approx(-50_000.0 / 3)
     # apparent power exists nowhere in the plant table
-    assert v["pv_s_total"] == pytest.approx(math.hypot(1_234_500.0, -50_000.0))
-    assert v["pv_s_l3"] == pytest.approx(v["pv_s_total"] / 3)
-    assert v["pv_pf_l1"] == v["pv_pf_l2"] == v["pv_pf_l3"] == pytest.approx(0.999)
-    assert v["pv_exp_energy_l1"] == pytest.approx(12_345.6 / 3)
+    assert v["s_total"] == pytest.approx(math.hypot(1_234_500.0, -50_000.0))
+    assert v["s_l3"] == pytest.approx(v["s_total"] / 3)
+    assert v["pf_l1"] == v["pf_l2"] == v["pf_l3"] == pytest.approx(0.999)
+    assert v["exp_energy_l1"] == pytest.approx(12_345.6 / 3)
     # frequency appears nowhere in the SmartLogger manual at all
-    assert v["pv_freq"] == pytest.approx(50.0)
+    assert v["freq"] == pytest.approx(50.0)
     # a PV plant has no import counter on this measurement point
-    assert v["pv_imp_energy_total"] == 0.0
-    assert v["pv_reactive_imp_energy_total"] == 0.0
-    assert v["pv_reactive_exp_energy_total"] == 0.0
+    assert v["imp_energy_total"] == 0.0
+    assert v["reactive_imp_energy_total"] == 0.0
+    assert v["reactive_exp_energy_total"] == 0.0
 
 
 async def test_plant_covers_the_whole_canonical_model():
-    """Every canonical point the DTSU maps consume exists under the pv_ prefix."""
-    from nd45_dtsu666.config import STATIC_DEBUG_VALUE_KEYS
-
+    """The plant set fills all 36 canonical points: 12 read, the rest derived."""
     _client, v = await _poll_plant()
-    produced = {k.removeprefix("pv_") for k in v if k.startswith("pv_")}
-    assert STATIC_DEBUG_VALUE_KEYS - produced == set()
+    assert STATIC_DEBUG_VALUE_KEYS - set(v) == set()
 
 
 async def test_plant_reads_one_block_on_logic_device_zero():
@@ -165,49 +161,48 @@ METER_UNIT_ID = 11
 async def _poll_meter(overrides=None, **kwargs):
     raw = {**METER_RAW, **(overrides or {})}
     client = FakeClient({a: _regs(val, dt) for a, (dt, val) in raw.items()})
-    sources = [("huawei_meter", REGISTERS.huawei_meter_source, METER_UNIT_ID)]
-    values = await huawei_poller.poll_once(client, sources, **kwargs)
+    values = await huawei_poller.poll_once(
+        client, REGISTERS.huawei_meter_source, METER_UNIT_ID, **kwargs
+    )
     return client, values
 
 
 async def test_meter_decodes_documented_registers():
     _client, v = await _poll_meter()
-    assert v["mtr_u_l1"] == pytest.approx(230.12)
-    assert v["mtr_u_l12"] == pytest.approx(398.5)
-    assert v["mtr_i_l1"] == pytest.approx(123.4)
-    assert v["mtr_p_total"] == pytest.approx(-60_000.0)
-    assert v["mtr_q_total"] == pytest.approx(6_000.0)
-    assert v["mtr_pf_total"] == pytest.approx(-0.95)
-    assert v["mtr_s_total"] == pytest.approx(60_300.0)
-    assert v["mtr_p_l1"] == pytest.approx(-10_000.0)
-    assert v["mtr_p_l3"] == pytest.approx(-30_000.0)
+    assert v["u_l1"] == pytest.approx(230.12)
+    assert v["u_l12"] == pytest.approx(398.5)
+    assert v["i_l1"] == pytest.approx(123.4)
+    assert v["p_total"] == pytest.approx(-60_000.0)
+    assert v["q_total"] == pytest.approx(6_000.0)
+    assert v["pf_total"] == pytest.approx(-0.95)
+    assert v["s_total"] == pytest.approx(60_300.0)
+    assert v["p_l1"] == pytest.approx(-10_000.0)
+    assert v["p_l3"] == pytest.approx(-30_000.0)
     # I64 directional energy counters
-    assert v["mtr_imp_energy_total"] == pytest.approx(7.0)
-    assert v["mtr_exp_energy_total"] == pytest.approx(3.0)
-    assert v["mtr_reactive_imp_energy_total"] == pytest.approx(1.2)
-    assert v["mtr_reactive_exp_energy_total"] == pytest.approx(2.8)
+    assert v["imp_energy_total"] == pytest.approx(7.0)
+    assert v["exp_energy_total"] == pytest.approx(3.0)
+    assert v["reactive_imp_energy_total"] == pytest.approx(1.2)
+    assert v["reactive_exp_energy_total"] == pytest.approx(2.8)
 
 
 async def test_meter_derives_per_phase_reactive_by_active_power_share():
     _client, v = await _poll_meter()
     # Q apportioned by each phase's share of |P|: 10/20/30 of 60 kW
-    assert v["mtr_q_l1"] == pytest.approx(1_000.0)
-    assert v["mtr_q_l2"] == pytest.approx(2_000.0)
-    assert v["mtr_q_l3"] == pytest.approx(3_000.0)
+    assert v["q_l1"] == pytest.approx(1_000.0)
+    assert v["q_l2"] == pytest.approx(2_000.0)
+    assert v["q_l3"] == pytest.approx(3_000.0)
     # S and PF then follow from the per-phase pair
-    assert v["mtr_s_l1"] == pytest.approx(math.hypot(-10_000.0, 1_000.0))
-    assert v["mtr_pf_l1"] == pytest.approx(-10_000.0 / math.hypot(-10_000.0, 1_000.0))
-    assert v["mtr_imp_energy_l1"] == pytest.approx(7.0 / 3)
-    assert v["mtr_exp_energy_l2"] == pytest.approx(3.0 / 3)
-    assert v["mtr_freq"] == pytest.approx(50.0)
+    assert v["s_l1"] == pytest.approx(math.hypot(-10_000.0, 1_000.0))
+    assert v["pf_l1"] == pytest.approx(-10_000.0 / math.hypot(-10_000.0, 1_000.0))
+    assert v["imp_energy_l1"] == pytest.approx(7.0 / 3)
+    assert v["exp_energy_l2"] == pytest.approx(3.0 / 3)
+    assert v["freq"] == pytest.approx(50.0)
 
 
 async def test_meter_covers_the_whole_canonical_model():
-    from nd45_dtsu666.config import STATIC_DEBUG_VALUE_KEYS
-
+    """The meter set fills all 36 canonical points: 20 read, the rest derived."""
     _client, v = await _poll_meter()
-    produced = {k.removeprefix("mtr_") for k in v if k.startswith("mtr_")}
-    assert STATIC_DEBUG_VALUE_KEYS - produced == set()
+    assert STATIC_DEBUG_VALUE_KEYS - set(v) == set()
 
 
 async def test_meter_reads_two_blocks_on_its_rs485_address():
@@ -225,10 +220,10 @@ async def test_ratio_split_falls_back_to_equal_when_weights_vanish():
             32280: ("i32", 900),
         }
     )
-    assert v["mtr_q_l1"] == v["mtr_q_l2"] == v["mtr_q_l3"] == pytest.approx(300.0)
+    assert v["q_l1"] == v["q_l2"] == v["q_l3"] == pytest.approx(300.0)
     # purely reactive phase: S comes from Q alone, so PF is legitimately zero
-    assert v["mtr_s_l1"] == pytest.approx(300.0)
-    assert v["mtr_pf_l1"] == pytest.approx(0.0)
+    assert v["s_l1"] == pytest.approx(300.0)
+    assert v["pf_l1"] == pytest.approx(0.0)
 
 
 async def test_pf_is_unity_when_the_phase_is_fully_idle():
@@ -241,47 +236,41 @@ async def test_pf_is_unity_when_the_phase_is_fully_idle():
             32280: ("i32", 0),
         }
     )
-    assert v["mtr_s_l1"] == 0.0
-    assert v["mtr_pf_l1"] == v["mtr_pf_l2"] == v["mtr_pf_l3"] == pytest.approx(1.0)
+    assert v["s_l1"] == 0.0
+    assert v["pf_l1"] == v["pf_l2"] == v["pf_l3"] == pytest.approx(1.0)
 
 
-# --- both sources in one poll ------------------------------------------------
-
-async def test_both_sources_poll_on_their_own_unit_ids():
-    """The SmartLogger answers as device 0 for itself, as the RS485 address for a meter."""
-    image = {**_plant_image()}
-    image.update({a: _regs(val, dt) for a, (dt, val) in METER_RAW.items()})
-    client = FakeClient(image)
-    sources = [
-        ("huawei_plant", REGISTERS.huawei_plant_source, 0),
-        ("huawei_meter", REGISTERS.huawei_meter_source, METER_UNIT_ID),
-    ]
-    values = await huawei_poller.poll_once(client, sources)
-    assert client.requests == [
-        (40521, 57, 0),
-        (32260, 30, METER_UNIT_ID),
-        (32335, 30, METER_UNIT_ID),
-    ]
-    assert values["pv_p_total"] == pytest.approx(1_234_500.0)
-    assert values["mtr_p_total"] == pytest.approx(-60_000.0)
+# --- compute_derived -------------------------------------------------------
 
 
-async def test_huawei_poll_never_emits_unprefixed_canonical_names():
-    """The DTSU energy aliases belong to the primary source and must stay untouched.
+async def test_poll_fills_the_energy_aliases_the_dtsu_maps_read():
+    """This bridge owns a full canonical model, so it must run compute_derived.
 
-    compute_derived would fill active_energy_total / net_*_energy_total from the
-    unprefixed keys, which a Huawei map does not have -- writing zeros over real
-    ND45 meter energy.
+    dtsu_target and dtsu_sigen_ext_energy reference active_energy_total and the
+    net_* fields via `from`, and update_datastore silently skips a missing key --
+    so without this the energy registers would sit at their previous image.
     """
-    image = {**_plant_image()}
-    image.update({a: _regs(val, dt) for a, (dt, val) in METER_RAW.items()})
-    client = FakeClient(image)
-    sources = [
-        ("huawei_plant", REGISTERS.huawei_plant_source, 0),
-        ("huawei_meter", REGISTERS.huawei_meter_source, METER_UNIT_ID),
-    ]
-    values = await huawei_poller.poll_once(client, sources)
-    assert not [k for k in values if not k.startswith(("pv_", "mtr_"))]
+    _client, v = await _poll_meter()
+    assert v["active_energy_total"] == pytest.approx(7.0 + 3.0)
+    assert v["net_imp_energy_total"] == pytest.approx(7.0)
+    assert v["net_exp_energy_total"] == pytest.approx(3.0)
+
+
+async def test_poll_covers_every_canonical_name_the_output_maps_reference():
+    """No `from` name may be missing, on either register set."""
+    for side, unit in (
+        (REGISTERS.huawei_plant_source, 0),
+        (REGISTERS.huawei_meter_source, METER_UNIT_ID),
+    ):
+        raw = PLANT_RAW if unit == 0 else METER_RAW
+        client = FakeClient({a: _regs(val, dt) for a, (dt, val) in raw.items()})
+        values = await huawei_poller.poll_once(client, side, unit)
+        required = {
+            pt.from_
+            for _name, target in REGISTERS.targets
+            for pt in target.points.values()
+        }
+        assert required - set(values) == set()
 
 
 # --- invalid values, faults --------------------------------------------------
@@ -295,22 +284,22 @@ async def test_invalid_sentinel_is_zeroed_and_does_not_reject_the_sample():
     _client, v = await _poll_plant(
         overrides={40532: ("i16", int_sentinel("i16"))}
     )
-    assert v["pv_pf_total"] == 0.0
-    assert v["pv_p_total"] == pytest.approx(1_234_500.0)  # unaffected
+    assert v["pf_total"] == 0.0
+    assert v["p_total"] == pytest.approx(1_234_500.0)  # unaffected
 
 
 async def test_invalid_sentinel_warns_once_per_episode(caplog):
-    sources = [("huawei_plant", REGISTERS.huawei_plant_source, 0)]
+    side = REGISTERS.huawei_plant_source
     bad = FakeClient(_plant_image({40544: ("i32", int_sentinel("i32"))}))
     good = FakeClient(_plant_image())
     seen: set[str] = set()
     with caplog.at_level("WARNING", logger="nd45_dtsu666.huawei_poller"):
-        await huawei_poller.poll_once(bad, sources, overrange_seen=seen)
-        await huawei_poller.poll_once(bad, sources, overrange_seen=seen)
-    assert seen == {"pv_q_total"}
-    assert sum("pv_q_total invalid" in r.getMessage() for r in caplog.records) == 1
+        await huawei_poller.poll_once(bad, side, 0, overrange_seen=seen)
+        await huawei_poller.poll_once(bad, side, 0, overrange_seen=seen)
+    assert seen == {"q_total"}
+    assert sum("q_total invalid" in r.getMessage() for r in caplog.records) == 1
     with caplog.at_level("INFO", logger="nd45_dtsu666.huawei_poller"):
-        await huawei_poller.poll_once(good, sources, overrange_seen=seen)
+        await huawei_poller.poll_once(good, side, 0, overrange_seen=seen)
     assert seen == set()
 
 
@@ -326,7 +315,7 @@ async def test_derived_non_finite_is_scrubbed_before_reaching_the_store():
         }
     )
     client = FakeClient({100: _regs(5, "u32")})
-    values = await huawei_poller.poll_once(client, [("x", side, 0)])
+    values = await huawei_poller.poll_once(client, side, 0)
     assert values["x_pf"] == 0.0
 
 
@@ -336,14 +325,14 @@ async def test_address_offset_shifts_the_wire_address_only():
         {
             "address_offset": -1,
             "read_groups": [{"base": 40521, "count": 57}],
-            "points": {"pv_p_total": {"addr": 40525, "dtype": "i32"}},
+            "points": {"p_total": {"addr": 40525, "dtype": "i32"}},
         }
     )
     # image is laid out one register lower, matching the shifted request
     client = FakeClient({40524: _regs(777, "i32")})
-    values = await huawei_poller.poll_once(client, [("plant", side, 0)])
+    values = await huawei_poller.poll_once(client, side, 0)
     assert client.requests == [(40520, 57, 0)]
-    assert values["pv_p_total"] == pytest.approx(777.0)
+    assert values["p_total"] == pytest.approx(777.0)
 
 
 async def test_read_error_raises_poll_error():
@@ -357,9 +346,8 @@ async def test_read_error_raises_poll_error():
         async def read_holding_registers(self, address, count, slave=0):
             return ErrorResponse()
 
-    sources = [("huawei_plant", REGISTERS.huawei_plant_source, 0)]
     with pytest.raises(huawei_poller.PollError, match="read error"):
-        await huawei_poller.poll_once(ErrorClient(), sources)
+        await huawei_poller.poll_once(ErrorClient(), REGISTERS.huawei_plant_source, 0)
 
 
 async def test_short_read_raises_poll_error():
@@ -367,48 +355,33 @@ async def test_short_read_raises_poll_error():
         async def read_holding_registers(self, address, count, slave=0):
             return FakeResponse([0] * (count - 1))
 
-    sources = [("huawei_plant", REGISTERS.huawei_plant_source, 0)]
     with pytest.raises(huawei_poller.PollError, match="short read"):
-        await huawei_poller.poll_once(ShortClient(), sources)
+        await huawei_poller.poll_once(ShortClient(), REGISTERS.huawei_plant_source, 0)
 
 
-# --- source selection -------------------------------------------------------
-
-def _config(**huawei) -> AppConfig:
-    return CONFIG.model_copy(
-        update={"huawei": CONFIG.huawei.model_copy(update={"enabled": True, **huawei})}
-    )
+# --- source resolution ------------------------------------------------------
 
 
-def test_select_sources_returns_both_when_both_unit_ids_are_set():
-    config = _config(host="10.0.0.5", plant_unit_id=0, meter_unit_id=11)
-    selected = huawei_poller.select_sources(config, REGISTERS)
-    assert [(name, unit) for name, _side, unit in selected] == [
-        ("huawei_plant", 0),
-        ("huawei_meter", 11),
-    ]
+def test_source_by_name_resolves_both_huawei_sections():
+    assert REGISTERS.source_by_name("huawei_plant_source") is REGISTERS.huawei_plant_source
+    assert REGISTERS.source_by_name("huawei_meter_source") is REGISTERS.huawei_meter_source
 
 
-def test_select_sources_skips_a_source_with_no_unit_id():
-    config = _config(host="10.0.0.5", plant_unit_id=0, meter_unit_id=None)
-    selected = huawei_poller.select_sources(config, REGISTERS)
-    assert [name for name, _side, _unit in selected] == ["huawei_plant"]
+def test_source_by_name_rejects_an_unknown_section():
+    with pytest.raises(ValueError, match="no source section 'nope'"):
+        REGISTERS.source_by_name("nope")
 
 
-def test_select_sources_rejects_a_unit_id_with_no_register_section():
-    config = _config(host="10.0.0.5", plant_unit_id=0, meter_unit_id=11)
-    stripped = REGISTERS.model_copy(update={"huawei_meter_source": None})
-    with pytest.raises(ValueError, match="no huawei_meter_source section"):
-        huawei_poller.select_sources(config, stripped)
+def test_source_by_name_lists_what_is_available():
+    with pytest.raises(ValueError, match="huawei_plant_source"):
+        REGISTERS.source_by_name("typo_source")
 
 
-def test_select_sources_rejects_a_source_without_read_groups():
+def test_validate_source_coverage_rejects_a_source_without_read_groups():
     """A Huawei source with no blocks would poll nothing and look like a dead device."""
-    side = SourceSide.model_validate({"points": {"pv_p_total": {"addr": 40525}}})
-    config = _config(host="10.0.0.5", plant_unit_id=0, meter_unit_id=None)
-    broken = REGISTERS.model_copy(update={"huawei_plant_source": side})
+    side = SourceSide.model_validate({"points": {"p_total": {"addr": 40525}}})
     with pytest.raises(ValueError, match="must declare 'read_groups'"):
-        huawei_poller.select_sources(config, broken)
+        huawei_poller.validate_source_coverage(side)
 
 
 def test_shipped_register_map_has_both_huawei_sources():
