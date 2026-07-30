@@ -48,6 +48,58 @@ the MBAP header for TCP) and must match what Sigenergy is configured to poll.
 The optional `prometheus` section controls the metrics endpoint (see below); omit it
 to accept the defaults.
 
+## Optional second source: Huawei SmartLogger
+
+The bridge can additionally poll a **Huawei SmartLogger** over Modbus TCP to report
+the PV farm's production alongside the grid-tie measurement. Disabled by default —
+with `huawei.enabled` false, nothing about the bridge changes.
+
+```json
+"huawei": {
+  "enabled": true,
+  "host": "192.168.22.120",
+  "port": 502,
+  "plant_unit_id": 0,        // SmartLogger's own aggregated registers
+  "meter_unit_id": null,     // RS485 address of a power meter behind it, or null
+  "poll_interval_s": 5.0,
+  "timeout_s": 6.0,          // the manual allows a 5s Modbus timeout
+  "max_data_age_s": 60.0     // staleness for telemetry only; never gates the output
+}
+```
+
+Two independent register sets are supported, both mapped in `config/registers.json`:
+
+| | `huawei_plant_source` (logic device 0) | `huawei_meter_source` (logic device = RS485 addr) |
+|---|---|---|
+| what it measures | PV production, aggregated from all inverters | the power meter behind the SmartLogger |
+| canonical points read directly | 10 of 36 | 20 of 36 |
+| point-name prefix | `pv_` | `mtr_` |
+
+Neither set covers the whole canonical model, so the maps carry declarative
+`derive` rules (`split_equal`, `phase_from_line`, `hypot`, `ratio_split`,
+`pf_from_p_s`, `copy`, `constant`) that fill the rest — editable on site without
+touching code, like the register maps themselves. **Grid frequency appears nowhere
+in the SmartLogger manual**, so it is a `constant` (50.0 Hz).
+
+Two things worth knowing before relying on this:
+
+- **The ND45 remains the only source of the registers Sigenergy reads.** Register
+  40525 is PV *production*, not the grid *balance* Sigenergy regulates on, so PV
+  points are telemetry (Prometheus + `monitor`) rather than DTSU output. If you do
+  want Sigenergy fed from Huawei, the semantically correct source is a meter at the
+  grid-tie point (`meter_unit_id`), and you point the DTSU targets' `from` fields at
+  `mtr_*` in `registers.json` — no code change needed.
+- **A SmartLogger outage never silences the bridge.** Freshness is gated per source:
+  the DTSU output follows the ND45 alone, so a SmartLogger that has been dark for an
+  hour leaves a healthy bridge serving. A stale PV panel next to a `SERVING` state is
+  expected, not a fault.
+
+Per-source health is exported as `nd45_dtsu666_source_*{source="huawei"}` (the existing
+`nd45_*` families are unchanged), and `monitor` grows a PV production panel.
+
+Design notes and the full coverage matrix:
+[`docs/superpowers/specs/2026-07-30-huawei-smartlogger-source-design.md`](docs/superpowers/specs/2026-07-30-huawei-smartlogger-source-design.md).
+
 ## Prometheus metrics
 
 Every mode (`run`, `monitor`, `rtudebug`, `static`) serves a read-only metrics
@@ -271,3 +323,20 @@ or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
    combined active energy, distinct Q+/Q- counters, and non-zero total and per-phase
    export energy. Continue to capture the installation under load to verify its sign,
    phase order, and scaling against the connected ND45.
+11. **Huawei SmartLogger source** (only if `huawei.enabled`) — five checks the test suite
+    cannot cover:
+    - **Address base.** Huawei documents "40525"; some Modbus clients need `40524`
+      (0- vs 1-based). Probe with `mbpoll` *before* enabling the bridge, and correct via
+      `address_offset` on the source in `registers.json` — no code change needed.
+    - **Meter RS485 address.** Read it from the SmartLogger LCD/WebUI. Until it is known,
+      leave `meter_unit_id: null`; only the plant path runs.
+    - **Refresh rate.** Watch `nd45_dtsu666_source_data_age_seconds{source="huawei"}`. If
+      it regularly exceeds 60s, raise `huawei.max_data_age_s` — **not**
+      `safety.max_data_age_s`, which gates the DTSU output.
+    - **Production sign.** Confirm `pv_p_total` is positive while generating.
+    - **Plant current resolution.** Registers 40572-74 have Gain 1 (I16): a 1 A step and
+      overflow past 32767 A. On a larger farm treat those phase currents as indicative;
+      only the meter path gives trustworthy values.
+    Then pull the SmartLogger cable and confirm the bridge keeps serving: `dtsu_server_up`
+    stays 1 and `nd45_data_fresh` stays 1 while `source_connected{source="huawei"}` drops
+    to 0. A secondary source must never be able to silence the output.

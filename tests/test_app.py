@@ -266,3 +266,275 @@ def test_fault_reporter_success_without_failure_is_silent():
     log = _FakeLog()
     FaultReporter(logger=log, clock=lambda: 0.0).success()
     assert log.warnings == [] and log.infos == []
+
+
+# --- Huawei SmartLogger as a second source ----------------------------------
+
+
+class _HuaweiFakeClient:
+    """Duck-typed stand-in: a real AsyncModbusTcpClient needs a running loop."""
+
+    def __init__(self):
+        self.requests = []
+
+    async def connect(self):
+        return True
+
+    async def read_holding_registers(self, address, count, slave=0):
+        self.requests.append((address, count, slave))
+
+        class _Resp:
+            registers = [0] * count
+
+            def isError(self):
+                return False
+
+        return _Resp()
+
+    def close(self):
+        pass
+
+
+def _huawei_config(**overrides):
+    config = load_config("config/config.json")
+    return config.model_copy(
+        update={
+            "huawei": config.huawei.model_copy(
+                update={"enabled": True, "host": "10.0.0.5", **overrides}
+            )
+        }
+    )
+
+
+def test_build_pipeline_without_huawei_builds_exactly_two_coros(monkeypatch):
+    """Regression guard: with the source disabled, nothing about the bridge changes."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = load_config("config/config.json")
+    assert config.huawei.enabled is False
+    pipe = build_pipeline(
+        config, load_registers("config/registers.json"), asyncio.Event(), client=object()
+    )
+
+    assert len(pipe.coros) == 2  # poller + supervisor, as before
+    assert pipe.huawei_store is None
+    assert pipe.huawei_client is None
+    assert pipe.merged_store is None
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_build_pipeline_with_huawei_adds_a_third_coro(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    pipe = build_pipeline(
+        _huawei_config(), load_registers("config/registers.json"),
+        asyncio.Event(), client=object(), huawei_client=_HuaweiFakeClient(),
+    )
+
+    assert len(pipe.coros) == 3  # ND45 poller + SmartLogger poller + supervisor
+    assert pipe.huawei_store is not None
+    assert pipe.huawei_client is not None
+    assert pipe.merged_store is not None
+    # the exporter reads the union, so PV points show up as registers
+    assert pipe.metrics.store is pipe.merged_store
+    assert pipe.metrics.huawei_store is pipe.huawei_store
+    for coro in pipe.coros:
+        coro.close()
+    pipe.huawei_client.close()
+
+
+def test_build_pipeline_freshness_still_tracks_the_nd45_alone(monkeypatch):
+    """pipe.store stays the primary store, so supervise_server's gate is unchanged."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    pipe = build_pipeline(
+        _huawei_config(), load_registers("config/registers.json"),
+        asyncio.Event(), client=object(), huawei_client=_HuaweiFakeClient(),
+    )
+
+    assert isinstance(pipe.store, CanonicalStore)
+    pipe.huawei_store.update({"pv_p_total": 1.0}, ts=100.0)
+    # a fresh SmartLogger sample must not make the never-polled ND45 look alive
+    assert pipe.store.age(now=100.0) == float("inf")
+    assert pipe.merged_store.age(now=100.0) == float("inf")
+    for coro in pipe.coros:
+        coro.close()
+    pipe.huawei_client.close()
+
+
+def test_build_pipeline_rejects_huawei_without_a_register_section(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    registers = load_registers("config/registers.json")
+    stripped = registers.model_copy(update={"huawei_plant_source": None})
+    with pytest.raises(ValueError, match="no huawei_plant_source section"):
+        build_pipeline(
+            _huawei_config(), stripped, asyncio.Event(),
+            client=object(), huawei_client=_HuaweiFakeClient(),
+        )
+
+
+def test_on_update_merges_a_secondary_store_beneath_its_own_values():
+    """Every poll writes the union, so one poller never blanks the other's points."""
+    target = load_registers("config/registers.json").dtsu_target
+    primary, secondary = CanonicalStore(), CanonicalStore()
+    context = build_context(target, slave_id=1)
+    secondary.update({"u_l2": 111.0}, ts=1.0)
+
+    on_update = build_on_update(primary, context, 1, target, beneath=(secondary,))
+    on_update({"u_l1": 230.0}, ts=5.0)
+
+    # our own value landed...
+    u_l1 = context[1].getValues(3, target.points["u_l1"].addr, count=2)
+    assert registers_to_float(u_l1, "big", "big") == 2300.0
+    # ...and so did the secondary's, without being in our own store
+    u_l2 = context[1].getValues(3, target.points["u_l2"].addr, count=2)
+    assert registers_to_float(u_l2, "big", "big") == 1110.0
+    assert primary.snapshot()[0] == {"u_l1": 230.0}
+
+
+def test_on_update_lets_an_above_store_override_its_own_values():
+    """The secondary poller's callback must never displace a primary measurement."""
+    target = load_registers("config/registers.json").dtsu_target
+    primary, secondary = CanonicalStore(), CanonicalStore()
+    context = build_context(target, slave_id=1)
+    primary.update({"u_l1": 230.0}, ts=1.0)
+
+    on_update = build_on_update(secondary, context, 1, target, above=(primary,))
+    on_update({"u_l1": 999.0, "u_l2": 111.0}, ts=5.0)
+
+    u_l1 = context[1].getValues(3, target.points["u_l1"].addr, count=2)
+    assert registers_to_float(u_l1, "big", "big") == 2300.0  # primary won
+    u_l2 = context[1].getValues(3, target.points["u_l2"].addr, count=2)
+    assert registers_to_float(u_l2, "big", "big") == 1110.0
+    # the secondary still records what it actually read
+    assert secondary.snapshot()[0]["u_l1"] == 999.0
+
+
+async def test_huawei_poller_does_not_touch_the_watchdog_heartbeat(monkeypatch):
+    """A live SmartLogger must not mask a hung ND45 poller from systemd.
+
+    If the secondary poller pinged the heartbeat, a genuinely stuck ND45 poller
+    would keep the watchdog satisfied and systemd would never restart the service.
+    """
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    stop = asyncio.Event()
+    fake = _HuaweiFakeClient()
+    pipe = build_pipeline(
+        _huawei_config(meter_unit_id=None), load_registers("config/registers.json"),
+        stop, client=object(), huawei_client=fake,
+    )
+    nd45_coro, huawei_coro, supervisor_coro = pipe.coros
+
+    task = asyncio.create_task(huawei_coro)
+    for _ in range(20):  # let at least one poll complete
+        await asyncio.sleep(0)
+        if fake.requests:
+            break
+    stop.set()
+    await task
+
+    assert fake.requests  # the secondary poller really did run
+    assert pipe.metrics.huawei_poll_stats.polls_ok >= 1
+    # ...and the watchdog heartbeat was never touched by it
+    assert pipe.heartbeat.age(now=time.monotonic()) == float("inf")
+    nd45_coro.close()
+    supervisor_coro.close()
+
+
+async def test_both_pollers_reach_the_same_datastore_without_erasing_each_other(monkeypatch):
+    """End-to-end: ND45 and SmartLogger values coexist in the served datastore.
+
+    The failure this guards against is a second poller whose write blanks the
+    first one's registers, which would show up at Sigenergy as a meter that
+    flickers between real and zero readings.
+    """
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    from nd45_dtsu666.codec import float_to_registers
+
+    registers = load_registers("config/registers.json")
+    nd45_image: dict[int, list[int]] = {}
+    for addr, value in ((128, -60000.0), (50, 240.0), (818, 50.0)):
+        nd45_image[addr] = float_to_registers(value, "big", "big")
+
+    class _Nd45Client:
+        async def read_holding_registers(self, address, count, slave=0):
+            flat = {}
+            for base, regs in nd45_image.items():
+                for offset, reg in enumerate(regs):
+                    flat[base + offset] = reg
+
+            class _Resp:
+                registers = [flat.get(a, 0) for a in range(address, address + count)]
+
+                def isError(self):
+                    return False
+
+            return _Resp()
+
+    class _SmartLogger:
+        """Reports 1.2345 MW of PV production at register 40525 (I32, gain 1000)."""
+
+        async def read_holding_registers(self, address, count, slave=0):
+            raw = (1_234_500).to_bytes(4, "big")
+            flat = {40525: int.from_bytes(raw[:2], "big"), 40526: int.from_bytes(raw[2:], "big")}
+
+            class _Resp:
+                registers = [flat.get(a, 0) for a in range(address, address + count)]
+
+                def isError(self):
+                    return False
+
+            return _Resp()
+
+    stop = asyncio.Event()
+    pipe = build_pipeline(
+        _huawei_config(meter_unit_id=None), registers, stop,
+        client=_Nd45Client(), huawei_client=_SmartLogger(),
+    )
+    nd45_coro, huawei_coro, supervisor_coro = pipe.coros
+    supervisor_coro.close()
+
+    async def _drive(coro):
+        task = asyncio.create_task(coro)
+        for _ in range(50):
+            await asyncio.sleep(0)
+        return task
+
+    nd45_task = await _drive(nd45_coro)
+    huawei_task = await _drive(huawei_coro)
+    stop.set()
+    await asyncio.gather(nd45_task, huawei_task)
+
+    # both sources landed in the merged view
+    values, _ts = pipe.merged_store.snapshot()
+    assert values["p_total"] == pytest.approx(-60000.0)
+    assert values["pv_p_total"] == pytest.approx(1_234_500.0)
+
+    # and the ND45 grid measurement is what the DTSU register actually serves
+    p_total_point = registers.dtsu_target.points["p_total"]
+    regs = pipe.context[pipe.metrics.config.dtsu.slave_id].getValues(
+        3, p_total_point.addr, count=2
+    )
+    served = registers_to_float(regs, "big", "big")
+    ct = pipe.metrics.config.dtsu.identity.ir_at
+    assert served == pytest.approx(-60000.0 / ct * 10)
+
+
+def test_fault_reporter_labels_the_source_it_is_reporting_on():
+    """A SmartLogger outage must not read as an ND45 fault in the journal."""
+    class _FakeLog:
+        def __init__(self):
+            self.warnings, self.infos = [], []
+
+        def warning(self, msg, *args):
+            self.warnings.append(msg % args)
+
+        def info(self, msg, *args):
+            self.infos.append(msg % args)
+
+    logger = _FakeLog()
+    reporter = FaultReporter(logger=logger, label="SmartLogger", clock=lambda: 0.0)
+    reporter.failure(RuntimeError("unreachable"))
+    reporter.success()
+
+    assert "SmartLogger polling failed: unreachable" in logger.warnings[0]
+    assert "SmartLogger polling recovered" in logger.infos[0]
+    assert not any("ND45" in line for line in logger.warnings + logger.infos)

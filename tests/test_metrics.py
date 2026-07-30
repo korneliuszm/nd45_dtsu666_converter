@@ -483,3 +483,114 @@ def test_shipped_config_files_load():
 
     for path in sorted(glob.glob("config/config*.json")):
         load_config(path)
+
+
+# --- secondary source (Huawei SmartLogger) ----------------------------------
+
+
+def _huawei_source(**overrides):
+    """A MetricsSource with the SmartLogger source active."""
+    config = load_config("config/config.json")
+    config = config.model_copy(
+        update={
+            "huawei": config.huawei.model_copy(
+                update={"enabled": True, "host": "10.0.0.5"}
+            )
+        }
+    )
+    store = CanonicalStore()
+    kwargs = dict(
+        config=config,
+        huawei_store=store,
+        huawei_poll_stats=PollStats(),
+        huawei_client=None,
+    )
+    kwargs.update(overrides)
+    return _source(**kwargs)
+
+
+def test_no_secondary_families_when_huawei_is_disabled():
+    """A single-source scrape must stay byte-identical to before this source existed."""
+    text = render(_source(), loop_now=10.0, mono_now=10.0)
+    assert f"{P}_source_data_age_seconds" not in text
+    assert f"{P}_source_polls_total" not in text
+    assert f"{P}_source_connected" not in text
+
+
+def test_secondary_families_are_labelled_by_source():
+    source = _huawei_source()
+    source.huawei_store.update({"pv_p_total": 1234500.0}, ts=9.5)
+    source.huawei_poll_stats.record_ok(10.0)
+
+    text = render(source, loop_now=10.0, mono_now=10.0)
+
+    assert _samples(text, f"{P}_source_data_age_seconds") == [('{source="huawei"}', "0.5")]
+    assert _samples(text, f"{P}_source_polls_total") == [
+        ('{source="huawei",result="ok"}', "1"),
+        ('{source="huawei",result="error"}', "0"),
+    ]
+
+
+def test_secondary_freshness_uses_its_own_threshold_not_the_safety_gate():
+    """20s stale is fine for a SmartLogger (60s) but far past safety.max_data_age_s (3s)."""
+    source = _huawei_source()
+    source.huawei_store.update({"pv_p_total": 1.0}, ts=0.0)
+
+    text = render(source, loop_now=20.0, mono_now=20.0)
+
+    assert _samples(text, f"{P}_source_data_fresh") == [('{source="huawei"}', "1")]
+    assert _samples(text, f"{P}_source_max_data_age_seconds") == [
+        ('{source="huawei"}', "60")
+    ]
+    # the primary gate is untouched and still reports the ND45's own threshold
+    assert _samples(text, f"{P}_nd45_max_data_age_seconds") == [("", "3")]
+
+
+def test_secondary_data_fresh_goes_zero_past_its_own_threshold():
+    source = _huawei_source()
+    source.huawei_store.update({"pv_p_total": 1.0}, ts=0.0)
+    text = render(source, loop_now=61.0, mono_now=61.0)
+    assert _samples(text, f"{P}_source_data_fresh") == [('{source="huawei"}', "0")]
+
+
+def test_secondary_age_is_infinite_before_the_first_poll():
+    text = render(_huawei_source(), loop_now=10.0, mono_now=10.0)
+    assert _samples(text, f"{P}_source_data_age_seconds") == [('{source="huawei"}', "+Inf")]
+
+
+def test_secondary_connected_gauge_only_when_the_client_exposes_it():
+    class _Connected:
+        connected = True
+
+    text = render(_huawei_source(huawei_client=_Connected()), loop_now=1.0, mono_now=1.0)
+    assert _samples(text, f"{P}_source_connected") == [('{source="huawei"}', "1")]
+    # a client without the attribute (a test fake) simply omits the gauge
+    text = render(_huawei_source(huawei_client=object()), loop_now=1.0, mono_now=1.0)
+    assert f"{P}_source_connected" not in text
+
+
+def test_secondary_last_error_type_is_reported():
+    source = _huawei_source()
+    source.huawei_poll_stats.record_error(TimeoutError("no reply"), 5.0)
+    text = render(source, loop_now=10.0, mono_now=10.0)
+    assert _samples(text, f"{P}_source_last_poll_error_info") == [
+        ('{source="huawei",type="TimeoutError"}', "1")
+    ]
+    assert _samples(text, f"{P}_source_consecutive_poll_failures") == [
+        ('{source="huawei"}', "1")
+    ]
+
+
+def test_every_secondary_family_declares_a_type():
+    source = _huawei_source(huawei_client=None)
+    source.huawei_poll_stats.record_error(RuntimeError("x"), 1.0)
+    text = render(source, loop_now=10.0, mono_now=10.0)
+    declared = {
+        line.split()[2] for line in text.splitlines() if line.startswith("# TYPE ")
+    }
+    emitted = {
+        line.split("{")[0].split(" ")[0]
+        for line in text.splitlines()
+        if line and not line.startswith("#")
+    }
+    assert {name for name in emitted if "_source_" in name} <= declared

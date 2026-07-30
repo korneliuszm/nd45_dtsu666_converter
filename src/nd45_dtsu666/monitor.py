@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 
 from . import metrics
@@ -29,6 +30,38 @@ def _direction(p_total: float | None) -> str:
     return "ZERO"
 
 
+def _render_pv_panel(canonical, pv_age: float) -> list[str]:
+    """PV production panel fed by the Huawei SmartLogger (telemetry only).
+
+    Labelled "telemetry" on purpose: these values never gate the DTSU output, so
+    a stale PV panel next to a healthy bridge is expected, not a fault.
+    """
+    stale = "" if math.isfinite(pv_age) else "   (never polled)"
+    lines = [
+        f" PV production (SmartLogger, telemetry)   data age: {_fmt(pv_age, 2)}s{stale}"
+    ]
+    p_total = canonical.get("pv_p_total")
+    if p_total is None:
+        lines.append("   (no data yet)")
+        return lines
+    lines.append(
+        f"   P={_fmt(p_total):>12} W   Q={_fmt(canonical.get('pv_q_total')):>12} var"
+        f"   PF={_fmt(canonical.get('pv_pf_total'), 3)}"
+    )
+    lines.append(
+        f"   E_total={_fmt(canonical.get('pv_exp_energy_total'))} kWh"
+        f"   E_daily={_fmt(canonical.get('pv_e_daily'))} kWh"
+        f"   P_dc={_fmt(canonical.get('pv_dc_power'))} W"
+    )
+    lines.append(
+        f"   I: {_fmt(canonical.get('pv_i_l1'), 1)} / {_fmt(canonical.get('pv_i_l2'), 1)}"
+        f" / {_fmt(canonical.get('pv_i_l3'), 1)} A"
+        f"   U_ll: {_fmt(canonical.get('pv_u_l12'))} / {_fmt(canonical.get('pv_u_l23'))}"
+        f" / {_fmt(canonical.get('pv_u_l31'))} V"
+    )
+    return lines
+
+
 def render_dashboard(
     canonical,
     age,
@@ -37,8 +70,13 @@ def render_dashboard(
     slave_id,
     now,
     source_label: str = "ND45",
+    pv_age: float | None = None,
 ) -> str:
-    """Render the two-panel dashboard (ND45 values + Sigenergy read activity)."""
+    """Render the dashboard (source values + Sigenergy read activity).
+
+    A third PV panel appears when `pv_age` is given (huawei.enabled), showing the
+    SmartLogger's production alongside the grid-tie measurement.
+    """
     state = "SERVING" if healthy else "FAIL-SAFE SILENT"
     poll = "OK" if healthy else "STALE"
     lines = [
@@ -68,6 +106,10 @@ def render_dashboard(
         f"E_exp={_fmt(canonical.get('exp_energy_total'))} kWh"
     )
     lines.append(_SEP)
+
+    if pv_age is not None:
+        lines.extend(_render_pv_panel(canonical, pv_age))
+        lines.append(_SEP)
 
     s = activity.summary(now)
     last = "never" if s["last_seen_age"] is None else f"{s['last_seen_age']:.1f}s ago"
@@ -147,16 +189,28 @@ async def run_monitor(
         registers.dtsu_sigen_ext_energy,
     ]
 
+    # Read through the merged store when a secondary source is active, so the PV
+    # panel and the register table see its points too. `age`/`healthy` still come
+    # from the primary source alone -- MergedStore.age delegates to it.
+    view = pipe.merged_store if pipe.merged_store is not None else pipe.store
+
     async def _display() -> None:
         loop = asyncio.get_running_loop()
         while not stop_event.is_set():
-            age = pipe.store.age(loop.time())
+            loop_now = loop.time()
+            age = view.age(loop_now)
             healthy = age <= config.safety.max_data_age_s
-            values, _ = pipe.store.snapshot()
+            values, _ = view.snapshot()
+            pv_age = (
+                pipe.huawei_store.age(loop_now) if pipe.huawei_store is not None else None
+            )
             now = time.monotonic()
             print("\033[2J\033[H", end="")  # clear screen
             print(
-                render_dashboard(values, age, healthy, activity, config.dtsu.slave_id, now)
+                render_dashboard(
+                    values, age, healthy, activity, config.dtsu.slave_id, now,
+                    pv_age=pv_age,
+                )
             )
             print(
                 render_registers_table(

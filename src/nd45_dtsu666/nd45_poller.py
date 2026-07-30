@@ -7,8 +7,22 @@ import logging
 import math
 from collections.abc import Callable
 
+from .canonical import compute_derived
 from .codec import OVERRANGE, compose, decode_point, registers_to_float
 from .config import SourceSide
+
+# compute_derived now lives in canonical.py (it is canonical-model logic shared
+# by every source, not ND45 logic). Re-exported here for existing importers.
+__all__ = [
+    "OPTIONAL_INVALID_ZERO_POINTS",
+    "READ_GROUPS",
+    "PollError",
+    "compute_derived",
+    "extract_registers",
+    "poll_once",
+    "run_poller",
+    "validate_source_coverage",
+]
 
 log = logging.getLogger(__name__)
 
@@ -24,15 +38,6 @@ OPTIONAL_INVALID_ZERO_POINTS = frozenset(
 
 class PollError(RuntimeError):
     pass
-
-
-def compute_derived(values: dict[str, float]) -> None:
-    """Fill canonical physical-meter energy aliases in place."""
-    imp = values.get("imp_energy_total", 0.0)
-    exp = values.get("exp_energy_total", 0.0)
-    values["active_energy_total"] = imp + exp
-    values["net_imp_energy_total"] = imp
-    values["net_exp_energy_total"] = exp
 
 
 def _source_point_addresses(source: SourceSide) -> set[int]:
@@ -152,12 +157,19 @@ async def run_poller(
     on_update: Callable[[dict[str, float], float], None],
     on_error: Callable[[Exception], None],
     stop_event: asyncio.Event,
+    poll_once_fn=None,
 ) -> None:
+    """Poll `source` forever, reporting each result through the callbacks.
+
+    `poll_once_fn` swaps in another decoder with the same signature (the Huawei
+    SmartLogger driver does this); it defaults to the ND45 `poll_once`.
+    """
+    poll = poll_once_fn or poll_once
     loop = asyncio.get_running_loop()
     overrange_seen: set[str] = set()
     while not stop_event.is_set():
         try:
-            values = await poll_once(client, source, slave, overrange_seen=overrange_seen)
+            values = await poll(client, source, slave, overrange_seen=overrange_seen)
             on_update(values, loop.time())
         except Exception as exc:  # noqa: BLE001 - poller must never die
             try:

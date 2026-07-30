@@ -4,14 +4,20 @@ import pytest
 from pydantic import ValidationError
 
 from nd45_dtsu666.config import (
+    MAX_READ_REGISTERS,
     AppConfig,
+    DeriveOp,
     DtsuConf,
     DtsuIdentityConf,
     DtsuRtuConf,
     DtsuTcpConf,
+    HuaweiConf,
     Nd45Conf,
+    ReadGroup,
+    RegisterMap,
     SafetyConf,
     SourcePoint,
+    SourceSide,
     StaticDebugConf,
     TargetPoint,
     load_config,
@@ -351,3 +357,153 @@ def test_dtsu_conf_identity_accepts_overrides():
     assert cfg.identity.ucode == 701
     assert cfg.identity.ir_at == 200
     assert cfg.identity.net == 0  # untouched fields keep their default
+
+
+# --- Huawei SmartLogger source ----------------------------------------------
+
+
+def test_huawei_defaults_to_disabled_so_existing_configs_are_unchanged():
+    config = load_config("config/config.json")
+    assert config.huawei.enabled is False
+    # a config file with no "huawei" key at all must still validate
+    bare = AppConfig.model_validate(
+        {"nd45": {"host": "1.2.3.4"}, "dtsu": {"rtu": {"port": "/dev/null"}}}
+    )
+    assert bare.huawei.enabled is False
+    assert bare.huawei.plant_unit_id == 0
+    assert bare.huawei.meter_unit_id is None
+
+
+def test_huawei_conf_defaults_match_the_devices_own_timing():
+    conf = HuaweiConf()
+    assert conf.poll_interval_s == 5.0
+    assert conf.timeout_s == 6.0  # the manual allows a 5s Modbus timeout
+    # deliberately much looser than safety.max_data_age_s (3.0): a concentrator
+    # aggregating over RS485 cannot keep up with a directly wired analyser
+    assert conf.max_data_age_s == 60.0
+
+
+def test_huawei_enabled_requires_a_host():
+    with pytest.raises(ValidationError, match="huawei.host is required"):
+        HuaweiConf(enabled=True)
+
+
+def test_huawei_enabled_requires_at_least_one_unit_id():
+    with pytest.raises(ValidationError, match="at least one of plant_unit_id"):
+        HuaweiConf(enabled=True, host="10.0.0.5", plant_unit_id=None, meter_unit_id=None)
+
+
+def test_shipped_registers_load_both_huawei_sources():
+    registers = load_registers("config/registers.json")
+    plant = registers.huawei_plant_source
+    meter = registers.huawei_meter_source
+
+    # plant: SmartLogger's own aggregated registers, one block on logic device 0
+    assert [(g.base, g.count) for g in plant.read_groups] == [(40521, 57)]
+    assert plant.points["pv_p_total"].addr == 40525
+    assert plant.points["pv_p_total"].dtype == "i32"
+    assert plant.points["pv_p_total"].scale == 1.0  # gain 1000 kW -> SI watts
+    assert plant.points["pv_pf_total"].dtype == "i16"
+    assert plant.points["pv_pf_total"].scale == pytest.approx(0.001)
+    assert plant.points["pv_u_l12"].scale == pytest.approx(0.1)
+
+    # meter: table 2-5, two blocks, addressed by the meter's RS485 address
+    assert [(g.base, g.count) for g in meter.read_groups] == [(32260, 30), (32335, 30)]
+    assert meter.points["mtr_imp_energy_total"].dtype == "i64"
+    assert meter.points["mtr_imp_energy_total"].scale == pytest.approx(0.01)
+
+
+def test_register_map_huawei_sections_are_optional():
+    """Every shipped config_debug_*.json predates this source and must still load."""
+    minimal = load_registers("config/registers.json").model_dump(by_alias=True)
+    del minimal["huawei_plant_source"]
+    del minimal["huawei_meter_source"]
+    stripped = RegisterMap.model_validate(minimal)
+    assert stripped.huawei_plant_source is None
+    assert stripped.huawei_meter_source is None
+
+
+def test_source_point_rejects_compose_with_an_integer_dtype():
+    with pytest.raises(ValidationError, match="only supported for dtype 'float32'"):
+        SourcePoint.model_validate({"compose": [100, 102], "dtype": "i32"})
+
+
+def test_source_point_width_follows_dtype():
+    assert SourcePoint(addr=1).width == 2  # float32 default
+    assert SourcePoint(addr=1, dtype="u16").width == 1
+    assert SourcePoint(addr=1, dtype="i64").width == 4
+
+
+def test_read_group_count_is_capped_at_one_modbus_response():
+    with pytest.raises(ValidationError):
+        ReadGroup(base=100, count=MAX_READ_REGISTERS + 1)
+    assert ReadGroup(base=100, count=MAX_READ_REGISTERS).count == 125
+
+
+def test_source_side_rejects_a_point_outside_its_read_groups():
+    """Load-time failure beats a permanent fail-safe that looks like an outage."""
+    with pytest.raises(ValidationError, match="not fully covered by read_groups"):
+        SourceSide.model_validate(
+            {
+                "read_groups": [{"base": 100, "count": 4}],
+                "points": {"x": {"addr": 200, "dtype": "u16"}},
+            }
+        )
+
+
+def test_source_side_rejects_a_point_straddling_the_end_of_a_block():
+    """A 4-register I64 at the last address would read past the block."""
+    with pytest.raises(ValidationError, match="not fully covered by read_groups"):
+        SourceSide.model_validate(
+            {
+                "read_groups": [{"base": 100, "count": 2}],
+                "points": {"x": {"addr": 100, "dtype": "i64"}},
+            }
+        )
+
+
+def test_source_side_without_read_groups_skips_coverage_checking():
+    """The ND45 source keeps using nd45_poller.READ_GROUPS."""
+    side = SourceSide.model_validate({"points": {"x": {"addr": 50}}})
+    assert side.read_groups is None
+    assert side.derive == []
+
+
+@pytest.mark.parametrize(
+    "op,message",
+    [
+        ({"op": "constant", "targets": ["a"]}, "requires a finite 'value'"),
+        ({"op": "constant", "targets": ["a"], "value": 1.0, "from": ["b"]}, "takes no 'from'"),
+        ({"op": "copy", "targets": ["a"], "from": ["b", "c"]}, "exactly one 'from'"),
+        (
+            {"op": "phase_from_line", "targets": ["a", "b"], "from": ["c"]},
+            "one 'from' per target",
+        ),
+        ({"op": "hypot", "targets": ["a"], "from": ["b"]}, "two 'from' points per target"),
+        (
+            {"op": "ratio_split", "targets": ["a", "b"], "from": ["c"], "weights": ["d"]},
+            "one 'weights' entry per target",
+        ),
+        (
+            {"op": "hypot", "targets": ["a"], "from": ["b", "c"], "weights": ["d"]},
+            "does not take 'weights'",
+        ),
+        (
+            {"op": "copy", "targets": ["a"], "from": ["b"], "value": 1.0},
+            "does not take 'value'",
+        ),
+    ],
+)
+def test_derive_op_arity_is_validated(op, message):
+    with pytest.raises(ValidationError, match=message):
+        DeriveOp.model_validate(op)
+
+
+def test_derive_op_accepts_the_shipped_plant_and_meter_rules():
+    registers = load_registers("config/registers.json")
+    plant_ops = [op.op for op in registers.huawei_plant_source.derive]
+    meter_ops = [op.op for op in registers.huawei_meter_source.derive]
+    # frequency is absent from the whole SmartLogger manual -> a constant
+    assert "constant" in plant_ops and "constant" in meter_ops
+    assert "phase_from_line" in plant_ops  # plant publishes line voltages only
+    assert "ratio_split" in meter_ops  # meter has per-phase P but not per-phase Q

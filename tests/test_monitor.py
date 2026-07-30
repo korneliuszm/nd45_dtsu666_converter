@@ -78,3 +78,56 @@ async def test_run_monitor_returns_cleanly_when_never_connected(monkeypatch):
     await asyncio.wait_for(
         monitor_mod.run_monitor(config, registers, asyncio.Event()), timeout=1.0
     )
+
+
+# --- PV panel (Huawei SmartLogger) ------------------------------------------
+
+
+def _pv_canonical():
+    return {
+        **_sample_canonical(),
+        "pv_p_total": 1234500.0,
+        "pv_q_total": -50000.0,
+        "pv_pf_total": 0.999,
+        "pv_exp_energy_total": 12345.6,
+        "pv_e_daily": 456.7,
+        "pv_dc_power": 1250000.0,
+        "pv_i_l1": 100.0, "pv_i_l2": 101.0, "pv_i_l3": 102.0,
+        "pv_u_l12": 400.1, "pv_u_l23": 400.2, "pv_u_l31": 400.3,
+    }
+
+
+def test_dashboard_has_no_pv_panel_without_a_secondary_source():
+    text = render_dashboard(
+        _sample_canonical(), 0.4, True, RtuActivity(), 10, now=100.0
+    )
+    assert "PV production" not in text
+
+
+def test_dashboard_renders_the_pv_panel_when_pv_age_is_given():
+    text = render_dashboard(
+        _pv_canonical(), 0.4, True, RtuActivity(), 10, now=100.0, pv_age=2.5
+    )
+    assert "PV production (SmartLogger, telemetry)" in text
+    assert "data age: 2.50s" in text
+    assert "1234500.0" in text  # instantaneous PV production, the headline number
+    assert "E_daily=456.7 kWh" in text
+    assert "P_dc=1250000.0 W" in text
+
+
+def test_pv_panel_is_labelled_telemetry_and_survives_a_healthy_bridge():
+    """A stale PV panel next to a SERVING bridge is expected, not a fault."""
+    text = render_dashboard(
+        _pv_canonical(), 0.4, True, RtuActivity(), 10, now=100.0, pv_age=900.0
+    )
+    assert "state: SERVING" in text
+    assert "telemetry" in text
+    assert "data age: 900.00s" in text
+
+
+def test_pv_panel_reports_never_polled_before_the_first_sample():
+    text = render_dashboard(
+        _sample_canonical(), 0.4, True, RtuActivity(), 10, now=100.0, pv_age=float("inf")
+    )
+    assert "(never polled)" in text
+    assert "(no data yet)" in text

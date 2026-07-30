@@ -110,6 +110,13 @@ class MetricsSource:
     client: object | None = None
     mode: str = "run"
     started_at: float = field(default_factory=time.monotonic)
+    # Secondary Huawei SmartLogger source; all None unless huawei.enabled.
+    # Reported under separate `source`-labelled families and judged against
+    # huawei.max_data_age_s, never safety.max_data_age_s -- this source does not
+    # gate the DTSU output.
+    huawei_store: CanonicalStore | None = None
+    huawei_poll_stats: PollStats | None = None
+    huawei_client: object | None = None
 
 
 def _fmt(value: float) -> str:
@@ -185,6 +192,7 @@ def render(source: MetricsSource, loop_now: float, mono_now: float) -> str:
     out.sample(f"{PREFIX}_uptime_seconds", mono_now - source.started_at)
 
     _render_nd45(out, source, loop_now, mono_now)
+    _render_secondary_sources(out, source, loop_now, mono_now)
     _render_dtsu(out, source, mono_now)
     if cfg.prometheus.include_registers:
         _render_values(out, source, mono_now)
@@ -269,6 +277,95 @@ def _render_nd45(out: _Out, source: MetricsSource, loop_now: float, mono_now: fl
         )
         out.sample(
             f"{PREFIX}_watchdog_heartbeat_age_seconds", source.heartbeat.age(mono_now)
+        )
+
+
+def _render_secondary_sources(
+    out: _Out, source: MetricsSource, loop_now: float, mono_now: float
+) -> None:
+    """Emit `source`-labelled families for non-primary data sources.
+
+    A separate labelled family set rather than more `nd45_*` metrics: the
+    existing families are what the deployed dashboards scrape, and a secondary
+    source must not change their meaning. Nothing is emitted at all unless
+    huawei.enabled, so a single-source bridge's scrape is byte-identical to before.
+    """
+    if source.huawei_store is None or source.huawei_poll_stats is None:
+        return
+    cfg = source.config
+    label = [("source", "huawei")]
+    age = source.huawei_store.age(loop_now)  # loop clock, as the poller stamps it
+    stats = source.huawei_poll_stats
+
+    connected = getattr(source.huawei_client, "connected", None)
+    if connected is not None:
+        out.family(
+            f"{PREFIX}_source_connected",
+            "gauge",
+            "1 if the secondary source's Modbus TCP link is up.",
+        )
+        out.sample(f"{PREFIX}_source_connected", 1 if connected else 0, label)
+
+    out.family(
+        f"{PREFIX}_source_data_age_seconds",
+        "gauge",
+        "Age of the newest sample from a secondary source. +Inf until the first poll.",
+    )
+    out.sample(f"{PREFIX}_source_data_age_seconds", age, label)
+    out.family(
+        f"{PREFIX}_source_data_fresh",
+        "gauge",
+        "1 while a secondary source is within its own max_data_age_s. "
+        "Does NOT gate the DTSU output -- only the primary source does.",
+    )
+    out.sample(
+        f"{PREFIX}_source_data_fresh", 1 if age <= cfg.huawei.max_data_age_s else 0, label
+    )
+    out.family(
+        f"{PREFIX}_source_max_data_age_seconds",
+        "gauge",
+        "Configured staleness threshold for a secondary source.",
+    )
+    out.sample(f"{PREFIX}_source_max_data_age_seconds", cfg.huawei.max_data_age_s, label)
+    out.family(
+        f"{PREFIX}_source_poll_interval_seconds",
+        "gauge",
+        "Configured poll interval for a secondary source.",
+    )
+    out.sample(f"{PREFIX}_source_poll_interval_seconds", cfg.huawei.poll_interval_s, label)
+    out.family(
+        f"{PREFIX}_source_polls_total", "counter", "Secondary-source poll attempts by outcome."
+    )
+    out.sample(f"{PREFIX}_source_polls_total", stats.polls_ok, [*label, ("result", "ok")])
+    out.sample(
+        f"{PREFIX}_source_polls_total", stats.polls_failed, [*label, ("result", "error")]
+    )
+    out.family(
+        f"{PREFIX}_source_consecutive_poll_failures",
+        "gauge",
+        "Failed secondary-source polls since the last successful one.",
+    )
+    out.sample(f"{PREFIX}_source_consecutive_poll_failures", stats.consecutive_failures, label)
+    out.family(
+        f"{PREFIX}_source_last_successful_poll_age_seconds",
+        "gauge",
+        "Seconds since the last successful secondary-source poll. +Inf if there was none.",
+    )
+    out.sample(
+        f"{PREFIX}_source_last_successful_poll_age_seconds",
+        _age(stats.last_ok_ts, mono_now),
+        label,
+    )
+    if stats.last_error_type is not None:
+        out.family(
+            f"{PREFIX}_source_last_poll_error_info",
+            "gauge",
+            "Exception type of the last failed secondary-source poll.",
+        )
+        out.sample(
+            f"{PREFIX}_source_last_poll_error_info",
+            1,
+            [*label, ("type", stats.last_error_type)],
         )
 
 
