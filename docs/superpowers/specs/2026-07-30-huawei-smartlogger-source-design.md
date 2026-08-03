@@ -116,7 +116,7 @@ SmartLogger ──FC03──> │ poller → CanonicalStore → datastore → RT
                       │              │                          ▲        │    /dev/ttyAMA3
                       │        HealthGate(30.0s) ────────────────┘        │
                       └──────────────────────────────────────────────────┘
-proces: jeden event loop · jeden endpoint Prometheusa · watchdog na żywotność loopa
+wdrożenie: osobna usługa systemd na mostek (`nd45-dtsu666@nd45`, `@smartlogger`)
 ```
 
 Mostki nie dzielą **niczego**: osobny klient, `CanonicalStore`, datastore, bramka
@@ -154,9 +154,9 @@ zawiesiłby się w ciszy, zamiast paść. `_check_output_transports_do_not_colli
 odrzuca to przy wczytaniu configu (i analogicznie kolizję `host:port` dla TCP).
 `slave_id` **może** się powtarzać, bo szyny są elektrycznie niezależne.
 
-### 4. Zawieszony poller naprawiany w procesie, bez restartu usługi
+### 4. Odzysk zawieszonego pollera: najpierw w procesie, potem systemd
 
-Restart przez systemd ubiłby oba mostki. Dlatego `app.supervise_poller` nadzoruje
+`app.supervise_poller` nadzoruje
 poller każdego mostka osobno: gdy `heartbeat` nie ruszy się dłużej niż
 `source.stall_timeout_s`, anuluje task, zamyka klienta, buduje nowego przez
 `client_factory`, łączy i startuje poller od nowa. Licznik `recovery.restarts` idzie
@@ -168,16 +168,32 @@ dane się starzeją, `supervise_server` wycisza wyjście, i nic nie jest odbudow
 Odzysk dotyczy tylko `await`, który nigdy nie wraca. Pilnuje tego test
 `test_a_healthy_poll_loop_is_never_rebuilt`.
 
-**Trade-off do świadomego przyjęcia:** wcześniej zawieszony poller ND45 powodował
-restart usługi przez systemd. Teraz nie powoduje. Zysk: awaria jednego mostka nie
-zrzuca drugiego. Koszt: jeśli sam odzysk okaże się niewystarczający, nie ma już
-zewnętrznej siatki bezpieczeństwa dla tego przypadku — dlatego
-`nd45_dtsu666_bridge_poller_restarts_total` **musi** być w alertach. Rosnący licznik
-oznacza, że odzysk kręci się w kółko.
+**Rozwiązane przez rozdzielenie na osobne usługi.** Początkowo odzysk w procesie był
+jedynym mechanizmem, bo restart przez systemd ubijał oba mostki — i trzeba było
+zaakceptować brak zewnętrznej siatki bezpieczeństwa. Po rozdzieleniu na
+`nd45-dtsu666@nd45` i `nd45-dtsu666@smartlogger` restart dotyka **tylko jednej**
+usługi, więc watchdog może wrócić do pilnowania postępu pollera. Kolejność:
+`stall_timeout_s` (60 s) < `WatchdogSec` (90 s) — najpierw tani odzysk klienta w
+procesie, a jeśli się zapętli, systemd restartuje tę jedną usługę. Zastrzeżenie o
+braku siatki bezpieczeństwa **już nie obowiązuje**; `bridge_poller_restarts_total`
+pozostaje przydatny jako sygnał, ale nie jest jedyną linią obrony.
 
-`watchdog_loop` śledzi teraz **żywotność event loopa** (ticker `app.loop_ticker`), a
-nie postęp pollera. Do systemd eskaluje wyłącznie zaklinowany loop albo martwy
-proces. `WatchdogSec=90` bez zmian.
+**Izolacja na dwóch poziomach.** Wewnątrz procesu mostki nie dzielą niczego poza
+event loopem. Między procesami — `run --bridge <nazwa>` ogranicza proces do jednego
+mostka, co zamyka ostatnią wspólną zależność: crash, OOM czy zwykły `systemctl
+restart` na jednej usłudze nie dotyka drugiej. Zweryfikowane na żywo: `SIGKILL` na
+usłudze smartlogger zostawia usługę nd45 serwującą −60000 W i odwrotnie.
+
+**Obie usługi czytają ten sam `config.json` — świadomie.** Walidatory odrzucające dwa
+mostki na tym samym porcie szeregowym działają tylko wtedy, gdy jedna konfiguracja
+widzi oba mostki; rozdzielenie plików odebrałoby tę kontrolę, a pymodbus zjada
+wynikający błąd bindowania. Osobne porty metryk (`primary_metrics_port`,
+`bridges[].metrics_port`) bo dwa procesy nie mogą dzielić jednego portu.
+
+`watchdog_loop` śledzi postęp pętli odpytywania przez `app.SlowestHeartbeat`
+(najwolniej postępujący mostek w tym procesie — przy jednym mostku na usługę to po
+prostu jego poller). Do systemd eskaluje dopiero to, czego odzysk w procesie nie
+naprawił. `WatchdogSec=90` bez zmian.
 
 ### 5. Konfiguracja: lista mostków bez migracji istniejących plików
 
@@ -241,8 +257,8 @@ proporcje nie niosą wtedy informacji.
 | `canonical.py` | `apply_derive`, przeniesione `compute_derived` |
 | `huawei_poller.py` | **nowy** — `poll_once` zgodne sygnaturą z ND45, `read_groups`, `decode_source` |
 | `nd45_poller.py` | `run_poller(..., poll_once_fn=)`; re-export `compute_derived` |
-| `app.py` | `BridgeRuntime`, `Pipeline` z listą mostków + akcesory zgodności, `build_pipeline` w pętli, `supervise_poller` z odzyskiem, `loop_ticker`, `_POLL_ONCE` |
-| `watchdog.py` | `watchdog_loop` na żywotność loopa |
+| `app.py` | `BridgeRuntime`, `Pipeline` z listą mostków + akcesory zgodności, `build_pipeline` w pętli, `select_specs` (filtr `--bridge`), `supervise_poller` z odzyskiem, `SlowestHeartbeat`, `_POLL_ONCE` |
+| `watchdog.py` | `watchdog_loop` karmiony postępem pollerów (przez `SlowestHeartbeat`) |
 | `metrics.py` | `BridgeMetrics`, `RecoveryStats`, rodziny `_bridge_*{bridge=...}`, `/healthz` po wszystkich mostkach, aliasy mostka A |
 | `monitor.py` | para paneli na mostek |
 | `rtudebug.py`, `diagnostics.py`, `static_debug.py`, `__main__.py` | wybór mostka przez `--bridge` |

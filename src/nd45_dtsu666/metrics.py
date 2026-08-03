@@ -142,8 +142,8 @@ class MetricsSource:
     bridges: list[BridgeMetrics] = field(default_factory=list)
     # (map name, side) pairs shared by every bridge -- the name becomes a label
     targets: list[tuple[str, TargetSide]] = field(default_factory=list)
-    # Proves the event loop is turning; drives the systemd watchdog.
-    loop_heartbeat: Heartbeat | None = None
+    # Least-progressing poll loop in this process; drives the systemd watchdog.
+    watchdog_heartbeat: object | None = None
     mode: str = "run"
     started_at: float = field(default_factory=time.monotonic)
 
@@ -221,16 +221,17 @@ def render(source: MetricsSource, loop_now: float, mono_now: float) -> str:
     out.family(f"{PREFIX}_uptime_seconds", "gauge", "Seconds since the exporter started.")
     out.sample(f"{PREFIX}_uptime_seconds", mono_now - source.started_at)
 
-    if source.loop_heartbeat is not None:
+    if source.watchdog_heartbeat is not None:
         out.family(
-            f"{PREFIX}_event_loop_heartbeat_age_seconds",
+            f"{PREFIX}_watchdog_heartbeat_age_seconds",
             "gauge",
-            "Seconds since the event loop last ticked (drives the systemd watchdog). "
-            "A stuck poller is recovered per bridge and does not show up here.",
+            "Seconds since the least-progressing poll loop in this process last "
+            "advanced. Drives the systemd watchdog; supervise_poller tries an "
+            "in-process rebuild first.",
         )
         out.sample(
-            f"{PREFIX}_event_loop_heartbeat_age_seconds",
-            source.loop_heartbeat.age(mono_now),
+            f"{PREFIX}_watchdog_heartbeat_age_seconds",
+            source.watchdog_heartbeat.age(mono_now),
         )
 
     for bridge in source.bridges:
@@ -629,18 +630,6 @@ def _render_primary_aliases(
         out.sample(
             f"{PREFIX}_nd45_last_poll_error_info", 1, [("type", stats.last_error_type)]
         )
-    if source.loop_heartbeat is not None:
-        out.family(
-            f"{PREFIX}_watchdog_heartbeat_age_seconds",
-            "gauge",
-            "Seconds since the watchdog heartbeat last advanced. Now tracks event-loop "
-            "liveness: a hung poller is recovered per bridge instead of restarting.",
-        )
-        out.sample(
-            f"{PREFIX}_watchdog_heartbeat_age_seconds",
-            source.loop_heartbeat.age(mono_now),
-        )
-
     out.family(
         f"{PREFIX}_dtsu_server_up",
         "gauge",
@@ -880,17 +869,26 @@ async def serve_metrics(
 
 
 def start(
-    config: AppConfig, source: MetricsSource | None, stop_event: asyncio.Event
+    config: AppConfig,
+    source: MetricsSource | None,
+    stop_event: asyncio.Event,
+    only: str | None = None,
 ) -> asyncio.Task | None:
     """Start the metrics endpoint as a task, or None if disabled.
 
     Started eagerly by each runner BEFORE connect_with_retry: an endpoint that
-    only came up after the ND45 connected would be unreachable in exactly the
+    only came up after the source connected would be unreachable in exactly the
     outage it exists to diagnose.
+
+    `only` names the single bridge this process runs, so it binds that bridge's
+    own `metrics_port` -- two systemd instances cannot share one port.
     """
     if source is None or not config.prometheus.enabled:
         return None
-    return asyncio.create_task(serve_metrics(config.prometheus, source, stop_event))
+    conf = config.prometheus.model_copy(
+        update={"port": config.metrics_port_for(only)}
+    )
+    return asyncio.create_task(serve_metrics(conf, source, stop_event))
 
 
 async def stop(task: asyncio.Task | None) -> None:

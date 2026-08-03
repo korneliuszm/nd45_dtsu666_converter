@@ -52,7 +52,7 @@ def _source(**overrides) -> MetricsSource:
         config=config,
         bridges=bridges,
         targets=registers.targets,
-        loop_heartbeat=Heartbeat(),
+        watchdog_heartbeat=Heartbeat(),
         mode="run",
         started_at=0.0,
     )
@@ -167,7 +167,7 @@ def test_build_info_carries_version_mode_and_bridge_count():
 def test_heartbeat_age_exported():
     """The alias family now reports event-loop liveness, not poller progress."""
     source = _source()
-    source.loop_heartbeat.touch(50.0)
+    source.watchdog_heartbeat.touch(50.0)
     text = render(source, loop_now=1.0, mono_now=52.5)
     assert _value(text, f"{P}_watchdog_heartbeat_age_seconds") == "2.5"
 
@@ -672,12 +672,12 @@ def test_healthz_is_ok_only_when_every_bridge_is_fresh():
     assert "stale: smartlogger" in body
 
 
-def test_event_loop_heartbeat_is_exported():
-    """The watchdog now tracks loop liveness, not poller progress."""
+def test_watchdog_heartbeat_is_exported():
+    """Tracks poll-loop progress; in-process recovery gets first crack at a stall."""
     source = _source()
-    source.loop_heartbeat.touch(9.0)
+    source.watchdog_heartbeat.touch(9.0)
     text = render(source, loop_now=10.0, mono_now=10.0)
-    assert _samples(text, f"{P}_event_loop_heartbeat_age_seconds") == [("", "1")]
+    assert _samples(text, f"{P}_watchdog_heartbeat_age_seconds") == [("", "1")]
 
 
 def test_bridge_heartbeat_and_stall_timeout_are_exported():

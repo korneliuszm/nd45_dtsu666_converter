@@ -1,14 +1,20 @@
+# Single-process unit: runs EVERY enabled bridge in one service.
+#
+# Prefer nd45-dtsu666@.service (one instance per bridge) for the two-bridge
+# deployment -- there a crash or restart here silences both meters at once. This
+# unit is kept for a single-bridge install and for bring-up, where having
+# everything in one journal is easier.
+
 [Unit]
-Description=Modbus bridges -> DTSU666 (Sigenergy Power Sensor)
+Description=Modbus bridges -> DTSU666, all in one process (Sigenergy Power Sensor)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=notify
-# Watches event-loop liveness, not poller progress: a single stalled poll loop is
-# rebuilt in-process per bridge (see app.supervise_poller), because a restart here
-# would take every configured bridge down at once. Alert on
-# nd45_dtsu666_bridge_poller_restarts_total instead.
+# Tracks the least-progressing poll loop in the process. With several bridges here
+# a restart takes them all down, which is why the per-instance unit is preferred.
+# supervise_poller still tries an in-process client rebuild first.
 WatchdogSec=90
 # One process serves every bridge in config.json -- with two bridges that is two
 # RS-485 ports (/dev/ttyAMA2 and /dev/ttyAMA3). Make sure the service user can open

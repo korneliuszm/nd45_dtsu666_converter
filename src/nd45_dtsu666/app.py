@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from pymodbus.client import AsyncModbusTcpClient
 
@@ -63,10 +64,12 @@ class Pipeline:
 
     bridges: list[BridgeRuntime]
     coros: list
-    # Proves the event loop itself is turning; drives the systemd watchdog.
-    # Poller progress is handled per bridge by supervise_poller, not here.
-    loop_heartbeat: Heartbeat = field(default_factory=Heartbeat)
     metrics: MetricsSource | None = None
+
+    @property
+    def watchdog_heartbeat(self) -> "SlowestHeartbeat":
+        """What the systemd watchdog watches: the least-progressing poll loop."""
+        return SlowestHeartbeat(bridge.heartbeat for bridge in self.bridges)
 
     # Single-bridge accessors, for callers that operate on one bridge (monitor's
     # register table, rtudebug, diag, static) and for existing tests.
@@ -241,6 +244,22 @@ def build_bridge(
     )
 
 
+def select_specs(config: AppConfig, only: str | None) -> list[BridgeConf]:
+    """Bridges this process should run: all of them, or just the named one.
+
+    Raises rather than silently running nothing, so a typo in a systemd unit fails
+    the unit instead of leaving a bus unserved.
+    """
+    specs = config.bridge_specs
+    if only is None:
+        return specs
+    selected = [spec for spec in specs if spec.name == only]
+    if not selected:
+        available = ", ".join(spec.name for spec in specs)
+        raise SystemExit(f"unknown bridge {only!r} (enabled bridges: {available})")
+    return selected
+
+
 def build_pipeline(
     config: AppConfig,
     registers: RegisterMap,
@@ -249,15 +268,22 @@ def build_pipeline(
     client=None,
     mode: str = "run",
     clients: dict[str, object] | None = None,
+    only: str | None = None,
 ) -> Pipeline:
-    """Wire every enabled bridge: poller + output server + fail-safe.
+    """Wire the enabled bridges: poller + output server + fail-safe for each.
 
-    `activity` and `client` apply to the first bridge (the single-bridge callers
-    and existing tests pass them); `clients` maps bridge name -> duck-typed client
-    for the rest. A real AsyncModbusTcpClient needs a running loop, so tests
+    `only` restricts the process to a single bridge, which is how the deployment
+    runs them: one systemd instance per bridge, so a crash, an OOM or a restart of
+    one cannot take the other's RS-485 down with it. The whole config is still
+    loaded and validated either way, which is what keeps the "two bridges must not
+    share a serial port" check working across separately-run services.
+
+    `activity` and `client` apply to the first selected bridge (the single-bridge
+    callers and existing tests pass them); `clients` maps bridge name -> duck-typed
+    client for the rest. A real AsyncModbusTcpClient needs a running loop, so tests
     inject fakes here rather than letting the factory run.
     """
-    specs = config.bridge_specs
+    specs = select_specs(config, only)
     injected = dict(clients or {})
     if client is not None:
         injected.setdefault(specs[0].name, client)
@@ -289,13 +315,12 @@ def build_pipeline(
         bridges.append(bridge)
         coros.extend(_bridge_coros(bridge, registers, config, stop_event))
 
-    loop_heartbeat = Heartbeat()
     metrics_source = (
         MetricsSource(
             config=config,
             mode=mode,
-            loop_heartbeat=loop_heartbeat,
             targets=registers.targets,
+            watchdog_heartbeat=SlowestHeartbeat(b.heartbeat for b in bridges),
             bridges=[
                 BridgeMetrics(
                     name=b.name,
@@ -314,9 +339,7 @@ def build_pipeline(
         if any(b.activity is not None for b in bridges)
         else None
     )
-    return Pipeline(
-        bridges=bridges, coros=coros, loop_heartbeat=loop_heartbeat, metrics=metrics_source
-    )
+    return Pipeline(bridges=bridges, coros=coros, metrics=metrics_source)
 
 
 def _bridge_coros(
@@ -456,24 +479,21 @@ def _close_quietly(client, name: str) -> None:
         log.debug("bridge %r client close() failed", name, exc_info=True)
 
 
-async def loop_ticker(
-    heartbeat: Heartbeat,
-    interval: float,
-    stop_event: asyncio.Event,
-    now: Callable[[], float] = time.monotonic,
-) -> None:
-    """Touch `heartbeat` on a timer, proving the event loop is still turning.
+class SlowestHeartbeat:
+    """Reports the age of whichever tracked poll loop is furthest behind.
 
-    This is what the systemd watchdog now watches. A stuck poller is recovered
-    in-process by supervise_poller; only a wedged event loop (or a dead process)
-    should reach systemd, because a restart takes every bridge down at once.
+    Feeds the systemd watchdog. With one bridge per systemd instance -- how the
+    deployment runs -- this is simply that bridge's poller progress. When several
+    bridges share a process (dev, `monitor`), any one of them stalling withholds
+    the ping, which is the conservative choice: a restart is only correct if it
+    fixes something, and a bridge that has stopped polling is not being served.
     """
-    while not stop_event.is_set():
-        heartbeat.touch(now())
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=interval)
-        except asyncio.TimeoutError:
-            pass
+
+    def __init__(self, beats) -> None:
+        self._beats = list(beats)
+
+    def age(self, now: float) -> float:
+        return max((beat.age(now) for beat in self._beats), default=math.inf)
 
 
 async def run_app(
@@ -482,8 +502,11 @@ async def run_app(
     stop_event: asyncio.Event,
     client=None,
     clients: dict[str, object] | None = None,
+    only: str | None = None,
 ) -> None:
-    pipe = build_pipeline(config, registers, stop_event, client=client, clients=clients)
+    pipe = build_pipeline(
+        config, registers, stop_event, client=client, clients=clients, only=only
+    )
     notify_ready()
 
     # Started here (not inside build_pipeline/pipe.coros) so they run throughout
@@ -491,20 +514,20 @@ async def run_app(
     # prolonged source-unreachable-at-startup would starve the watchdog and
     # trigger a spurious restart, and a metrics endpoint that is down while a
     # source is unreachable is down exactly when it is needed.
+    # The watchdog tracks poll-loop progress. supervise_poller gets first crack at
+    # a stalled loop (source.stall_timeout_s is set below WatchdogSec), and systemd
+    # restarts this instance only if that in-process recovery is itself looping.
+    # Safe to escalate now that each bridge is its own systemd instance -- the
+    # restart no longer takes a sibling bridge's RS-485 down with it.
     watchdog_sec = watchdog_seconds()
     extra_tasks: list[asyncio.Task] = []
     if watchdog_sec is not None:
         extra_tasks.append(
             asyncio.create_task(
-                loop_ticker(pipe.loop_heartbeat, watchdog_sec / 4, stop_event)
+                watchdog_loop(pipe.watchdog_heartbeat, watchdog_sec, stop_event)
             )
         )
-        extra_tasks.append(
-            asyncio.create_task(
-                watchdog_loop(pipe.loop_heartbeat, watchdog_sec, stop_event)
-            )
-        )
-    metrics_task = metrics.start(config, pipe.metrics, stop_event)
+    metrics_task = metrics.start(config, pipe.metrics, stop_event, only=only)
 
     # Bridges connect concurrently and independently: an unreachable source must
     # not delay bringing any sibling bridge up.

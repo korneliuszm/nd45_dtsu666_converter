@@ -467,6 +467,12 @@ class BridgeConf(BaseModel):
     source: SourceConf
     dtsu: DtsuConf
     safety: SafetyConf = SafetyConf()
+    # Prometheus port to use when this bridge runs as its own process
+    # (`run --bridge <name>`, i.e. one systemd instance per bridge). Two services
+    # cannot share prometheus.port, so each needs its own here. None falls back to
+    # the process-wide prometheus.port, which is right when one process runs all
+    # bridges (dev, `monitor`).
+    metrics_port: int | None = Field(default=None, ge=1, le=65535)
 
     @model_validator(mode="after")
     def _check_enabled_is_usable(self) -> "BridgeConf":
@@ -529,6 +535,21 @@ class AppConfig(BaseModel):
 
     # Name given to the bridge assembled from the legacy top-level keys.
     PRIMARY_BRIDGE_NAME: ClassVar[str] = "nd45"
+    # Its metrics port when run as its own service; None = use prometheus.port.
+    primary_metrics_port: int | None = Field(default=None, ge=1, le=65535)
+
+    def metrics_port_for(self, only: str | None) -> int:
+        """Port the Prometheus endpoint binds for this process.
+
+        With one bridge per systemd instance each service needs its own port; with
+        every bridge in one process the shared prometheus.port is right.
+        """
+        if only is None:
+            return self.prometheus.port
+        for spec in self.bridge_specs:
+            if spec.name == only and spec.metrics_port is not None:
+                return spec.metrics_port
+        return self.prometheus.port
 
     @property
     def bridge_specs(self) -> list[BridgeConf]:
@@ -539,6 +560,7 @@ class AppConfig(BaseModel):
         """
         primary = BridgeConf(
             name=self.PRIMARY_BRIDGE_NAME,
+            metrics_port=self.primary_metrics_port,
             source=Nd45SourceConf(
                 host=self.nd45.host,
                 port=self.nd45.port,
@@ -631,6 +653,42 @@ class AppConfig(BaseModel):
                 raise ValueError(
                     f"prometheus.port {self.prometheus.port} collides with "
                     f"bridge {bridge.name!r} dtsu.tcp.port"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _check_per_bridge_metrics_ports(self) -> "AppConfig":
+        """Two bridges run as separate services must not share a metrics port.
+
+        They would race for the bind, and the loser retries silently rather than
+        failing -- so one service would simply have no metrics endpoint.
+        """
+        seen: dict[int, str] = {}
+        for spec in self.bridge_specs:
+            if spec.metrics_port is None:
+                continue
+            owner = seen.get(spec.metrics_port)
+            if owner is not None:
+                raise ValueError(
+                    f"bridges {owner!r} and {spec.name!r} both use metrics_port "
+                    f"{spec.metrics_port}"
+                )
+            seen[spec.metrics_port] = spec.name
+        # ...and none may collide with any bridge's Modbus TCP output
+        wildcards = {"0.0.0.0", "::"}
+        for spec in self.bridge_specs:
+            dtsu = spec.dtsu
+            if dtsu.transport != "tcp" or dtsu.tcp is None:
+                continue
+            owner = seen.get(dtsu.tcp.port)
+            if owner is not None and (
+                self.prometheus.host == dtsu.tcp.host
+                or self.prometheus.host in wildcards
+                or dtsu.tcp.host in wildcards
+            ):
+                raise ValueError(
+                    f"bridge {owner!r} metrics_port {dtsu.tcp.port} collides with "
+                    f"bridge {spec.name!r} dtsu.tcp.port"
                 )
         return self
 

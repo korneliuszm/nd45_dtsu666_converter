@@ -636,3 +636,40 @@ def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():
     assert bridge.dtsu.rtu.port != config.dtsu.rtu.port
     assert bridge.source.register_map == "huawei_plant_source"
     assert bridge.safety.max_data_age_s == 30.0
+
+
+def test_two_bridges_may_not_share_a_metrics_port():
+    """Run as separate services they would race for the bind; the loser retries
+    silently, so one service would simply have no metrics endpoint."""
+    raw = _with_bridges(
+        {**SECOND_BRIDGE, "metrics_port": 9090},
+    )
+    raw["primary_metrics_port"] = 9090
+    with pytest.raises(ValidationError, match="both use metrics_port 9090"):
+        AppConfig.model_validate(raw)
+
+
+def test_a_metrics_port_may_not_collide_with_a_bridge_tcp_output():
+    raw = _with_bridges(
+        {**SECOND_BRIDGE, "metrics_port": 5020,
+         "dtsu": {"transport": "tcp", "slave_id": 11,
+                  "tcp": {"host": "0.0.0.0", "port": 5020}}}
+    )
+    with pytest.raises(ValidationError, match="collides with bridge"):
+        AppConfig.model_validate(raw)
+
+
+def test_metrics_port_falls_back_to_the_shared_one_when_unset():
+    config = AppConfig.model_validate(_with_bridges(SECOND_BRIDGE))
+    assert config.metrics_port_for("smartlogger") == config.prometheus.port
+
+
+def test_shipped_config_gives_each_service_its_own_metrics_port():
+    """The two systemd instances must not fight over 9090."""
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    raw["bridges"][0]["enabled"] = True
+    raw["bridges"][0]["source"]["host"] = "192.168.22.120"
+    config = AppConfig.model_validate(raw)
+    ports = {s.name: config.metrics_port_for(s.name) for s in config.bridge_specs}
+    assert ports == {"nd45": 9090, "smartlogger": 9091}
+    assert len(set(ports.values())) == len(ports)

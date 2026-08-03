@@ -1,10 +1,10 @@
 # nd45_dtsu666_converter
 
-Temporary Modbus bridge: one or more independent source → DTSU666 translators in a
-single process, each served as Modbus RTU or Modbus TCP (config-selectable) so a
-Sigenergy storage system can read it as a "Power Sensor". The deployment here runs
-two: a Lumel ND45 on `/dev/ttyAMA2` (grid-tie balance) and a Huawei SmartLogger on
-`/dev/ttyAMA3` (PV farm production). See "Multiple bridges in one process".
+Temporary Modbus bridge: one or more independent source → DTSU666 translators, each
+served as Modbus RTU or Modbus TCP (config-selectable) so a Sigenergy storage system
+can read it as a "Power Sensor". The deployment here runs two, **as separate systemd
+services**: a Lumel ND45 on `/dev/ttyAMA2` (grid-tie balance) and a Huawei
+SmartLogger on `/dev/ttyAMA3` (PV farm production). See "Independent bridges".
 
 The output exposes both the standard DTSU666 holding-register map over FC03 (secondary/
 CT side, `0x2000`/`0x101E`) and the Sigenergy OEM map over FC04 (primary side, `0x150A`
@@ -56,11 +56,11 @@ the MBAP header for TCP) and must match what Sigenergy is configured to poll.
 The optional `prometheus` section controls the metrics endpoint (see below); omit it
 to accept the defaults.
 
-## Multiple bridges in one process
+## Independent bridges
 
-The process can run **several fully independent bridges**, each with its own
-upstream source, its own served DTSU666 datastore, and its own output transport.
-The intended deployment here is two:
+A **bridge** is a complete source → DTSU666 translator with its own upstream client,
+canonical store, served datastore, freshness gate and output transport. The intended
+deployment here is two, each running as its own systemd service:
 
 | | bridge `nd45` | bridge `smartlogger` |
 |---|---|---|
@@ -69,10 +69,17 @@ The intended deployment here is two:
 | what Sigenergy sees | grid-tie balance | PV farm production |
 | `safety.max_data_age_s` | 3.0s (polled every 0.3s) | 30.0s (polled every 5s) |
 
-Bridges share the event loop and the Prometheus endpoint and **nothing else**:
-separate client, canonical store, datastore, freshness gate and transport. One
-source going dark silences that bridge's RS-485 alone, so the Sigenergy on that bus
-sees a meter timeout and enters its own safe mode while the other bus keeps serving.
+Two levels of isolation, and both matter:
+
+- **Inside a process** — bridges share nothing but the event loop, so one source
+  going dark silences that bridge's RS-485 alone. The Sigenergy on that bus sees a
+  meter timeout and enters its own safe mode while the other bus keeps serving.
+- **Across processes** — running each bridge as its own service (`run --bridge`)
+  means a crash, an OOM, a bad deploy or a routine `systemctl restart` on one cannot
+  touch the other either. See "Run as a service".
+
+One process can still run every bridge (`run` with no `--bridge`), which is what
+`monitor` and the debug modes do.
 
 ### Configuration
 
@@ -146,13 +153,12 @@ families are still emitted as aliases for the first bridge, so existing dashboar
 keep working. `/healthz` returns 200 only when **every** bridge is fresh and names
 the stale ones. `monitor_nd45` / `monitor_hsm` show one screen per bridge (see below).
 
-### Hung-poller recovery, and what changed in the watchdog
+### Hung-poller recovery
 
-A restart by systemd would take **every** bridge down, so a poll loop that stops
-making progress for `source.stall_timeout_s` is now torn down and rebuilt in place
-(fresh client, reconnect, restart) by `app.supervise_poller`, per bridge. The
-systemd watchdog therefore watches **event-loop liveness** instead of poller
-progress, and only a wedged loop or a dead process escalates to a restart.
+A poll loop that stops making progress for `source.stall_timeout_s` is torn down and
+rebuilt in place (fresh client, reconnect, restart) by `app.supervise_poller`, per
+bridge. That is the cheap first attempt; the systemd watchdog is the backstop if the
+rebuild itself loops. See "Run as a service" for how the two are ordered.
 
 An unreachable source is *not* a stall: the poller keeps cycling through its error
 path, the data goes stale, and `supervise_server` silences that bridge — no rebuild.
@@ -369,20 +375,52 @@ Static mode is strictly opt-in: the `run`, `monitor`, `rtudebug`, and `selftest`
 commands continue to use their existing data sources.
 
 ## Run as a service
+
+**One systemd instance per bridge.** Each bridge already owns its store, datastore,
+fail-safe and RS-485 port inside the process, but the process itself was still a
+shared fate: a crash, an OOM, a bad deploy or a plain `systemctl restart` silenced
+*both* meters. Separate services remove that last coupling — verified by SIGKILLing
+one service and watching the other keep serving.
+
 ```bash
-sudo cp systemd/nd45-dtsu666.service /etc/systemd/system/
+sudo cp systemd/nd45-dtsu666@.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now nd45-dtsu666
-journalctl -u nd45-dtsu666 -f
+sudo systemctl enable --now nd45-dtsu666@nd45
+sudo systemctl enable --now nd45-dtsu666@smartlogger
+
+systemctl status nd45-dtsu666@smartlogger
+journalctl -u nd45-dtsu666@smartlogger -f
+sudo systemctl restart nd45-dtsu666@smartlogger   # grid-tie meter untouched
 ```
 
-The unit uses systemd's watchdog (`WatchdogSec=90`): the app pings systemd every
-~45s as long as the ND45 poller is making progress (connecting, polling
-successfully, or handling a poll failure — a real ND45 outage is a normal,
-expected state, not a hang). If the poller genuinely freezes for 90s, systemd
-stops seeing pings and restarts the service automatically (`Restart=always`
-already covers this the same as a crash). No config changes needed to enable
-or disable this — it's entirely controlled by `WatchdogSec=` in the unit file.
+`%i` is the bridge `name` from `config.json`, passed through as `run --bridge %i`.
+
+**Both instances read the same `config/config.json`, deliberately.** The validators
+that reject two bridges sharing a serial port (or colliding TCP/metrics ports) only
+work when one configuration sees every bridge. Splitting into per-service config
+files would lose that check — and pymodbus 3.6.9 swallows the resulting bind error,
+so the losing service would hang in silence instead of failing.
+
+Because two processes cannot share a Prometheus port, each bridge sets its own:
+`primary_metrics_port` for the first bridge and `bridges[].metrics_port` for the
+rest (9090 and 9091 as shipped). Running everything in one process still uses the
+shared `prometheus.port`.
+
+### Single-process alternative
+
+`systemd/nd45-dtsu666.service` runs **every** enabled bridge in one service
+(`run` with no `--bridge`). Fine for a single-bridge install or for bring-up, where
+one journal is easier to follow — but for the two-bridge deployment prefer the
+per-instance unit, since a restart there drops both buses.
+
+### The watchdog
+
+`WatchdogSec=90` tracks **this instance's poll-loop progress**. A stalled loop is
+first rebuilt in place by `app.supervise_poller` (`source.stall_timeout_s`, 60s),
+and only if that recovery keeps looping does systemd restart the service — which is
+now safe, because the restart no longer touches the sibling bridge. An unreachable
+source is *not* a stall: the poller keeps cycling, the data goes stale, and the
+freshness gate silences that bridge's output on its own.
 
 ## On-site verification checklist (before leaving unattended)
 1. **Sign convention** — with known import/export, confirm Sigenergy sees correct grid

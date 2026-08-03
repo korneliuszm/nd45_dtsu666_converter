@@ -3,8 +3,16 @@ import socket
 import time
 
 import pytest
+from pydantic import ValidationError
 
-from nd45_dtsu666.app import FaultReporter, build_on_update, build_pipeline, connect_with_retry, run_app
+from nd45_dtsu666.app import (
+    FaultReporter,
+    build_on_update,
+    build_pipeline,
+    connect_with_retry,
+    run_app,
+    select_specs,
+)
 from nd45_dtsu666.canonical import CanonicalStore
 from nd45_dtsu666.codec import registers_to_float
 from nd45_dtsu666.config import AppConfig, load_config, load_registers
@@ -288,6 +296,7 @@ SMARTLOGGER_BRIDGE = {
         "rtu": {"port": "/dev/ttyAMA3"},
     },
     "safety": {"max_data_age_s": 30.0},
+    "metrics_port": 9091,
 }
 
 
@@ -535,5 +544,105 @@ def test_no_activity_recorders_without_a_watcher_or_prometheus(monkeypatch):
         clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
     )
     assert all(b.activity is None for b in pipe.bridges)
+    for coro in pipe.coros:
+        coro.close()
+
+
+# --- one bridge per process (systemd instance per bridge) --------------------
+
+
+def test_run_bridge_restricts_the_process_to_one_bridge(monkeypatch):
+    """How the deployment runs: a systemd instance per bridge.
+
+    A crash, an OOM or a plain `systemctl restart` on one service must not be able
+    to silence the other's RS-485, which sharing a process cannot guarantee.
+    """
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = _two_bridge_config()
+    registers = load_registers("config/registers.json")
+
+    pipe = build_pipeline(
+        config, registers, asyncio.Event(), only="smartlogger",
+        clients={"smartlogger": _FakeSourceClient()},
+    )
+    assert [b.name for b in pipe.bridges] == ["smartlogger"]
+    assert len(pipe.coros) == 2  # its poller + its supervisor, nothing else
+    # ...and it serves its own port, not the other bridge's
+    assert pipe.bridges[0].spec.dtsu.rtu.port == "/dev/ttyAMA3"
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_select_specs_defaults_to_every_enabled_bridge():
+    config = _two_bridge_config()
+    assert [s.name for s in select_specs(config, None)] == ["nd45", "smartlogger"]
+
+
+def test_select_specs_rejects_an_unknown_bridge_and_says_what_exists():
+    """A typo in a systemd unit must fail the unit, not leave a bus unserved."""
+    config = _two_bridge_config()
+    with pytest.raises(SystemExit, match="unknown bridge 'nope'"):
+        select_specs(config, "nope")
+    with pytest.raises(SystemExit, match="enabled bridges: nd45, smartlogger"):
+        select_specs(config, "nope")
+
+
+def test_select_specs_rejects_a_disabled_bridge():
+    """`enabled: false` means there is nothing to run -- say so rather than idle."""
+    config = load_config("config/config.json")  # smartlogger ships disabled
+    with pytest.raises(SystemExit, match="unknown bridge 'smartlogger'"):
+        select_specs(config, "smartlogger")
+
+
+def test_the_whole_config_is_still_validated_when_running_one_bridge():
+    """The cross-bridge checks only work because both services load one config.
+
+    Splitting into per-service config files would lose the "two bridges on one
+    serial port" check, and pymodbus swallows that bind error.
+    """
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    raw["bridges"] = [
+        {**SMARTLOGGER_BRIDGE,
+         "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA2"}}}
+    ]
+    with pytest.raises(ValidationError, match="both serve RTU on /dev/ttyAMA2"):
+        AppConfig.model_validate(raw)
+
+
+def test_each_bridge_gets_its_own_metrics_port_when_run_separately():
+    """Two systemd instances cannot share one Prometheus port."""
+    config = _two_bridge_config()
+    assert config.metrics_port_for("nd45") == 9090
+    assert config.metrics_port_for("smartlogger") == 9091
+    # one process running everything keeps the shared port
+    assert config.metrics_port_for(None) == config.prometheus.port
+
+
+def test_watchdog_heartbeat_follows_the_bridges_in_this_process(monkeypatch):
+    """With one bridge per instance this is exactly that bridge's poller progress."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = _two_bridge_config()
+    pipe = build_pipeline(
+        config, load_registers("config/registers.json"), asyncio.Event(),
+        only="smartlogger", clients={"smartlogger": _FakeSourceClient()},
+    )
+    beat = pipe.watchdog_heartbeat
+    assert beat.age(now=100.0) == float("inf")  # not polled yet
+    pipe.bridges[0].heartbeat.touch(99.0)
+    assert beat.age(now=100.0) == pytest.approx(1.0)
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_watchdog_heartbeat_follows_the_slowest_of_several_bridges(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    pipe = build_pipeline(
+        _two_bridge_config(), load_registers("config/registers.json"), asyncio.Event(),
+        clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
+    )
+    pipe.bridges[0].heartbeat.touch(99.0)
+    pipe.bridges[1].heartbeat.touch(40.0)
+    # a stalled sibling withholds the ping: a restart is only right if it helps
+    assert pipe.watchdog_heartbeat.age(now=100.0) == pytest.approx(60.0)
     for coro in pipe.coros:
         coro.close()

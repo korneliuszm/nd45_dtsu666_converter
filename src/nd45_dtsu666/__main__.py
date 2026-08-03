@@ -33,13 +33,21 @@ def _install_signal_handlers(loop, stop_event) -> None:
 
 
 def _cmd_run(args) -> int:
+    """Run every enabled bridge, or just `--bridge <name>`.
+
+    One bridge per invocation is how the deployment runs: a systemd instance each,
+    so a crash or a restart of one cannot silence the other's RS-485. The whole
+    config is still loaded, which keeps the cross-bridge validators (shared serial
+    port, colliding ports) working even though each service runs one bridge.
+    """
     config = _load_config(args)
     registers = load_registers(args.registers)
+    only = getattr(args, "bridge", None)
 
     async def _main() -> None:
         stop_event = asyncio.Event()
         _install_signal_handlers(asyncio.get_running_loop(), stop_event)
-        await run_app(config, registers, stop_event)
+        await run_app(config, registers, stop_event, only=only)
 
     try:
         asyncio.run(_main())
@@ -127,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
              "bridge. Every bridge always runs; this only selects what is shown or traced.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("run", help="run every configured bridge")
+    sub.add_parser("run", help="run every enabled bridge, or one with --bridge")
     sub.add_parser(
         "monitor", help="run every bridge, showing a dashboard for each (or --bridge)"
     )
