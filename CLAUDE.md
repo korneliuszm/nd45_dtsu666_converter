@@ -80,4 +80,4 @@ Sigenergy (RTU or TCP master) --FC03--> DTSU output server (serves instantly fro
 
 ## Reference
 
-Design and plan docs live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. The device manuals are PDFs in the repo root (not indexed by glob — use `Get-ChildItem -Recurse -Force`); extract text with `pdfplumber` (poppler is unavailable in this environment).
+Register mapping references: `docs/register-map.md` (ND45 bridge) and `docs/smartlogger-dtsu-map.md` (SmartLogger bridge — tables generated from `config/registers.json` by `scripts/gen_smartlogger_map_doc.py`; re-run it after editing the `huawei_*` sections, `tests/test_docs.py` fails otherwise). Design and plan docs live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. The device manuals are PDFs in the repo root (not indexed by glob — use `Get-ChildItem -Recurse -Force`); extract text with `pdfplumber` (poppler is unavailable in this environment).

@@ -25,8 +25,14 @@ combined active energy, `0x180A` is exported reactive energy (Q-), and
 while the directional `net_*` fields repeat their corresponding import/export
 totals as on the physical meter.
 
-The full verified register layout — every address, description and multiplier, checked
-against a live-meter scan — is in [`docs/register-map.md`](docs/register-map.md).
+Full register layouts, address by address:
+
+- [`docs/register-map.md`](docs/register-map.md) — the ND45 bridge, verified against
+  a live-meter scan.
+- [`docs/smartlogger-dtsu-map.md`](docs/smartlogger-dtsu-map.md) — the Huawei
+  SmartLogger bridge: which Huawei register feeds which canonical point, how the
+  gaps are filled, and how each one lands in the DTSU666 maps. Its tables are
+  generated from `config/registers.json`, so they cannot drift.
 
 ## Install (reComputer R1000, Ubuntu)
 ```bash
