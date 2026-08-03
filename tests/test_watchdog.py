@@ -1,8 +1,10 @@
 import asyncio
+import math
 import socket
 
 import pytest
 
+import nd45_dtsu666.watchdog as watchdog
 from nd45_dtsu666.watchdog import (
     Heartbeat,
     notify_ready,
@@ -129,3 +131,78 @@ async def test_watchdog_loop_withholds_ping_when_heartbeat_stale(tmp_path, monke
     with pytest.raises(BlockingIOError):
         server.recvfrom(1024)  # no datagram sent -- stale heartbeat withheld the ping
     server.close()
+
+
+# --- what feeds the systemd watchdog ----------------------------------------
+
+
+def test_slowest_heartbeat_reports_the_least_progressing_loop():
+    """With one bridge per systemd instance this is just that bridge's poller."""
+    from nd45_dtsu666.app import SlowestHeartbeat
+
+    fast, slow = Heartbeat(), Heartbeat()
+    fast.touch(99.0)
+    slow.touch(50.0)
+    assert SlowestHeartbeat([fast]).age(100.0) == pytest.approx(1.0)
+    # a stalled sibling withholds the ping: a restart is only correct if it fixes
+    # something, and a bridge that stopped polling is not being served
+    assert SlowestHeartbeat([fast, slow]).age(100.0) == pytest.approx(50.0)
+
+
+def test_slowest_heartbeat_is_infinite_before_any_poll():
+    from nd45_dtsu666.app import SlowestHeartbeat
+
+    assert SlowestHeartbeat([Heartbeat()]).age(100.0) == math.inf
+    assert SlowestHeartbeat([]).age(100.0) == math.inf
+
+
+async def test_watchdog_pings_while_the_poll_loop_progresses(monkeypatch):
+    from nd45_dtsu666.app import SlowestHeartbeat
+
+    sent = []
+    monkeypatch.setattr(watchdog, "notify_watchdog", lambda: sent.append(1))
+    beat = Heartbeat()
+    beat.touch(1000.0)
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        watchdog.watchdog_loop(
+            SlowestHeartbeat([beat]), 0.04, stop, now=lambda: 1000.0
+        )
+    )
+    await asyncio.sleep(0.06)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert sent, "the watchdog kept pinging while the poller made progress"
+
+
+async def test_watchdog_withholds_the_ping_when_the_poll_loop_stalls(monkeypatch):
+    """systemd restarts this instance -- safe now that each bridge is its own."""
+    from nd45_dtsu666.app import SlowestHeartbeat
+
+    sent = []
+    monkeypatch.setattr(watchdog, "notify_watchdog", lambda: sent.append(1))
+    beat = Heartbeat()
+    beat.touch(0.0)  # last progress long ago
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        watchdog.watchdog_loop(
+            SlowestHeartbeat([beat]), 0.02, stop, now=lambda: 1000.0
+        )
+    )
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+    assert sent == []
+
+
+def test_stall_recovery_fires_before_the_watchdog_would():
+    """Ordering that makes in-process recovery the first attempt, not a race.
+
+    source.stall_timeout_s must stay below WatchdogSec, or systemd would restart
+    the service before supervise_poller ever got to rebuild the client.
+    """
+    from nd45_dtsu666.config import load_config
+
+    watchdog_sec = 90.0  # systemd/nd45-dtsu666@.service
+    for spec in load_config("config/config.json").bridge_specs:
+        assert spec.source.stall_timeout_s < watchdog_sec, spec.name

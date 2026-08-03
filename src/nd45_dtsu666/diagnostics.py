@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import time
 
-from .canonical import CanonicalStore, HealthGate
+from .canonical import CanonicalStore, HealthGate, compute_derived
 from .codec import registers_to_float
-from .config import RegisterMap, load_config, load_registers
+from .config import AppConfig, BridgeConf, RegisterMap, load_config, load_registers
 from .dtsu_server import encode_target_point
 
 
@@ -37,12 +37,30 @@ def render_table(
     return "\n".join(lines)
 
 
+def select_bridge(config: AppConfig, name: str | None = None) -> BridgeConf:
+    """Resolve a --bridge name to its spec; default the first bridge.
+
+    diag/selftest/static are single-bridge modes -- they print or serve one
+    meter's worth of data, and interleaving two would make the output unreadable.
+    The flag is what lets them target the SmartLogger bridge during bring-up.
+    """
+    specs = config.bridge_specs
+    if name is None:
+        return specs[0]
+    for spec in specs:
+        if spec.name == name:
+            return spec
+    available = ", ".join(s.name for s in specs)
+    raise SystemExit(f"unknown bridge {name!r} (configured: {available})")
+
+
 def run_diag_command(args) -> int:
     config = load_config(args.config)
     registers = load_registers(args.registers)
+    spec = select_bridge(config, getattr(args, "bridge", None))
     if args.command == "selftest":
-        return _run_selftest(config, registers)
-    return _run_diag(config, registers)
+        return _run_selftest(config, registers, spec)
+    return _run_diag(registers, spec)
 
 
 def _synthetic_values(registers: RegisterMap) -> dict[str, float]:
@@ -50,30 +68,27 @@ def _synthetic_values(registers: RegisterMap) -> dict[str, float]:
             "p_total": 1500.0, "q_total": 200.0, "pf_total": 0.95, "freq": 50.0,
             "s_l1": 1150.0, "s_l2": 1178.1, "s_l3": 1122.1, "s_total": 3450.2,
             "imp_energy_total": 1234.5, "exp_energy_total": 67.8}
-    values = {k: demo.get(k, 0.0) for k in registers.nd45_source.points}
-    # Net energy is normally computed by nd45_poller.poll_once; without it the
-    # mbpoll bench would show the net_* DTSU registers stuck at zero.
-    from .nd45_poller import compute_derived
-
+    # Zero-fill from every canonical name any output map reads, so the bench sees
+    # a complete image regardless of which source section a bridge uses.
+    required = {pt.from_ for _name, side in registers.targets for pt in side.points.values()}
+    values = {k: demo.get(k, 0.0) for k in required}
+    # Net energy is normally computed by the poller; without it the mbpoll bench
+    # would show the net_* DTSU registers stuck at zero.
     compute_derived(values)
     return values
 
 
-def _run_selftest(config, registers) -> int:
+def _run_selftest(config, registers, spec: BridgeConf) -> int:
     from .dtsu_server import build_context, supervise_server, update_datastore
 
     async def _main() -> None:
         store = CanonicalStore()
-        gate = HealthGate(config.safety.max_data_age_s)
-        targets = [
-            registers.dtsu_target,
-            registers.dtsu_sigen_ext_target,
-            registers.dtsu_sigen_ext_energy,
-        ]
+        gate = HealthGate(spec.safety.max_data_age_s)
+        targets = [side for _name, side in registers.targets]
         context = build_context(
             targets,
-            config.dtsu.slave_id,
-            dtsu_cfg=config.dtsu,
+            spec.dtsu.slave_id,
+            dtsu_cfg=spec.dtsu,
             sigen_identity=registers.dtsu_sigen_identity,
         )
         values = _synthetic_values(registers)
@@ -83,19 +98,20 @@ def _run_selftest(config, registers) -> int:
             while not stop.is_set():
                 store.update(values, asyncio.get_running_loop().time())
                 update_datastore(
-                    context, config.dtsu.slave_id, values, targets,
-                    ct_ratio=config.dtsu.identity.ir_at,
+                    context, spec.dtsu.slave_id, values, targets,
+                    ct_ratio=spec.dtsu.identity.ir_at,
                 )
                 await asyncio.sleep(0.5)
 
         print(
-            f"selftest: serving synthetic DTSU data over {config.dtsu.transport} "
-            "(see config/config.json); bench with mbpoll. Ctrl-C to stop."
+            f"selftest: serving synthetic DTSU data for bridge {spec.name!r} over "
+            f"{spec.dtsu.transport} (see config/config.json); bench with mbpoll. "
+            "Ctrl-C to stop."
         )
         await asyncio.gather(
             _feeder(),
-            supervise_server(config.dtsu, context, store, gate,
-                             config.safety.check_interval_s, stop),
+            supervise_server(spec.dtsu, context, store, gate,
+                             spec.safety.check_interval_s, stop),
         )
 
     try:
@@ -105,36 +121,45 @@ def _run_selftest(config, registers) -> int:
     return 0
 
 
-def _run_diag(config, registers) -> int:
+def _run_diag(registers, spec: BridgeConf) -> int:
+    """Poll one bridge's source and print the decoded table. Serves nothing."""
     from pymodbus.client import AsyncModbusTcpClient
 
-    from .nd45_poller import poll_once, validate_source_coverage
+    from .app import _POLL_ONCE
 
-    validate_source_coverage(registers.nd45_source)
+    source_side = registers.source_by_name(spec.source.register_map)
+    if spec.source.type == "nd45":
+        from .nd45_poller import validate_source_coverage
+    else:
+        from .huawei_poller import validate_source_coverage
+    validate_source_coverage(source_side)
+    poll_once = _POLL_ONCE[spec.source.type]
 
     async def _main() -> None:
-        client = AsyncModbusTcpClient(config.nd45.host, port=config.nd45.port,
-                                      timeout=config.nd45.timeout_s)
+        client = AsyncModbusTcpClient(spec.source.host, port=spec.source.port,
+                                      timeout=spec.source.timeout_s)
         await client.connect()
         try:
             while True:
                 t0 = time.monotonic()
                 try:
-                    values = await poll_once(client, registers.nd45_source, config.nd45.unit_id)
+                    values = await poll_once(client, source_side, spec.source.unit_id)
                     age = time.monotonic() - t0
                     healthy = True
                 except Exception as exc:  # noqa: BLE001
                     values, age, healthy = {}, float("inf"), False
                     print(f"poll error: {exc}")
                 print("\033[2J\033[H", end="")  # clear screen
+                print(f"bridge {spec.name!r}  source {spec.source.type} "
+                      f"@ {spec.source.host}:{spec.source.port} unit {spec.source.unit_id}")
                 print(
                     render_table(
-                        registers.nd45_source,
+                        source_side,
                         registers.dtsu_target,
                         values,
                         age,
                         healthy,
-                        ct_ratio=config.dtsu.identity.ir_at,
+                        ct_ratio=spec.dtsu.identity.ir_at,
                     )
                 )
                 await asyncio.sleep(1.0)

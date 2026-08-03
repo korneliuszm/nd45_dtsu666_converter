@@ -7,11 +7,17 @@ import time
 from dataclasses import dataclass
 
 from . import metrics
-from .canonical import CanonicalStore, HealthGate
+from .canonical import CanonicalStore, HealthGate, compute_derived
 from .config import AppConfig, RegisterMap
 from .dtsu_server import RtuActivity, build_context, supervise_server, update_datastore
-from .metrics import MetricsSource, PollStats, ServerStatus
-from .monitor import render_dashboard
+from .metrics import (
+    BridgeMetrics,
+    MetricsSource,
+    PollStats,
+    RecoveryStats,
+    ServerStatus,
+)
+from .monitor import BridgeSnapshot, output_desc, render_bridge_monitor
 
 
 @dataclass
@@ -22,6 +28,8 @@ class StaticPipeline:
     context: object
     coros: list
     metrics: MetricsSource | None = None
+    spec: object | None = None  # the BridgeConf whose output is being served
+    server_status: ServerStatus | None = None
 
 
 def expand_static_values(
@@ -52,8 +60,6 @@ def expand_static_values(
         values["s_total"] = sum(values[f"s_{suffix}"] for suffix in ("l1", "l2", "l3"))
 
     # Net energy remains common to static and live pipelines.
-    from .nd45_poller import compute_derived
-
     compute_derived(values)
     return values
 
@@ -63,22 +69,26 @@ def build_static_pipeline(
     registers: RegisterMap,
     stop_event: asyncio.Event,
     activity: RtuActivity,
+    bridge_name: str | None = None,
 ) -> StaticPipeline:
-    """Build a static feeder plus the normal output server supervisor."""
+    """Build a static feeder plus the normal output server supervisor.
+
+    Serves one bridge's output transport (`bridge_name`, default the first), so
+    the synthetic image goes out on exactly the bus being bench-tested.
+    """
+    from .diagnostics import select_bridge
+
+    spec = select_bridge(config, bridge_name)
     store = CanonicalStore()
-    gate = HealthGate(config.safety.max_data_age_s)
-    named_targets = [
-        ("dtsu_target", registers.dtsu_target),
-        ("dtsu_sigen_ext_target", registers.dtsu_sigen_ext_target),
-        ("dtsu_sigen_ext_energy", registers.dtsu_sigen_ext_energy),
-    ]
+    gate = HealthGate(spec.safety.max_data_age_s)
+    named_targets = registers.targets
     targets = [side for _name, side in named_targets]
     server_status = ServerStatus()
     context = build_context(
         targets,
-        config.dtsu.slave_id,
+        spec.dtsu.slave_id,
         activity=activity,
-        dtsu_cfg=config.dtsu,
+        dtsu_cfg=spec.dtsu,
         sigen_identity=registers.dtsu_sigen_identity,
     )
     values = expand_static_values(registers, config.static_debug.values)
@@ -86,10 +96,10 @@ def build_static_pipeline(
     # and makes an invalid scaled/debug value fail synchronously at startup.
     update_datastore(
         context,
-        config.dtsu.slave_id,
+        spec.dtsu.slave_id,
         values,
         targets,
-        ct_ratio=config.dtsu.identity.ir_at,
+        ct_ratio=spec.dtsu.identity.ir_at,
     )
 
     async def feeder() -> None:
@@ -97,8 +107,8 @@ def build_static_pipeline(
         while not stop_event.is_set():
             store.update(values, loop.time())
             update_datastore(
-                context, config.dtsu.slave_id, values, targets,
-                ct_ratio=config.dtsu.identity.ir_at,
+                context, spec.dtsu.slave_id, values, targets,
+                ct_ratio=spec.dtsu.identity.ir_at,
             )
             try:
                 await asyncio.wait_for(
@@ -109,29 +119,37 @@ def build_static_pipeline(
                 pass
 
     supervisor = supervise_server(
-        config.dtsu,
+        spec.dtsu,
         context,
         store,
         gate,
-        config.safety.check_interval_s,
+        spec.safety.check_interval_s,
         stop_event,
-        min_restart_interval=config.safety.min_restart_interval_s,
+        min_restart_interval=spec.safety.min_restart_interval_s,
         status=server_status,
     )
-    # No ND45 client and no poller here, so the poll counters stay at zero and
-    # `nd45_connected` is omitted entirely -- build_info's mode="static" is what
+    # No upstream client and no poller here, so the poll counters stay at zero and
+    # the connected gauge is omitted entirely -- build_info's mode="static" is what
     # tells a scraper the served values are synthetic.
     source = MetricsSource(
         config=config,
-        store=store,
-        activity=activity,
-        poll_stats=PollStats(),
-        server_status=server_status,
+        bridges=[
+            BridgeMetrics(
+                name=spec.name,
+                spec=spec,
+                store=store,
+                poll_stats=PollStats(),
+                server_status=server_status,
+                recovery=RecoveryStats(),
+                activity=activity,
+            )
+        ],
         targets=named_targets,
         mode="static",
     )
     return StaticPipeline(
-        store=store, context=context, coros=[feeder(), supervisor], metrics=source
+        store=store, context=context, coros=[feeder(), supervisor], metrics=source,
+        spec=spec, server_status=server_status,
     )
 
 
@@ -140,31 +158,35 @@ async def run_static_debug(
     registers: RegisterMap,
     stop_event: asyncio.Event,
     refresh: float = 1.0,
+    bridge_name: str | None = None,
 ) -> None:
     """Serve static data and show Sigenergy request activity until stopped."""
     activity = RtuActivity()
-    pipe = build_static_pipeline(config, registers, stop_event, activity)
+    pipe = build_static_pipeline(config, registers, stop_event, activity, bridge_name)
     metrics_task = metrics.start(config, pipe.metrics, stop_event)
 
     async def display() -> None:
         loop = asyncio.get_running_loop()
         while not stop_event.is_set():
-            age = pipe.store.age(loop.time())
-            healthy = age <= config.safety.max_data_age_s
+            mono_now = time.monotonic()
             values, _ = pipe.store.snapshot()
-            print("\033[2J\033[H", end="")
-            print(
-                render_dashboard(
-                    values,
-                    age,
-                    healthy,
-                    activity,
-                    config.dtsu.slave_id,
-                    time.monotonic(),
-                    source_label="STATIC DEBUG",
-                )
+            snap = BridgeSnapshot(
+                name=pipe.spec.name,
+                # No upstream client at all here, so the link fields stay unset --
+                # mode="static" is what tells a reader the values are synthetic.
+                source_kind="STATIC DEBUG",
+                source_desc="static_debug.values (no source connected)",
+                output_desc=output_desc(pipe.spec),
+                slave_id=pipe.spec.dtsu.slave_id,
+                canonical=values,
+                data_age=pipe.store.age(loop.time()),
+                max_data_age=pipe.spec.safety.max_data_age_s,
+                poll_interval=config.static_debug.feed_interval_s,
+                server_up=pipe.server_status.running if pipe.server_status else False,
+                activity=activity.summary(mono_now),
             )
-            print(" Synthetic values from static_debug.values; ND45 is not connected.")
+            print("\033[2J\033[H", end="")
+            print(render_bridge_monitor(snap))
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=refresh)
             except asyncio.TimeoutError:
