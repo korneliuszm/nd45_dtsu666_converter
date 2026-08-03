@@ -72,7 +72,7 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
     assert pipe.store is not None
     assert len(pipe.coros) == 2  # poller + supervisor
     # activity was threaded into a recording datastore context
-    slave = pipe.context[config.dtsu.slave_id]
+    slave = pipe.context[config.bridge_specs[0].dtsu.slave_id]
     assert isinstance(slave, RecordingSlaveContext)
     assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
     sigen_u_l1 = registers.dtsu_sigen_ext_target.points["u_l1"]
@@ -91,7 +91,7 @@ def test_build_pipeline_records_activity_for_metrics_without_explicit_activity(m
     registers = load_registers("config/registers.json")
     assert config.prometheus.enabled
     pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
-    assert isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
+    assert isinstance(pipe.context[config.bridge_specs[0].dtsu.slave_id], RecordingSlaveContext)
     assert pipe.metrics is not None
     for coro in pipe.coros:
         coro.close()
@@ -103,7 +103,7 @@ def test_build_pipeline_default_context_not_recording_without_prometheus(monkeyp
     config.prometheus.enabled = False
     registers = load_registers("config/registers.json")
     pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
-    assert not isinstance(pipe.context[config.dtsu.slave_id], RecordingSlaveContext)
+    assert not isinstance(pipe.context[config.bridge_specs[0].dtsu.slave_id], RecordingSlaveContext)
     assert pipe.metrics is None
     for coro in pipe.coros:
         coro.close()
@@ -332,15 +332,19 @@ class _FakeSourceClient:
 def _two_bridge_config(**bridge_overrides):
     config = load_config("config/config.json")
     raw = config.model_dump(mode="json", by_alias=True)
-    raw["bridges"] = [{**SMARTLOGGER_BRIDGE, **bridge_overrides}]
+    raw["bridges"] = [raw["bridges"][0], {**SMARTLOGGER_BRIDGE, **bridge_overrides}]
     return AppConfig.model_validate(raw)
 
 
-def test_legacy_config_without_bridges_builds_exactly_one_bridge(monkeypatch):
-    """Regression guard: nothing about a single-bridge deployment changes."""
+def test_shipped_config_builds_exactly_one_bridge(monkeypatch):
+    """Regression guard: nothing about a single-bridge deployment changes.
+
+    The shipped config lists both bridges, but smartlogger ships disabled, so a
+    stock install still runs exactly the ND45 bridge it always did.
+    """
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
-    assert [b.enabled for b in config.bridges] == [False]  # shipped, disabled
+    assert [b.enabled for b in config.bridges] == [True, False]
 
     pipe = build_pipeline(
         config, load_registers("config/registers.json"), asyncio.Event(), client=object()
@@ -602,8 +606,9 @@ def test_the_whole_config_is_still_validated_when_running_one_bridge():
     """
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
     raw["bridges"] = [
+        raw["bridges"][0],  # nd45, on /dev/ttyAMA2
         {**SMARTLOGGER_BRIDGE,
-         "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA2"}}}
+         "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA2"}}},
     ]
     with pytest.raises(ValidationError, match="both serve RTU on /dev/ttyAMA2"):
         AppConfig.model_validate(raw)

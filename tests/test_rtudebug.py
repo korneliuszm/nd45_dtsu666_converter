@@ -114,6 +114,7 @@ async def test_run_rtudebug_traces_the_named_bridge(monkeypatch, caplog):
     config = load_config("config/config.json")
     raw = config.model_dump(mode="json", by_alias=True)
     raw["bridges"] = [
+        raw["bridges"][0],
         {
             "name": "smartlogger",
             "source": {

@@ -43,7 +43,8 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e .
 ```
 
-Edit `config/config.json`: set ND45 `host`, and under `dtsu` pick the output
+Edit `config/config.json`. Everything runtime lives under `bridges`, one entry per
+bridge; in the `nd45` entry set `source.host`, and under `dtsu` pick the output
 `transport`:
 - `"rtu"`: fill in `dtsu.rtu` — the RS-485 device `port` (`/dev/ttyAMA2` etc.),
   `baudrate`, `parity`, `stopbits`.
@@ -83,12 +84,28 @@ One process can still run every bridge (`run` with no `--bridge`), which is what
 
 ### Configuration
 
-The top-level `nd45` / `dtsu` / `safety` keys **are** the first bridge, so a config
-file written before multi-bridge support loads unchanged. Extra bridges go in
-`bridges`:
+**Every** bridge is one entry in `bridges`, and all entries have the same shape —
+`name`, `enabled`, `source`, `dtsu`, `safety`, `metrics_port`. The ND45 bridge and the
+SmartLogger bridge differ only in their values, so the two are read side by side:
 
 ```json
 "bridges": [
+  {
+    "name": "nd45",
+    "enabled": true,
+    "source": {
+      "type": "nd45", "host": "192.168.22.109", "port": 502, "unit_id": 1,
+      "register_map": "nd45_source",
+      "poll_interval_s": 0.3, "timeout_s": 1.0, "stall_timeout_s": 30.0
+    },
+    "dtsu": {
+      "transport": "rtu", "slave_id": 10,
+      "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10},
+      "rtu": {"port": "/dev/ttyAMA2", "baudrate": 9600, "parity": "N", "stopbits": 1}
+    },
+    "safety": {"max_data_age_s": 3.0, "check_interval_s": 0.5},
+    "metrics_port": 9090
+  },
   {
     "name": "smartlogger",
     "enabled": false,
@@ -102,21 +119,32 @@ file written before multi-bridge support loads unchanged. Extra bridges go in
       "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10},
       "rtu": {"port": "/dev/ttyAMA3", "baudrate": 9600, "parity": "N", "stopbits": 1}
     },
-    "safety": {"max_data_age_s": 30.0, "check_interval_s": 0.5}
+    "safety": {"max_data_age_s": 30.0, "check_interval_s": 0.5},
+    "metrics_port": 9091
   }
 ]
 ```
 
-Shipped with `enabled: false` — fill in `host` and flip it to turn the second bridge
-on. `slave_id` may repeat across bridges (the RS-485 buses are electrically
-independent); the serial port may not. Config load fails fast on:
+Outside `bridges` there are only the two process-wide sections, `prometheus` and
+`static_debug`.
+
+The `smartlogger` entry ships with `enabled: false` — fill in `source.host` and flip
+it to turn the second bridge on. `slave_id` may repeat across bridges (the RS-485
+buses are electrically independent); the serial port may not. Config load fails fast
+on:
 
 - two bridges on one serial port (or one TCP bind) — pymodbus 3.6.9's `listen()`
   swallows the resulting `OSError`, so the loser would hang silently instead of
   failing
 - `safety.max_data_age_s` below twice `source.poll_interval_s` — that parks a bridge
   in permanent fail-safe, which in the field looks exactly like a dead source
-- a duplicate or reserved bridge name, or a metrics port colliding with any bridge
+- a duplicate bridge name, or a metrics port colliding with any bridge
+- a config with no bridges at all, or with every bridge disabled
+
+The older layout, in which top-level `nd45` / `dtsu` / `safety` /
+`primary_metrics_port` keys described the single bridge, is still accepted, so a
+config file written before multi-bridge support keeps loading; those keys become
+the first bridge, named `nd45`. New files should use `bridges` throughout.
 
 ### Source types and register maps
 
@@ -401,10 +429,9 @@ work when one configuration sees every bridge. Splitting into per-service config
 files would lose that check — and pymodbus 3.6.9 swallows the resulting bind error,
 so the losing service would hang in silence instead of failing.
 
-Because two processes cannot share a Prometheus port, each bridge sets its own:
-`primary_metrics_port` for the first bridge and `bridges[].metrics_port` for the
-rest (9090 and 9091 as shipped). Running everything in one process still uses the
-shared `prometheus.port`.
+Because two processes cannot share a Prometheus port, each bridge sets its own
+`bridges[].metrics_port` (9090 and 9091 as shipped). Running everything in one
+process still uses the shared `prometheus.port`.
 
 ### Single-process alternative
 

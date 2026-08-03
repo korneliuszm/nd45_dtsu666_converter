@@ -187,8 +187,8 @@ usłudze smartlogger zostawia usługę nd45 serwującą −60000 W i odwrotnie.
 **Obie usługi czytają ten sam `config.json` — świadomie.** Walidatory odrzucające dwa
 mostki na tym samym porcie szeregowym działają tylko wtedy, gdy jedna konfiguracja
 widzi oba mostki; rozdzielenie plików odebrałoby tę kontrolę, a pymodbus zjada
-wynikający błąd bindowania. Osobne porty metryk (`primary_metrics_port`,
-`bridges[].metrics_port`) bo dwa procesy nie mogą dzielić jednego portu.
+wynikający błąd bindowania. Osobne porty metryk (`bridges[].metrics_port`)
+bo dwa procesy nie mogą dzielić jednego portu.
 
 `watchdog_loop` śledzi postęp pętli odpytywania przez `app.SlowestHeartbeat`
 (najwolniej postępujący mostek w tym procesie — przy jednym mostku na usługę to po

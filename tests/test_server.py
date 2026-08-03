@@ -125,7 +125,7 @@ def test_static_registers_include_observed_meter_constants():
     from nd45_dtsu666.config import load_config
 
     target = load_registers("config/registers.json").dtsu_target
-    cfg = load_config("config/config.json").dtsu  # ir_at=200, as on the real meter
+    cfg = load_config("config/config.json").bridge_specs[0].dtsu  # ir_at=200, as on the real meter
     slave = build_context(target, slave_id=cfg.slave_id, dtsu_cfg=cfg)[cfg.slave_id]
     assert slave.getValues(3, 0x0004, count=1) == [1]
     assert slave.getValues(3, 0x0008, count=1) == [4]

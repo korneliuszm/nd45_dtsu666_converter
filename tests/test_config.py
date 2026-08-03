@@ -1,3 +1,4 @@
+import json
 import math
 
 import pytest
@@ -195,16 +196,18 @@ def test_load_registers_reads_sigen_identity():
 
 def test_load_config_reads_seed():
     cfg = load_config("config/config.json")
-    assert cfg.nd45.port == 502
-    assert cfg.dtsu.slave_id == 10
-    assert cfg.dtsu.transport == "rtu"
-    assert cfg.dtsu.rtu.port == "/dev/ttyAMA2"
-    assert cfg.dtsu.tcp.port == 502
-    assert cfg.safety.max_data_age_s == 3.0
-    assert cfg.dtsu.identity.rev == 103
-    assert cfg.dtsu.identity.ucode == 701
-    assert cfg.dtsu.identity.ir_at == 200
-    assert cfg.dtsu.identity.ur_at == 10
+    nd45 = cfg.bridge_specs[0]
+    assert nd45.name == "nd45"
+    assert nd45.source.port == 502
+    assert nd45.dtsu.slave_id == 10
+    assert nd45.dtsu.transport == "rtu"
+    assert nd45.dtsu.rtu.port == "/dev/ttyAMA2"
+    assert nd45.dtsu.tcp is None  # RTU output; no unused tcp block to confuse readers
+    assert nd45.safety.max_data_age_s == 3.0
+    assert nd45.dtsu.identity.rev == 103
+    assert nd45.dtsu.identity.ucode == 701
+    assert nd45.dtsu.identity.ir_at == 200
+    assert nd45.dtsu.identity.ur_at == 10
     assert cfg.static_debug.feed_interval_s == 0.5
     assert cfg.static_debug.values["u_l1"] == 240.0
     assert cfg.static_debug.values["p_total"] == -60000.0
@@ -299,10 +302,10 @@ def test_dtsu_identity_conf_rejects_non_positive_ir_at():
 
 
 def test_reliability_defaults():
-    cfg = load_config("config/config.json")
-    assert cfg.nd45.reconnect_delay_s == 1.0
-    assert cfg.nd45.reconnect_delay_max_s == 30.0
-    assert cfg.safety.min_restart_interval_s == 5.0
+    nd45 = load_config("config/config.json").bridge_specs[0]
+    assert nd45.source.reconnect_delay_s == 1.0
+    assert nd45.source.reconnect_delay_max_s == 30.0
+    assert nd45.safety.min_restart_interval_s == 5.0
 
 
 def test_dtsu_conf_rtu_requires_rtu_block():
@@ -483,9 +486,17 @@ def test_derive_op_accepts_the_shipped_plant_and_meter_rules():
 
 
 def _with_bridges(*bridges) -> dict:
+    """The shipped nd45 bridge plus the given extras (dropping shipped siblings)."""
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["bridges"] = list(bridges)
+    raw["bridges"] = [raw["bridges"][0], *bridges]
     return raw
+
+
+LEGACY_RAW = {
+    "nd45": {"host": "192.168.22.109", "poll_interval_s": 0.3},
+    "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA2"}},
+    "safety": {"max_data_age_s": 3.0},
+}
 
 
 SECOND_BRIDGE = {
@@ -496,16 +507,35 @@ SECOND_BRIDGE = {
 }
 
 
+def test_every_shipped_bridge_has_the_same_structure():
+    """The point of the uniform layout: nd45 and smartlogger differ only in values."""
+    raw = json.load(open("config/config.json", encoding="utf-8"))
+    assert set(raw) == {"bridges", "prometheus", "static_debug"}
+    shapes = [
+        (tuple(b), tuple(b["source"]), tuple(b["dtsu"]), tuple(b["safety"]))
+        for b in raw["bridges"]
+    ]
+    assert len(set(shapes)) == 1, "bridge entries must share one key layout"
+    assert tuple(raw["bridges"][0]) == (
+        "name", "enabled", "source", "dtsu", "safety", "metrics_port"
+    )
+
+
 def test_legacy_keys_become_the_first_bridge():
-    """Config files written before multi-bridge support must load untouched."""
-    config = load_config("config/config.json")
+    """Config files written before multi-bridge support must still load untouched."""
+    config = AppConfig.model_validate(LEGACY_RAW)
     specs = config.bridge_specs
-    assert specs[0].name == "nd45"
+    assert [s.name for s in specs] == ["nd45"]
     assert specs[0].source.type == "nd45"
     assert specs[0].source.host == config.nd45.host
     assert specs[0].source.poll_interval_s == config.nd45.poll_interval_s
     assert specs[0].dtsu is config.dtsu
     assert specs[0].safety is config.safety
+
+
+def test_legacy_keys_may_be_mixed_with_a_bridges_entry():
+    config = AppConfig.model_validate({**LEGACY_RAW, "bridges": [SECOND_BRIDGE]})
+    assert [b.name for b in config.bridge_specs] == ["nd45", "smartlogger"]
 
 
 def test_a_config_with_no_bridges_key_at_all_still_loads():
@@ -516,11 +546,29 @@ def test_a_config_with_no_bridges_key_at_all_still_loads():
     assert len(bare.bridge_specs) == 1
 
 
+def test_a_config_with_neither_bridges_nor_legacy_keys_is_rejected():
+    with pytest.raises(ValidationError, match="defines no bridges"):
+        AppConfig.model_validate({"prometheus": {"enabled": False}})
+
+
+def test_half_the_legacy_pair_is_rejected():
+    with pytest.raises(ValidationError, match="must be set together"):
+        AppConfig.model_validate({"nd45": {"host": "1.2.3.4"}})
+
+
+def test_a_config_whose_every_bridge_is_disabled_is_rejected():
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    for bridge in raw["bridges"]:
+        bridge["enabled"] = False
+    with pytest.raises(ValidationError, match="every configured bridge is disabled"):
+        AppConfig.model_validate(raw)
+
+
 def test_disabled_bridges_are_left_out_of_bridge_specs():
     """The shipped smartlogger entry is a disabled template."""
     config = load_config("config/config.json")
-    assert [b.name for b in config.bridges] == ["smartlogger"]
-    assert config.bridges[0].enabled is False
+    assert [b.name for b in config.bridges] == ["nd45", "smartlogger"]
+    assert config.bridges[1].enabled is False
     assert [b.name for b in config.bridge_specs] == ["nd45"]
 
 
@@ -578,10 +626,13 @@ def test_bridge_names_must_be_unique():
         AppConfig.model_validate(raw)
 
 
-def test_the_primary_bridge_name_is_reserved():
-    raw = _with_bridges({**SECOND_BRIDGE, "name": "nd45"})
+def test_the_primary_bridge_name_is_reserved_only_by_the_legacy_keys():
+    """With legacy keys present, 'nd45' names *their* bridge and cannot be reused."""
+    raw = {**LEGACY_RAW, "bridges": [{**SECOND_BRIDGE, "name": "nd45"}]}
     with pytest.raises(ValidationError, match="reserved"):
         AppConfig.model_validate(raw)
+    # ...but in the uniform shape it is just an ordinary bridge name.
+    assert load_config("config/config.json").bridge_specs[0].name == "nd45"
 
 
 def test_a_metrics_port_colliding_with_any_bridge_is_rejected():
@@ -631,9 +682,9 @@ def test_source_defaults_reflect_each_device_s_own_timing():
 
 def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():
     config = load_config("config/config.json")
-    bridge = config.bridges[0]
+    nd45, bridge = config.bridges
     assert bridge.dtsu.rtu.port == "/dev/ttyAMA3"
-    assert bridge.dtsu.rtu.port != config.dtsu.rtu.port
+    assert bridge.dtsu.rtu.port != nd45.dtsu.rtu.port
     assert bridge.source.register_map == "huawei_plant_source"
     assert bridge.safety.max_data_age_s == 30.0
 
@@ -641,10 +692,9 @@ def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():
 def test_two_bridges_may_not_share_a_metrics_port():
     """Run as separate services they would race for the bind; the loser retries
     silently, so one service would simply have no metrics endpoint."""
-    raw = _with_bridges(
+    raw = _with_bridges(  # the shipped nd45 bridge already claims 9090
         {**SECOND_BRIDGE, "metrics_port": 9090},
     )
-    raw["primary_metrics_port"] = 9090
     with pytest.raises(ValidationError, match="both use metrics_port 9090"):
         AppConfig.model_validate(raw)
 
@@ -667,8 +717,8 @@ def test_metrics_port_falls_back_to_the_shared_one_when_unset():
 def test_shipped_config_gives_each_service_its_own_metrics_port():
     """The two systemd instances must not fight over 9090."""
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["bridges"][0]["enabled"] = True
-    raw["bridges"][0]["source"]["host"] = "192.168.22.120"
+    raw["bridges"][1]["enabled"] = True
+    raw["bridges"][1]["source"]["host"] = "192.168.22.120"
     config = AppConfig.model_validate(raw)
     ports = {s.name: config.metrics_port_for(s.name) for s in config.bridge_specs}
     assert ports == {"nd45": 9090, "smartlogger": 9091}

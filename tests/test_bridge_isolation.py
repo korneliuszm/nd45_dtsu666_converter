@@ -57,8 +57,8 @@ SMARTLOGGER_BRIDGE = {
 def two_bridge_config(**overrides) -> AppConfig:
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
     # Tick both supervisors fast so a test does not wait half a second per round.
-    raw["safety"]["check_interval_s"] = 0.01
-    raw["bridges"] = [{**SMARTLOGGER_BRIDGE, **overrides}]
+    raw["bridges"][0]["safety"]["check_interval_s"] = 0.01
+    raw["bridges"] = [raw["bridges"][0], {**SMARTLOGGER_BRIDGE, **overrides}]
     return AppConfig.model_validate(raw)
 
 

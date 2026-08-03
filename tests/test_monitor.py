@@ -43,7 +43,7 @@ SMARTLOGGER_BRIDGE = {
 
 def _two_bridge_config() -> AppConfig:
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["bridges"] = [SMARTLOGGER_BRIDGE]
+    raw["bridges"] = [raw["bridges"][0], SMARTLOGGER_BRIDGE]
     return AppConfig.model_validate(raw)
 
 
@@ -299,7 +299,8 @@ def test_descriptors_name_the_source_and_the_output():
 
 def test_output_desc_covers_the_tcp_transport():
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["dtsu"]["transport"] = "tcp"
+    raw["bridges"][0]["dtsu"]["transport"] = "tcp"
+    raw["bridges"][0]["dtsu"]["tcp"] = {"host": "0.0.0.0", "port": 502}
     spec = AppConfig.model_validate(raw).bridge_specs[0]
     assert output_desc(spec) == "tcp 0.0.0.0:502"
 
@@ -313,7 +314,7 @@ def test_select_bridge_by_source_finds_each_kind():
 
 def test_select_bridge_by_source_finds_a_renamed_bridge():
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["bridges"] = [{**SMARTLOGGER_BRIDGE, "name": "pv-farm"}]
+    raw["bridges"] = [raw["bridges"][0], {**SMARTLOGGER_BRIDGE, "name": "pv-farm"}]
     config = AppConfig.model_validate(raw)
     assert select_bridge_by_source(config, "huawei") == "pv-farm"
 

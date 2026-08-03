@@ -234,7 +234,7 @@ async def test_build_pipeline_counts_polls_through_the_existing_callbacks(monkey
             return _RR()
 
     pipe = build_pipeline(config, registers, stop, client=_Client())
-    config.nd45.poll_interval_s = 0.0
+    config.bridges[0].source.poll_interval_s = 0.0
     poller, supervisor = pipe.coros
     supervisor.close()
     await asyncio.wait_for(poller, timeout=5)
@@ -296,7 +296,7 @@ async def test_server_status_follows_the_supervisor():
     await asyncio.wait_for(
         asyncio.gather(
             supervise_server(
-                config.dtsu, object(), store, gate, 0.0, stop,
+                config.bridge_specs[0].dtsu, object(), store, gate, 0.0, stop,
                 server_factory=_FakeServer, now=lambda: clock["t"], status=status,
             ),
             _drive(),
@@ -528,7 +528,7 @@ SMARTLOGGER_BRIDGE = {
 
 def _two_bridge_config() -> AppConfig:
     raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["bridges"] = [SMARTLOGGER_BRIDGE]
+    raw["bridges"] = [raw["bridges"][0], SMARTLOGGER_BRIDGE]
     return AppConfig.model_validate(raw)
 
 

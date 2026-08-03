@@ -517,22 +517,27 @@ class PrometheusConf(BaseModel):
 
 
 class AppConfig(BaseModel):
-    """Process configuration: one or more bridges plus process-wide settings.
+    """Process configuration: a list of bridges plus process-wide settings.
 
-    The top-level `nd45` / `dtsu` / `safety` keys describe the first bridge and
-    are kept as-is, so every config file written before multi-bridge support
-    still loads unchanged. Additional bridges go in `bridges`. Read the assembled
-    list through `bridge_specs`, never the raw fields.
+    The current shape puts *every* bridge in `bridges`, each one a complete and
+    identically structured `name`/`source`/`dtsu`/`safety`/`metrics_port` block --
+    an ND45 bridge and a SmartLogger bridge differ only in the values.
+
+    The top-level `nd45` / `dtsu` / `safety` / `primary_metrics_port` keys are the
+    older shape, in which those four described the single bridge. They are still
+    accepted, so a config file written before multi-bridge support keeps loading;
+    when present they become the *first* bridge, named `PRIMARY_BRIDGE_NAME`.
+    Read the assembled list through `bridge_specs`, never the raw fields.
     """
 
-    nd45: Nd45Conf
-    dtsu: DtsuConf
-    safety: SafetyConf = SafetyConf()
-    # Bridges beyond the legacy top-level one.
     bridges: list[BridgeConf] = Field(default_factory=list)
     static_debug: StaticDebugConf = StaticDebugConf()
     prometheus: PrometheusConf = PrometheusConf()  # process-wide, not per bridge
 
+    # --- legacy single-bridge shape, kept only for back-compatibility ---
+    nd45: Nd45Conf | None = None
+    dtsu: DtsuConf | None = None
+    safety: SafetyConf | None = None
     # Name given to the bridge assembled from the legacy top-level keys.
     PRIMARY_BRIDGE_NAME: ClassVar[str] = "nd45"
     # Its metrics port when run as its own service; None = use prometheus.port.
@@ -552,13 +557,11 @@ class AppConfig(BaseModel):
         return self.prometheus.port
 
     @property
-    def bridge_specs(self) -> list[BridgeConf]:
-        """Every enabled bridge: the legacy top-level one first, then `bridges`.
-
-        Order matters: the first entry is what single-bridge callers (diag,
-        static, rtudebug) and the back-compat metric aliases refer to.
-        """
-        primary = BridgeConf(
+    def legacy_bridge(self) -> BridgeConf | None:
+        """The bridge described by the legacy top-level keys, if that shape is used."""
+        if self.nd45 is None or self.dtsu is None:
+            return None
+        return BridgeConf(
             name=self.PRIMARY_BRIDGE_NAME,
             metrics_port=self.primary_metrics_port,
             source=Nd45SourceConf(
@@ -571,13 +574,41 @@ class AppConfig(BaseModel):
                 reconnect_delay_max_s=self.nd45.reconnect_delay_max_s,
             ),
             dtsu=self.dtsu,
-            safety=self.safety,
+            safety=self.safety or SafetyConf(),
         )
-        return [primary, *(b for b in self.bridges if b.enabled)]
+
+    @property
+    def bridge_specs(self) -> list[BridgeConf]:
+        """Every enabled bridge, in config order.
+
+        A legacy top-level bridge, if any, comes first. Order matters: the first
+        entry is what single-bridge callers (diag, static, rtudebug) and the
+        back-compat metric aliases refer to.
+        """
+        legacy = self.legacy_bridge
+        listed = [b for b in self.bridges if b.enabled]
+        return listed if legacy is None else [legacy, *listed]
+
+    @model_validator(mode="after")
+    def _check_at_least_one_bridge(self) -> "AppConfig":
+        """A process with no bridge would start, poll nothing and serve nothing."""
+        if self.nd45 is None and self.dtsu is None and not self.bridges:
+            raise ValueError("config defines no bridges: add at least one entry to 'bridges'")
+        if (self.nd45 is None) != (self.dtsu is None):
+            raise ValueError(
+                "legacy top-level 'nd45' and 'dtsu' must be set together "
+                "(or dropped in favour of a 'bridges' entry)"
+            )
+        if not self.bridge_specs:
+            raise ValueError("every configured bridge is disabled: enable at least one")
+        return self
 
     @model_validator(mode="after")
     def _check_static_debug_freshness(self) -> "AppConfig":
-        if self.static_debug.feed_interval_s >= self.safety.max_data_age_s:
+        # static/selftest modes feed the first bridge, so that bridge's threshold
+        # is the one the synthetic feed has to keep ahead of.
+        max_data_age = self.bridge_specs[0].safety.max_data_age_s
+        if self.static_debug.feed_interval_s >= max_data_age:
             raise ValueError(
                 "static_debug.feed_interval_s must be shorter than safety.max_data_age_s"
             )
@@ -586,7 +617,7 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def _check_bridge_names_unique(self) -> "AppConfig":
         names = [b.name for b in self.bridges]
-        if self.PRIMARY_BRIDGE_NAME in names:
+        if self.legacy_bridge is not None and self.PRIMARY_BRIDGE_NAME in names:
             raise ValueError(
                 f"bridge name {self.PRIMARY_BRIDGE_NAME!r} is reserved for the "
                 "bridge built from the top-level nd45/dtsu/safety keys"
