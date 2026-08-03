@@ -138,7 +138,7 @@ Per-bridge series carry a `bridge` label:
 `_bridge_canonical_value{point=...}`. The original unlabelled `nd45_*` / `dtsu_*`
 families are still emitted as aliases for the first bridge, so existing dashboards
 keep working. `/healthz` returns 200 only when **every** bridge is fresh and names
-the stale ones. `monitor` shows one panel pair per bridge.
+the stale ones. `monitor_nd45` / `monitor_hsm` show one screen per bridge (see below).
 
 ### Hung-poller recovery, and what changed in the watchdog
 
@@ -246,18 +246,55 @@ python -m nd45_dtsu666 diag   # live table: canonical SI, DTSU addr/raw, age, st
 ```
 
 ## Interactive monitor (commissioning)
-Runs the live bridge (poller + DTSU output server + fail-safe) **and** shows a live
-dashboard: the ND45 values per phase (with IMPORT/EXPORT power direction — the key
-sign-convention check) plus the Modbus read requests coming from Sigenergy (count, rate,
-which register blocks it reads), over whichever transport is configured. Use this
-instead of `run` while bringing the system up.
+
 ```bash
-python -m nd45_dtsu666 monitor   # Ctrl-C to quit
+python -m nd45_dtsu666 monitor_nd45    # the ND45 bridge's screen
+python -m nd45_dtsu666 monitor_hsm     # the Huawei SmartLogger bridge's screen
+python -m nd45_dtsu666 monitor         # one screen per bridge, stacked
+python -m nd45_dtsu666 --bridge smartlogger monitor   # by name
 ```
-Requires the configured output transport to be reachable (real RS-485 port for `"rtu"`,
-a free TCP port for `"tcp"`) — same requirement as `run`; for a bench test without
-Sigenergy use `selftest`.
-During fail-safe (stale ND45) the panel shows `FAIL-SAFE SILENT` — that is expected.
+
+**Every configured bridge runs in all of these** — the flag only chooses what is on
+screen, so watching one bridge never changes the other's timing or leaves its output
+unserved. `monitor_nd45` / `monitor_hsm` resolve by *source type*, so they still find
+the right bridge if you renamed it in `config.json`.
+
+Each screen answers the two questions bring-up actually asks, per bridge:
+
+```
+ bridge 'smartlogger'   Huawei SmartLogger -> DTSU666   state: SERVING
+------------------------------------------------------------------------
+ SOURCE  Huawei SmartLogger  192.168.22.120:502 unit 0
+   link: CONNECTED  data age: 2.40s / 30.0s   poll: OK (every 5s)
+   polls: 721 ok / 0 err   consecutive fails: 0   last ok: 2.4s ago
+   Phase      U [V]    I [A]       P [W]     Q [var]      PF
+   L1         231.0   100.00    411500.0    -16666.7   0.999
+   ...
+   TOTAL                       1234500.0    -50000.0   0.999   f=50.00 Hz
+   Direction: IMPORT (P>0)      E_imp=0.0  E_exp=12345.6 kWh
+   E_daily=456.7   P_dc=1250000.0
+------------------------------------------------------------------------
+ OUTPUT  DTSU666 slave 10  on /dev/ttyAMA3 @9600 8N1
+   server: UP                  starts: 1  stops: 0
+   Sigenergy reads: 1203    rate: 1.1/s    last seen: 0.9s ago
+   blocks read:  FC03 @8192 x40 (601)   FC04 @5386 x50 (602)
+   recent:  @8192x40  @5386x50
+------------------------------------------------------------------------
+```
+
+- **SOURCE** — is the upstream link up (`link: CONNECTED / DOWN / UNKNOWN`), how old
+  the data is against *this bridge's own* threshold, poll counters, last error type,
+  and `poller restarts` (a rising count means stall recovery is looping). Then the
+  decoded per-phase values. `E_daily` / `P_dc` appear only for a SmartLogger source.
+- **OUTPUT** — which port this bridge serves, whether its server is UP or silenced by
+  the fail-safe, and whether **Sigenergy is actually reading on that port**: request
+  count, rate, last seen, and which register blocks it asked for. `(none yet --
+  Sigenergy has not polled this port)` is the answer you are looking for when
+  commissioning the second bus.
+
+The served DTSU register dump is deliberately **not** in the monitor — it is long and
+pushed the link and activity lines off screen. Use `rtudebug` to trace register
+blocks, or the Prometheus `*_bridge_dtsu_register_value` series.
 
 ## Debug: which registers does Sigenergy read?
 For raw protocol debugging (no dashboard), `rtudebug` runs the same live bridge but

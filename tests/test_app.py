@@ -501,3 +501,39 @@ def test_fault_reporter_labels_the_source_it_is_reporting_on():
     assert "SmartLogger polling failed: unreachable" in logger.warnings[0]
     assert "SmartLogger polling recovered" in logger.infos[0]
     assert not any("ND45" in line for line in logger.warnings + logger.infos)
+
+
+def test_every_bridge_records_reads_when_a_watcher_is_attached(monkeypatch):
+    """monitor/rtudebug must be able to answer 'is Sigenergy polling THIS port?'.
+
+    Without this, a sibling bridge's activity recorder only existed when the
+    metrics endpoint happened to be enabled, so its panel showed no read stats.
+    """
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = _two_bridge_config()
+    config.prometheus.enabled = False
+    pipe = build_pipeline(
+        config, load_registers("config/registers.json"), asyncio.Event(),
+        activity=RtuActivity(),
+        clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
+    )
+
+    assert all(b.activity is not None for b in pipe.bridges)
+    # ...and each bridge records into its own, not a shared one
+    assert pipe.bridges[0].activity is not pipe.bridges[1].activity
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_no_activity_recorders_without_a_watcher_or_prometheus(monkeypatch):
+    """`run` with metrics off keeps the plain (non-recording) datastore context."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = _two_bridge_config()
+    config.prometheus.enabled = False
+    pipe = build_pipeline(
+        config, load_registers("config/registers.json"), asyncio.Event(),
+        clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
+    )
+    assert all(b.activity is None for b in pipe.bridges)
+    for coro in pipe.coros:
+        coro.close()

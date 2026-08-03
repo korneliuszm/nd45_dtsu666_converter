@@ -17,7 +17,7 @@ from .metrics import (
     RecoveryStats,
     ServerStatus,
 )
-from .monitor import render_dashboard
+from .monitor import BridgeSnapshot, output_desc, render_bridge_monitor
 
 
 @dataclass
@@ -29,6 +29,7 @@ class StaticPipeline:
     coros: list
     metrics: MetricsSource | None = None
     spec: object | None = None  # the BridgeConf whose output is being served
+    server_status: ServerStatus | None = None
 
 
 def expand_static_values(
@@ -147,7 +148,8 @@ def build_static_pipeline(
         mode="static",
     )
     return StaticPipeline(
-        store=store, context=context, coros=[feeder(), supervisor], metrics=source, spec=spec
+        store=store, context=context, coros=[feeder(), supervisor], metrics=source,
+        spec=spec, server_status=server_status,
     )
 
 
@@ -166,22 +168,25 @@ async def run_static_debug(
     async def display() -> None:
         loop = asyncio.get_running_loop()
         while not stop_event.is_set():
-            age = pipe.store.age(loop.time())
-            healthy = age <= pipe.spec.safety.max_data_age_s
+            mono_now = time.monotonic()
             values, _ = pipe.store.snapshot()
-            print("\033[2J\033[H", end="")
-            print(
-                render_dashboard(
-                    values,
-                    age,
-                    healthy,
-                    activity,
-                    pipe.spec.dtsu.slave_id,
-                    time.monotonic(),
-                    source_label=f"STATIC DEBUG ({pipe.spec.name})",
-                )
+            snap = BridgeSnapshot(
+                name=pipe.spec.name,
+                # No upstream client at all here, so the link fields stay unset --
+                # mode="static" is what tells a reader the values are synthetic.
+                source_kind="STATIC DEBUG",
+                source_desc="static_debug.values (no source connected)",
+                output_desc=output_desc(pipe.spec),
+                slave_id=pipe.spec.dtsu.slave_id,
+                canonical=values,
+                data_age=pipe.store.age(loop.time()),
+                max_data_age=pipe.spec.safety.max_data_age_s,
+                poll_interval=config.static_debug.feed_interval_s,
+                server_up=pipe.server_status.running if pipe.server_status else False,
+                activity=activity.summary(mono_now),
             )
-            print(" Synthetic values from static_debug.values; no source is connected.")
+            print("\033[2J\033[H", end="")
+            print(render_bridge_monitor(snap))
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=refresh)
             except asyncio.TimeoutError:

@@ -280,7 +280,11 @@ def build_pipeline(
             registers,
             activity=activity if index == 0 else None,
             client=injected.get(spec.name),
-            prometheus_enabled=config.prometheus.enabled,
+            # An explicit `activity` means a caller is watching reads (monitor,
+            # rtudebug), so every bridge records -- otherwise the sibling bridges'
+            # panels could not answer "is Sigenergy polling this port?" whenever
+            # the metrics endpoint happens to be switched off.
+            prometheus_enabled=config.prometheus.enabled or activity is not None,
         )
         bridges.append(bridge)
         coros.extend(_bridge_coros(bridge, registers, config, stop_event))
