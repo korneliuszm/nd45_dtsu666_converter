@@ -221,3 +221,66 @@ def test_decode_int_point_returns_nan_for_the_invalid_sentinel():
     assert math.isnan(
         decode_int_point([0xFFFF, 0xFFFF], "u32", 1.0, 1, 0.0, "big", "big")
     )
+
+
+# --- sign and range integrity end to end -------------------------------------
+#
+# Asked directly during bring-up: can the translation itself make a served value
+# swing between positive and negative? These pin the answer to "no", so a sign
+# change observed in the field is the source's, not the bridge's.
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        0.5, -0.5, 1.0, -1.0, 100.0, -100.0, 9_000.0, -9_000.0,
+        60_000.0, -60_000.0, 2_700_000.0, -2_700_000.0, 1e9, -1e9,
+        1e-6, -1e-6, 1e15, -1e15,
+    ],
+)
+def test_decode_encode_decode_never_inverts_the_sign(raw):
+    """Every measured point of the shipped maps, at this site's magnitudes."""
+    from nd45_dtsu666.config import load_registers
+    from nd45_dtsu666.dtsu_server import encode_target_point
+
+    registers = load_registers("config/registers.json")
+    source = registers.nd45_source
+    for name in ("p_total", "p_l1", "q_total", "u_l1", "i_l1", "pf_total", "freq"):
+        point = source.points[name]
+        si = decode_point(
+            float_to_registers(raw), point.scale, point.sign, point.offset,
+            source.word_order, source.byte_order,
+        )
+        assert math.copysign(1.0, si) == math.copysign(1.0, raw * point.sign)
+        for _map_name, side in registers.targets:
+            for target in side.points.values():
+                if target.from_ != name:
+                    continue
+                served = registers_to_float(
+                    encode_target_point(si, target, side, ct_ratio=200),
+                    side.word_order, side.byte_order,
+                )
+                if served == 0.0:  # flushed to zero, not inverted
+                    continue
+                assert math.copysign(1.0, served) == math.copysign(1.0, si * target.sign)
+
+
+def test_zeroing_the_low_word_cannot_change_the_sign():
+    """The coarse energy aliases drop the low mantissa word; the sign bit is not there."""
+    for value in (-1234.5, 1234.5, -1e-30, 1e30):
+        regs = encode_point(value, 1.0, 1, 0.0, "big", "big", zero_low_word=True)
+        served = registers_to_float(regs, "big", "big")
+        assert math.copysign(1.0, served) == math.copysign(1.0, value)
+
+
+def test_the_dtsu_encoding_has_headroom_far_beyond_this_site():
+    """Nothing plausible on an MV feed comes near the float32 ceiling."""
+    from nd45_dtsu666.config import load_registers
+    from nd45_dtsu666.dtsu_server import encode_target_point
+
+    registers = load_registers("config/registers.json")
+    classic_p = registers.dtsu_target.points["p_total"]
+    # 100x the site's ~2.7 MW, still encodes without complaint
+    encode_target_point(270_000_000.0, classic_p, registers.dtsu_target, ct_ratio=200)
+    with pytest.raises(ValueError, match="not representable"):
+        encode_target_point(1e40, classic_p, registers.dtsu_target, ct_ratio=200)
