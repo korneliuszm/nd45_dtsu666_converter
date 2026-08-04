@@ -334,21 +334,27 @@ mean the bridge is inventing the swing — and `monitor` now prints the same
 `diag --interval 0.3`: if the spread matches the monitor's, the swing is in the
 measurement, and it is what Sigenergy is being fed.
 
-If the spread does *not* match — `diag` steady even at the bridge's own
-interval, but `monitor`/the service still wrong — that is a second, unrelated
-issue: `monitor`/`rtudebug` still track Sigenergy's own read activity
-(`RtuActivity`/`WireActivity`) per bridge, which was found to corrupt that
-bridge's own source poll under real, sustained RS-485 traffic. `diag` never
-attaches this tracker, so it stays clean either way. See
-`/persistence/nd45-dtsu666-DEPLOY.md` on the deployment host and the matching
-note in `CLAUDE.md`.
+Running `diag` with the bridge's service **stopped** keeps two masters off the
+meter, and `monitor` cannot open the RS-485 port while the service holds it
+anyway (see the `bus traffic:` line) — but be aware of what else stopping the
+service changes, below.
 
-Do this with the bridge's service **stopped**. `diag` and `monitor` each open
-their own Modbus TCP connection, so running one alongside `nd45-dtsu666@nd45`
-puts two masters on a meter that is being polled three times a second — which is
-itself enough to make readings erratic on a small analyser. `monitor` also
-cannot open the RS-485 port while the service holds it (see the `bus traffic:`
-line).
+**The trap: stopping the service also stops the plant regulating.** Silence the
+bridge and Sigenergy loses its Power Sensor, enters its own safe mode and stops
+driving the battery — so the grid power genuinely settles. A `diag` that looks
+steady with the service stopped, next to a `monitor`/service that swings with it
+running, is therefore *not* evidence of a bug in the bridge. It is a regulating
+plant compared against an idle one. Measured on this site 2026-08-04: stopping
+the ND45 bridge collapsed a ±330 kW, ~3.3s swing to zero sign changes within two
+seconds, and restarting it brought the cycle straight back.
+
+To tell the two apart, read the source **while the service keeps running**, from
+a second process with its own TCP connection and no output server. If that
+independent reader sees the same swing sample for sample — and `u_l1`/`freq`
+stay flat while `i_l1` moves — the measurement is real and the instability is in
+the plant's control loop, not in this code. That is exactly how the two
+"corruption" incidents of 2026-08-04 were found to be misattributed; see
+`CLAUDE.md` and `/persistence/nd45-dtsu666-DEPLOY.md` §0.
 
 ## Interactive monitor (commissioning)
 

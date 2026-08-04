@@ -225,15 +225,14 @@ def build_bridge(
     registers: RegisterMap,
     activity: RtuActivity | None = None,
     client=None,
-    attended: bool = False,
+    prometheus_enabled: bool = True,
 ) -> BridgeRuntime:
     """Build one bridge's runtime state: store, datastore context, client.
 
-    `attended` auto-creates an RtuActivity for THIS bridge when `activity` is
-    None, so a sibling bridge under an attended session (monitor/rtudebug) gets
-    its own recorder too -- see the incident note below for why this must never
-    happen for the unattended production `run` path, regardless of
-    `config.prometheus.enabled`.
+    `prometheus_enabled` auto-creates an RtuActivity for THIS bridge when
+    `activity` is None, so every bridge -- including under `run` -- can report
+    what Sigenergy actually reads. An explicit `activity=` (monitor/rtudebug)
+    still wins.
     """
     source_side = registers.source_by_name(spec.source.register_map)
     if spec.source.type == "nd45":
@@ -241,28 +240,25 @@ def build_bridge(
     else:
         huawei_poller.validate_source_coverage(source_side)
 
-    # The metrics endpoint normally reports what Sigenergy actually reads, via an
-    # RtuActivity. Auto-creating one here is now gated on `attended`, NOT on
-    # `config.prometheus.enabled` (2026-08-04 incident):
-    # RecordingSlaveContext.getValues (which RtuActivity needs) runs synchronously
-    # on every register read Sigenergy makes, on the SAME event loop as this
-    # bridge's source poller. Reproduced live on this host, isolated by direct A/B
-    # with the same bridge/live source/output server (WireActivity/tracing_rtu_framer
-    # ruled OUT the same way -- corruption persists with wire=None): with real,
-    # sustained RS-485 read traffic on the port (Sigenergy polling at its normal
-    # rate, ~15-20 req/s here), attaching RtuActivity alone was enough to corrupt
-    # the concurrently-running ND45 TCP source reads -- p_total swinging between
-    # roughly +200kW and -290kW within seconds, absent any read/decode error, and
-    # not self-correcting. Clean with activity=None every time; corrupted with it
-    # attached every time. Root cause inside pymodbus 3.6.9 not yet identified.
-    # `run` (the unattended production path, which is what feeds Sigenergy, and
-    # never passes `attended=True`) must not silently do this to a live meter
-    # reading. `monitor`/`rtudebug` pass `attended=True` (an attended bring-up
-    # session, never the production service) precisely so every bridge still gets
-    # its own recorder there -- those callers are choosing to accept this known
-    # corruption risk on THEIR panel for a short session. See
-    # /persistence/nd45-dtsu666-DEPLOY.md.
-    if activity is None and attended:
+    # The metrics endpoint reports what Sigenergy actually reads, which only the
+    # recording context can see -- so `run` needs an RtuActivity too, not just
+    # the debug modes. An explicit `activity=` (monitor/rtudebug) still wins.
+    #
+    # This was disabled between 2026-08-04 and 2026-08-04 on the belief that
+    # RecordingSlaveContext.getValues corrupted the concurrent source poll (see
+    # git history for the retracted note). It does not. The symptom that A/B
+    # test chased -- p_total swinging roughly +200kW/-290kW within seconds, no
+    # read error, not self-correcting -- was the *plant*, not the data: with the
+    # bridge feeding Sigenergy, the battery regulates against this meter, its
+    # response comes back through the grid connection, and the loop hunts in a
+    # ~3.1s limit cycle. Measured 2026-08-04 by reading the ND45 from a second,
+    # independent process (own TCP client, no output server) while the service
+    # ran: both readers agreed sample for sample, and u_l1/freq stayed flat
+    # (0.45V / 0.021Hz peak-to-peak) throughout. Stopping this bridge collapsed
+    # the swing to zero sign changes within ~2s and restarting it brought the
+    # cycle straight back. The old A/B was confounded: every arm of it changed
+    # whether Sigenergy was being fed, so it measured the plant's reaction.
+    if activity is None and prometheus_enabled:
         activity = RtuActivity()
     # Only RTU has a wire to listen to; a TCP output either accepts a connection
     # or does not, which is already visible.
@@ -356,9 +352,9 @@ def build_pipeline(
             client=injected.get(spec.name),
             # An explicit `activity` means a caller is watching reads (monitor,
             # rtudebug), so every bridge records -- otherwise the sibling bridges'
-            # panels could not answer "is Sigenergy polling this port?". Not tied
-            # to config.prometheus.enabled: see build_bridge's incident note.
-            attended=activity is not None,
+            # panels could not answer "is Sigenergy polling this port?" whenever
+            # the metrics endpoint happens to be switched off.
+            prometheus_enabled=config.prometheus.enabled or activity is not None,
         )
         bridges.append(bridge)
         coros.extend(_bridge_coros(bridge, registers, config, stop_event))
@@ -387,9 +383,9 @@ def build_pipeline(
         )
         # Gated on prometheus.enabled alone, not on any bridge having activity:
         # metrics.py already renders activity/wire-dependent families as absent
-        # when a bridge's activity/wire is None (2026-08-04: unattended `run`
-        # never sets either -- see build_bridge). Canonical values, poll stats,
-        # server status etc. do not depend on activity and should stay visible.
+        # when a bridge's activity/wire is None (a TCP-output bridge never has a
+        # wire). Canonical values, poll stats, server status etc. do not depend
+        # on activity and should stay visible either way.
         if config.prometheus.enabled
         else None
     )

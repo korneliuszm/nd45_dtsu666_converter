@@ -86,27 +86,25 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
         coro.close()
 
 
-def test_build_pipeline_does_not_auto_record_for_unattended_run(monkeypatch):
-    """`run` (no explicit activity=) must never get a RecordingSlaveContext.
+def test_build_pipeline_records_for_run_when_prometheus_is_enabled(monkeypatch):
+    """`run` gets a RecordingSlaveContext too, so /metrics can report reads.
 
-    2026-08-04 incident: RecordingSlaveContext.getValues, running synchronously
-    on every Sigenergy read on the same event loop as this bridge's source
-    poller, was found to corrupt the source reads under real, sustained RS-485
-    traffic -- independent of config.prometheus.enabled. See build_bridge's
-    docstring/comment and /persistence/nd45-dtsu666-DEPLOY.md. The metrics
-    endpoint itself still comes up (canonical values, poll stats, etc. do not
-    depend on activity) -- only the activity/wire-derived families go missing.
+    This asserted the opposite between 2026-08-04 and 2026-08-04, when the
+    recorder was blamed for corrupting the concurrent source poll. It does not:
+    that swing was the battery hunting against the meter this bridge feeds, and
+    it reproduced identically for a second, independent reader with no recorder
+    and no output server at all. See build_bridge's comment.
     """
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
-    assert config.prometheus.enabled  # even so:
+    assert config.prometheus.enabled
     pipe = build_pipeline(config, registers, asyncio.Event(), only="nd45", client=object())
-    assert not isinstance(
+    assert isinstance(
         pipe.context[config.bridge_specs[0].dtsu.slave_id], RecordingSlaveContext
     )
     assert pipe.metrics is not None
-    assert pipe.bridges[0].activity is None
+    assert pipe.bridges[0].activity is not None
     for coro in pipe.coros:
         coro.close()
 
@@ -671,11 +669,7 @@ def test_watchdog_heartbeat_follows_the_slowest_of_several_bridges(monkeypatch):
 
 
 def test_each_rtu_bridge_gets_its_own_bus_tracker(monkeypatch):
-    """Per bridge, like everything else -- one port's traffic must not count for another.
-
-    Wire trackers only exist in an attended session (activity= passed
-    explicitly) since 2026-08-04 -- see build_bridge's incident note.
-    """
+    """Per bridge, like everything else -- one port's traffic must not count for another."""
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     pipe = build_pipeline(
         _two_bridge_config(), load_registers("config/registers.json"), asyncio.Event(),
