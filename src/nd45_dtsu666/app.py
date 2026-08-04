@@ -20,7 +20,13 @@ from pymodbus.client import AsyncModbusTcpClient
 from . import huawei_poller, metrics, nd45_poller
 from .canonical import CanonicalStore, HealthGate
 from .config import AppConfig, BridgeConf, RegisterMap
-from .dtsu_server import RtuActivity, build_context, supervise_server, update_datastore
+from .dtsu_server import (
+    RtuActivity,
+    WireActivity,
+    build_context,
+    supervise_server,
+    update_datastore,
+)
 from .metrics import BridgeMetrics, MetricsSource, PollStats, RecoveryStats, ServerStatus
 from .nd45_poller import run_poller
 from .watchdog import Heartbeat, notify_ready, watchdog_loop, watchdog_seconds
@@ -52,6 +58,10 @@ class BridgeRuntime:
     server_status: ServerStatus
     recovery: RecoveryStats
     activity: RtuActivity | None = None
+    # Raw RS-485 traffic on this bridge's output port, counted before pymodbus
+    # filters by slave id -- the only way to tell "nobody is polling this bus"
+    # apart from "someone is polling it under a different address".
+    wire: WireActivity | None = None
 
     def replace_client(self) -> object:
         self.client = self.client_factory()
@@ -220,6 +230,9 @@ def build_bridge(
     # the debug modes. An explicit `activity=` (monitor/rtudebug) still wins.
     if activity is None and prometheus_enabled:
         activity = RtuActivity()
+    # Only RTU has a wire to listen to; a TCP output either accepts a connection
+    # or does not, which is already visible.
+    wire = WireActivity() if activity is not None and spec.dtsu.transport == "rtu" else None
 
     context = build_context(
         [side for _name, side in registers.targets],
@@ -241,6 +254,7 @@ def build_bridge(
         server_status=ServerStatus(),
         recovery=RecoveryStats(),
         activity=activity,
+        wire=wire,
     )
 
 
@@ -327,6 +341,7 @@ def build_pipeline(
                     spec=b.spec,
                     store=b.store,
                     activity=b.activity,
+                    wire=b.wire,
                     poll_stats=b.poll_stats,
                     server_status=b.server_status,
                     recovery=b.recovery,
@@ -378,6 +393,7 @@ def _bridge_coros(
         spec.safety.check_interval_s, stop_event,
         min_restart_interval=spec.safety.min_restart_interval_s,
         status=bridge.server_status,
+        wire=bridge.wire,
     )
     return [poller, supervisor]
 

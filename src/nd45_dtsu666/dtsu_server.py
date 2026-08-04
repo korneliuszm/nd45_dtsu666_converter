@@ -96,6 +96,94 @@ def _targets(value: TargetSide | Iterable[TargetSide]) -> list[TargetSide]:
     return list(value)
 
 
+_RTU_REQUEST_LEN = 8  # uid, fc, addr(2), count(2), crc(2) -- FC01..FC06 requests
+_REQUEST_FUNCTION_CODES = frozenset({1, 2, 3, 4, 5, 6})
+
+
+def rtu_crc(data: bytes) -> int:
+    """Modbus RTU CRC16, little-endian on the wire."""
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc
+
+
+def scan_rtu_requests(buffer: bytes) -> list[tuple[int, int, int, int]]:
+    """Every CRC-valid 8-byte request frame in `buffer` as (slave, fc, addr, count).
+
+    Deliberately CRC-checked rather than "first byte is the slave id": this feeds
+    a diagnostic that tells the installer which address a master is polling, and
+    a wrong answer there sends them chasing the wrong fault.
+    """
+    found: list[tuple[int, int, int, int]] = []
+    for i in range(0, max(0, len(buffer) - _RTU_REQUEST_LEN + 1)):
+        frame = buffer[i:i + _RTU_REQUEST_LEN]
+        if frame[1] not in _REQUEST_FUNCTION_CODES:
+            continue
+        if rtu_crc(frame[:-2]) != int.from_bytes(frame[-2:], "little"):
+            continue
+        slave, fc = frame[0], frame[1]
+        addr = int.from_bytes(frame[2:4], "big")
+        count = int.from_bytes(frame[4:6], "big")
+        found.append((slave, fc, addr, count))
+    return found
+
+
+class WireActivity:
+    """Raw traffic on an RTU output port, counted *before* slave-id filtering.
+
+    pymodbus's RTU framer silently drops a frame addressed to a slave the server
+    does not hold: ModbusRtuFramer.frameProcessIncomingPacket skips those bytes
+    and logs only at DEBUG, so RecordingSlaveContext never sees them. That makes
+    the two most common bring-up faults on a fresh RS-485 bus look identical --
+    nothing is polling this port at all, versus something is polling it under a
+    different slave address. This separates them.
+    """
+
+    def __init__(self, max_ids: int = 8) -> None:
+        self.bytes_seen = 0
+        self.last_ts: float | None = None
+        self.frames: Counter[int] = Counter()  # slave id -> CRC-valid requests seen
+        self._max_ids = max_ids
+        self._tail = b""
+
+    def record(self, data: bytes, ts: float) -> None:
+        if not data:
+            return
+        self.bytes_seen += len(data)
+        self.last_ts = ts
+        # Keep a short tail so a frame split across two reads is still matched.
+        buffer = self._tail + data
+        for slave, _fc, _addr, _count in scan_rtu_requests(buffer):
+            if slave in self.frames or len(self.frames) < self._max_ids:
+                self.frames[slave] += 1
+        self._tail = buffer[-(_RTU_REQUEST_LEN - 1):]
+
+    def summary(self, now: float) -> dict:
+        return {
+            "bytes_seen": self.bytes_seen,
+            "last_seen_age": None if self.last_ts is None else now - self.last_ts,
+            "slave_ids": self.frames.most_common(),
+        }
+
+
+def tracing_rtu_framer(wire: WireActivity, clock: Callable[[], float] = time.monotonic):
+    """A ModbusRtuFramer subclass that feeds `wire` every chunk read from the port.
+
+    pymodbus takes a framer *class* and instantiates it itself, so the tracker is
+    closed over here rather than passed in.
+    """
+
+    class _TracingRtuFramer(ModbusRtuFramer):
+        def processIncomingPacket(self, data, callback, slave, **kwargs):  # noqa: N802
+            wire.record(data, clock())
+            return super().processIncomingPacket(data, callback, slave, **kwargs)
+
+    return _TracingRtuFramer
+
+
 class RtuActivity:
     """Records Modbus read requests received from the storage (Sigenergy)."""
 
@@ -251,10 +339,12 @@ def encode_target_point(
     )
 
 
-def make_serial_server(cfg: DtsuConf, context) -> ModbusSerialServer:
+def make_serial_server(
+    cfg: DtsuConf, context, wire: WireActivity | None = None
+) -> ModbusSerialServer:
     return ModbusSerialServer(
         context=context,
-        framer=ModbusRtuFramer,
+        framer=ModbusRtuFramer if wire is None else tracing_rtu_framer(wire),
         port=cfg.rtu.port,
         baudrate=cfg.rtu.baudrate,
         parity=cfg.rtu.parity,
@@ -271,10 +361,12 @@ def make_tcp_server(cfg: DtsuConf, context) -> ModbusTcpServer:
     )
 
 
-def make_server(cfg: DtsuConf, context) -> ModbusSerialServer | ModbusTcpServer:
+def make_server(
+    cfg: DtsuConf, context, wire: WireActivity | None = None
+) -> ModbusSerialServer | ModbusTcpServer:
     if cfg.transport == "tcp":
         return make_tcp_server(cfg, context)
-    return make_serial_server(cfg, context)
+    return make_serial_server(cfg, context, wire=wire)
 
 
 def _server_action(
@@ -313,6 +405,7 @@ async def supervise_server(
     min_restart_interval: float = 0.0,
     dead_start_grace: float = 5.0,
     status=None,
+    wire: WireActivity | None = None,
 ) -> None:
     """Start the DTSU output server (RTU or TCP, per cfg.transport) while data is
     fresh; stop it (silence) while stale.
@@ -321,7 +414,7 @@ async def supervise_server(
     transitions. Server state is otherwise loop-local and unobservable from
     outside, and it cannot be re-derived from the freshness gate: a server whose
     transport never opened still looks 'should serve'."""
-    factory = server_factory or (lambda: make_server(cfg, context))
+    factory = server_factory or (lambda: make_server(cfg, context, wire=wire))
     clock = now or time.monotonic
     server = None
     serve_task: asyncio.Task | None = None

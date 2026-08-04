@@ -707,3 +707,26 @@ def test_every_bridge_family_declares_a_type():
         if line and not line.startswith("#")
     }
     assert emitted <= declared
+
+
+def test_bus_traffic_is_exported_per_bridge_and_slave_id():
+    """Lets an alert fire on "frames arrive but none are ours" -- a wrong address."""
+    from nd45_dtsu666.dtsu_server import WireActivity, rtu_crc
+
+    def frame(slave):
+        body = bytes([slave, 3]) + (8198).to_bytes(2, "big") + (2).to_bytes(2, "big")
+        return body + rtu_crc(body).to_bytes(2, "little")
+
+    wire = WireActivity()
+    wire.record(frame(3), ts=1.0)
+    config = _two_bridge_config()
+    bridges = [_bridge(config=config, spec=spec) for spec in config.bridge_specs]
+    bridges[1].wire = wire
+    text = render(_source(config=config, bridges=bridges), loop_now=10.0, mono_now=10.0)
+
+    assert _value(text, f"{P}_bridge_dtsu_bus_bytes_total", '{bridge="smartlogger"}') == "8"
+    assert _value(
+        text, f"{P}_bridge_dtsu_bus_frames_total", '{bridge="smartlogger",slave_id="3"}'
+    ) == "1"
+    # the bridge without a wire tracker emits no bus series at all
+    assert f'{P}_bridge_dtsu_bus_bytes_total{{bridge="nd45"}}' not in text

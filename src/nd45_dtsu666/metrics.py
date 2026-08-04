@@ -123,6 +123,9 @@ class BridgeMetrics:
     server_status: ServerStatus
     recovery: RecoveryStats
     activity: RtuActivity | None = None
+    # Raw RS-485 traffic on the output port (dtsu_server.WireActivity), counted
+    # before pymodbus filters by slave id. None for a TCP output.
+    wire: object | None = None
     heartbeat: Heartbeat | None = None
     # The BridgeRuntime itself, read for `.client` at scrape time: a stall
     # recovery replaces the client object, so caching it here would report the
@@ -491,6 +494,30 @@ def _render_bridge_dtsu(
             f"{PREFIX}_bridge_dtsu_block_reads_total",
             hits,
             [*label, ("fc", str(fc)), ("addr", str(addr)), ("count", str(count))],
+        )
+
+    if bridge.wire is None:
+        return
+    # Bus-level counters. A frame addressed to another slave id never reaches the
+    # datastore (pymodbus's RTU framer drops it), so requests_total staying 0
+    # while these rise is the signature of a wrong Modbus address on that bus.
+    wire = bridge.wire.summary(mono_now)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_bus_bytes_total",
+        "counter",
+        "Bytes received on this bridge's RS-485 output port, whatever they address.",
+    )
+    out.sample(f"{PREFIX}_bridge_dtsu_bus_bytes_total", wire["bytes_seen"], label)
+    out.family(
+        f"{PREFIX}_bridge_dtsu_bus_frames_total",
+        "counter",
+        "Valid Modbus request frames seen on the bus, by the slave id they address.",
+    )
+    for slave_id, hits in wire["slave_ids"]:
+        out.sample(
+            f"{PREFIX}_bridge_dtsu_bus_frames_total",
+            hits,
+            [*label, ("slave_id", str(slave_id))],
         )
 
 

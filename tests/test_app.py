@@ -652,3 +652,35 @@ def test_watchdog_heartbeat_follows_the_slowest_of_several_bridges(monkeypatch):
     assert pipe.watchdog_heartbeat.age(now=100.0) == pytest.approx(60.0)
     for coro in pipe.coros:
         coro.close()
+
+
+def test_each_rtu_bridge_gets_its_own_bus_tracker(monkeypatch):
+    """Per bridge, like everything else -- one port's traffic must not count for another."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    pipe = build_pipeline(
+        _two_bridge_config(), load_registers("config/registers.json"), asyncio.Event(),
+        clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
+    )
+    wires = [b.wire for b in pipe.bridges]
+    assert all(w is not None for w in wires)
+    assert wires[0] is not wires[1]
+    wires[0].record(b"\x0a\x03\x20\x06\x00\x02\x21\x8c", ts=1.0)
+    assert wires[1].summary(now=1.0)["bytes_seen"] == 0
+    for coro in pipe.coros:
+        coro.close()
+
+
+def test_a_tcp_output_bridge_has_no_bus_tracker(monkeypatch):
+    """There is no shared wire to listen to; a TCP listener is up or it is not."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = _two_bridge_config(
+        dtsu={"transport": "tcp", "slave_id": 10, "tcp": {"host": "0.0.0.0", "port": 5020}}
+    )
+    pipe = build_pipeline(
+        config, load_registers("config/registers.json"), asyncio.Event(),
+        clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
+    )
+    assert pipe.bridge("smartlogger").wire is None
+    assert pipe.bridge("nd45").wire is not None  # still RTU
+    for coro in pipe.coros:
+        coro.close()

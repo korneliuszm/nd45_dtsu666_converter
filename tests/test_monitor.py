@@ -345,3 +345,46 @@ async def test_run_monitor_rejects_an_unknown_bridge_name():
     stop.set()
     with pytest.raises(KeyError, match="no bridge named 'nope'"):
         await monitor_mod.run_monitor(config, registers, stop, bridge_name="nope")
+
+
+# --- bus traffic (the wrong-address case) ------------------------------------
+#
+# pymodbus drops a frame addressed to a slave id the server does not hold, so
+# "Sigenergy reads: 0" alone cannot tell a silent bus from a wrong address.
+
+
+def _wire(bytes_seen=0, last=None, slave_ids=()):
+    return {"bytes_seen": bytes_seen, "last_seen_age": last, "slave_ids": list(slave_ids)}
+
+
+def test_a_silent_bus_says_nothing_is_transmitting():
+    text = render_bridge_monitor(_dead_smartlogger(wire=_wire()))
+    assert "bus traffic:  none -- nothing is transmitting on this port" in text
+
+
+def test_traffic_for_a_foreign_slave_id_is_called_out():
+    """The signature of a Sigenergy configured for the wrong Modbus address."""
+    snap = _dead_smartlogger(
+        server_up=True, activity=_activity(total=0), wire=_wire(96, 0.2, [(3, 12)])
+    )
+    text = render_bridge_monitor(snap)
+    assert "frames for: slave 3 x12" in text
+    assert "WRONG ADDRESS (this bridge answers slave 10)" in text
+
+
+def test_traffic_for_the_right_slave_id_is_not_flagged():
+    snap = _healthy_nd45(wire=_wire(4096, 0.1, [(10, 512)]))
+    text = render_bridge_monitor(snap)
+    assert "frames for: slave 10 x512" in text
+    assert "WRONG ADDRESS" not in text
+
+
+def test_bytes_without_a_decodable_frame_point_at_framing():
+    """Something is on the wire but nothing frames -- baudrate/parity/wiring."""
+    snap = _dead_smartlogger(server_up=True, activity=_activity(), wire=_wire(240, 1.0))
+    assert "no valid Modbus frame decoded" in render_bridge_monitor(snap)
+
+
+def test_a_tcp_output_has_no_bus_line():
+    text = render_bridge_monitor(_healthy_nd45(wire=None))
+    assert "bus traffic" not in text

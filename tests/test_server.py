@@ -9,12 +9,16 @@ from nd45_dtsu666.config import DtsuConf, DtsuIdentityConf, DtsuRtuConf, DtsuTcp
 from nd45_dtsu666.dtsu_server import (
     RecordingSlaveContext,
     RtuActivity,
+    WireActivity,
     _server_action,
     build_context,
     make_serial_server,
     make_server,
     make_tcp_server,
+    rtu_crc,
+    scan_rtu_requests,
     supervise_server,
+    tracing_rtu_framer,
     update_datastore,
 )
 
@@ -807,3 +811,102 @@ async def test_supervisor_logs_exception_from_cancelled_server_task(caplog):
     assert not any(
         r.name == "asyncio" and "never retrieved" in r.getMessage() for r in caplog.records
     )
+
+
+# --- bus-level activity ------------------------------------------------------
+#
+# The gap these cover: pymodbus's RTU framer drops a frame addressed to a slave
+# id the server does not hold, before the datastore (and therefore RtuActivity)
+# ever sees it. Without a bus-level counter, "no reads" on a fresh RS-485 bus
+# cannot be told apart from "polled under the wrong address".
+
+
+def _request(slave: int, fc: int, addr: int, count: int) -> bytes:
+    import struct
+
+    body = struct.pack(">BBHH", slave, fc, addr, count)
+    return body + rtu_crc(body).to_bytes(2, "little")
+
+
+def test_scan_rtu_requests_reads_a_frame_off_the_wire():
+    assert scan_rtu_requests(_request(10, 3, 8198, 2)) == [(10, 3, 8198, 2)]
+
+
+def test_scan_rtu_requests_ignores_noise_without_a_valid_crc():
+    """CRC-checked on purpose: a wrong slave id here would misdirect an installer."""
+    frame = bytearray(_request(10, 3, 8198, 2))
+    frame[-1] ^= 0xFF
+    assert scan_rtu_requests(bytes(frame)) == []
+    assert scan_rtu_requests(b"\x00" * 32) == []
+
+
+def test_wire_activity_counts_bytes_and_the_addressed_slave():
+    wire = WireActivity()
+    wire.record(_request(10, 3, 8198, 2), ts=1.0)
+    wire.record(_request(3, 4, 5404, 2), ts=2.0)
+    summary = wire.summary(now=5.0)
+    assert summary["bytes_seen"] == 16
+    assert summary["last_seen_age"] == 3.0
+    assert dict(summary["slave_ids"]) == {10: 1, 3: 1}
+
+
+def test_wire_activity_matches_a_frame_split_across_two_reads():
+    """Serial reads chop frames arbitrarily; a split frame must still be seen."""
+    frame = _request(7, 3, 100, 2)
+    wire = WireActivity()
+    wire.record(frame[:5], ts=1.0)
+    wire.record(frame[5:], ts=1.01)
+    assert dict(wire.summary(now=1.0)["slave_ids"]) == {7: 1}
+
+
+def test_wire_activity_is_silent_before_anything_arrives():
+    assert WireActivity().summary(now=1.0) == {
+        "bytes_seen": 0, "last_seen_age": None, "slave_ids": []
+    }
+
+
+def test_wire_activity_caps_the_slave_ids_it_tracks():
+    """A scanning master must not grow this dict without bound."""
+    wire = WireActivity(max_ids=2)
+    for slave in range(1, 6):
+        wire.record(_request(slave, 3, 0, 1), ts=1.0)
+    assert len(wire.summary(now=1.0)["slave_ids"]) == 2
+
+
+def test_tracing_framer_feeds_every_chunk_and_still_frames_normally():
+    wire = WireActivity()
+    framer_cls = tracing_rtu_framer(wire, clock=lambda: 1.0)
+    seen = []
+    from pymodbus.factory import ServerDecoder
+
+    framer = framer_cls(ServerDecoder())
+    framer.processIncomingPacket(
+        _request(10, 3, 8198, 2), seen.append, slave=[10], single=False
+    )
+    assert wire.summary(now=1.0)["bytes_seen"] == 8
+    assert [r.function_code for r in seen] == [3]  # still decoded for the server
+
+
+def test_tracing_framer_records_a_frame_the_server_will_drop():
+    """The whole point: slave 3 never reaches the callback, but is still counted."""
+    wire = WireActivity()
+    seen = []
+    from pymodbus.factory import ServerDecoder
+
+    framer = tracing_rtu_framer(wire, clock=lambda: 1.0)(ServerDecoder())
+    framer.processIncomingPacket(
+        _request(3, 3, 8198, 2), seen.append, slave=[10], single=False
+    )
+    assert seen == []
+    assert dict(wire.summary(now=1.0)["slave_ids"]) == {3: 1}
+
+
+async def test_make_serial_server_uses_the_tracing_framer_only_when_asked():
+    cfg = DtsuConf(transport="rtu", slave_id=10, rtu=DtsuRtuConf(port="/dev/null"))
+    from pymodbus.framer.rtu_framer import ModbusRtuFramer
+
+    plain = make_serial_server(cfg, context=None)
+    traced = make_serial_server(cfg, context=None, wire=WireActivity())
+    assert plain.framer is ModbusRtuFramer
+    assert traced.framer is not ModbusRtuFramer
+    assert issubclass(traced.framer, ModbusRtuFramer)  # still a real RTU framer

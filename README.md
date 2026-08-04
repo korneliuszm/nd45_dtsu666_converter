@@ -244,6 +244,8 @@ All names are prefixed `nd45_dtsu666_`:
 | `dtsu_server_up` | 1 while the output transport is actually serving (0 = fail-safe or port problem) |
 | `dtsu_requests_total`, `dtsu_request_rate_per_second`, `dtsu_last_request_age_seconds` | whether Sigenergy is polling at all |
 | `dtsu_block_reads_total{fc,addr,count}` | which register blocks it asks for |
+| `bridge_dtsu_bus_bytes_total{bridge}` | bytes received on that bridge's RS-485 port, whatever they address |
+| `bridge_dtsu_bus_frames_total{bridge,slave_id}` | valid request frames on the bus, by the slave id they address |
 | `canonical_value{point}` | latest ND45 value in SI units |
 | `dtsu_register_value{map,point,fc,addr}` | value currently encoded in each DTSU output register |
 | `dtsu_register_read_age_seconds{map,point,fc,addr}` | seconds since Sigenergy last read that register (`+Inf` = never) |
@@ -254,6 +256,9 @@ Useful alert expressions:
 nd45_dtsu666_nd45_data_fresh == 0                      # ND45 stale -> output silenced
 nd45_dtsu666_dtsu_server_up == 0                       # output server down
 rate(nd45_dtsu666_dtsu_requests_total[5m]) == 0        # Sigenergy stopped asking
+# something polls the bus but never us -> wrong Modbus address on that bridge
+rate(nd45_dtsu666_bridge_dtsu_bus_frames_total[5m]) > 0
+  unless on(bridge) rate(nd45_dtsu666_bridge_dtsu_requests_total[5m]) > 0
 increase(nd45_dtsu666_nd45_polls_total{result="error"}[5m]) > 0
 ```
 
@@ -497,6 +502,15 @@ freshness gate silences that bridge's output on its own.
       system-level fix (overlay), not a code one. Config load rejects two bridges
       sharing a port, but it cannot conjure a port that does not exist.
     - **RS-485 direction on the second port** — same check as item 7 for `ttyAMA2`.
+    - **If Sigenergy never appears**, read the OUTPUT panel's `bus traffic:` line
+      (or `bridge_dtsu_bus_*`), which counts raw frames *before* pymodbus filters
+      by slave id. It separates the three faults that otherwise look identical:
+      `none` = nothing is transmitting (wiring, A/B swap, direction control, or the
+      storage is not configured to poll); `frames for: slave N` with reads at 0 =
+      the storage polls a different Modbus address than `dtsu.slave_id`; bytes but
+      `no valid Modbus frame decoded` = baudrate/parity/framing mismatch. A missing
+      or busy port is different again — the journal then repeats "DTSU server never
+      opened its transport".
     - **Address base of the SmartLogger.** Huawei documents "40525"; some Modbus
       clients need `40524` (0- vs 1-based). Probe with `mbpoll` *before* enabling the
       bridge, and correct via `address_offset` on the source in `registers.json`.

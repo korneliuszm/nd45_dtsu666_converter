@@ -76,6 +76,9 @@ class BridgeSnapshot:
     server_stops: int = 0
     # RtuActivity.summary() output for this bridge's output port, or None.
     activity: dict | None = None
+    # WireActivity.summary(): raw RS-485 traffic, counted before pymodbus filters
+    # by slave id. None for a TCP output or when nothing is recording.
+    wire: dict | None = None
 
     @property
     def healthy(self) -> bool:
@@ -113,6 +116,7 @@ def snapshot_bridge(bridge, loop_now: float, mono_now: float) -> BridgeSnapshot:
         server_starts=bridge.server_status.starts,
         server_stops=bridge.server_status.stops,
         activity=bridge.activity.summary(mono_now) if bridge.activity else None,
+        wire=bridge.wire.summary(mono_now) if getattr(bridge, "wire", None) else None,
     )
 
 
@@ -243,7 +247,36 @@ def _render_output(snap: BridgeSnapshot) -> list[str]:
             f"@{addr}x{cnt}" for (_ts, _fc, addr, cnt) in list(act["recent"])[-5:]
         )
         lines.append(f"   recent:  {recent}")
+    lines.extend(_render_wire(snap))
     return lines
+
+
+def _render_wire(snap: BridgeSnapshot) -> list[str]:
+    """Raw bus traffic, which the read counter above cannot see.
+
+    A request addressed to another slave id is dropped by pymodbus's RTU framer
+    before it reaches the datastore, so "Sigenergy reads: 0" alone cannot
+    distinguish a silent bus from a wrong address. This line does.
+    """
+    if snap.wire is None:
+        return []
+    wire = snap.wire
+    if not wire["bytes_seen"]:
+        return ["   bus traffic:  none -- nothing is transmitting on this port"]
+    ids = wire["slave_ids"]
+    line = (
+        f"   bus traffic:  {wire['bytes_seen']} B"
+        f"    last: {_age(wire['last_seen_age'])}"
+    )
+    if ids:
+        addressed = "  ".join(f"slave {sid} x{hits}" for sid, hits in ids[:4])
+        line += f"    frames for: {addressed}"
+        foreign = [sid for sid, _hits in ids if sid != snap.slave_id]
+        if foreign and snap.activity is not None and not snap.activity["total"]:
+            line += f"  <- WRONG ADDRESS (this bridge answers slave {snap.slave_id})"
+    else:
+        line += "    no valid Modbus frame decoded (baudrate/framing/wiring?)"
+    return [line]
 
 
 def select_bridge_by_source(config: AppConfig, source_type: str) -> str:
