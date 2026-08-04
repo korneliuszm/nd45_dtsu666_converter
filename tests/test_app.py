@@ -67,7 +67,9 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
     stop = asyncio.Event()
     activity = RtuActivity()
 
-    pipe = build_pipeline(config, registers, stop, activity=activity, client=object())
+    pipe = build_pipeline(
+        config, registers, stop, activity=activity, client=object(), only="nd45"
+    )
 
     assert pipe.store is not None
     assert len(pipe.coros) == 2  # poller + supervisor
@@ -84,15 +86,27 @@ def test_build_pipeline_wires_components_and_threads_activity(monkeypatch):
         coro.close()
 
 
-def test_build_pipeline_records_activity_for_metrics_without_explicit_activity(monkeypatch):
-    """`run` passes no activity=, but the metrics endpoint still needs read stats."""
+def test_build_pipeline_does_not_auto_record_for_unattended_run(monkeypatch):
+    """`run` (no explicit activity=) must never get a RecordingSlaveContext.
+
+    2026-08-04 incident: RecordingSlaveContext.getValues, running synchronously
+    on every Sigenergy read on the same event loop as this bridge's source
+    poller, was found to corrupt the source reads under real, sustained RS-485
+    traffic -- independent of config.prometheus.enabled. See build_bridge's
+    docstring/comment and /persistence/nd45-dtsu666-DEPLOY.md. The metrics
+    endpoint itself still comes up (canonical values, poll stats, etc. do not
+    depend on activity) -- only the activity/wire-derived families go missing.
+    """
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
     registers = load_registers("config/registers.json")
-    assert config.prometheus.enabled
-    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
-    assert isinstance(pipe.context[config.bridge_specs[0].dtsu.slave_id], RecordingSlaveContext)
+    assert config.prometheus.enabled  # even so:
+    pipe = build_pipeline(config, registers, asyncio.Event(), only="nd45", client=object())
+    assert not isinstance(
+        pipe.context[config.bridge_specs[0].dtsu.slave_id], RecordingSlaveContext
+    )
     assert pipe.metrics is not None
+    assert pipe.bridges[0].activity is None
     for coro in pipe.coros:
         coro.close()
 
@@ -102,7 +116,7 @@ def test_build_pipeline_default_context_not_recording_without_prometheus(monkeyp
     config = load_config("config/config.json")
     config.prometheus.enabled = False
     registers = load_registers("config/registers.json")
-    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
+    pipe = build_pipeline(config, registers, asyncio.Event(), only="nd45", client=object())
     assert not isinstance(pipe.context[config.bridge_specs[0].dtsu.slave_id], RecordingSlaveContext)
     assert pipe.metrics is None
     for coro in pipe.coros:
@@ -336,23 +350,24 @@ def _two_bridge_config(**bridge_overrides):
     return AppConfig.model_validate(raw)
 
 
-def test_shipped_config_builds_exactly_one_bridge(monkeypatch):
-    """Regression guard: nothing about a single-bridge deployment changes.
+def test_shipped_config_builds_both_bridges(monkeypatch):
+    """Regression guard on the live deployment's actual shape.
 
-    The shipped config lists both bridges, but smartlogger ships disabled, so a
-    stock install still runs exactly the ND45 bridge it always did.
+    Both bridges ship enabled since the SmartLogger bridge went live alongside
+    the ND45 bridge (2026-08-04 cutover) -- a stock install now runs both.
     """
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
-    assert [b.enabled for b in config.bridges] == [True, False]
+    assert [b.enabled for b in config.bridges] == [True, True]
 
     pipe = build_pipeline(
-        config, load_registers("config/registers.json"), asyncio.Event(), client=object()
+        config, load_registers("config/registers.json"), asyncio.Event(),
+        clients={"nd45": object(), "smartlogger": object()},
     )
 
-    assert len(pipe.bridges) == 1
-    assert pipe.bridges[0].name == "nd45"
-    assert len(pipe.coros) == 2  # poller + supervisor, as before
+    assert len(pipe.bridges) == 2
+    assert [b.name for b in pipe.bridges] == ["nd45", "smartlogger"]
+    assert len(pipe.coros) == 4  # poller + supervisor, per bridge
     for coro in pipe.coros:
         coro.close()
 
@@ -483,11 +498,12 @@ async def test_each_bridge_writes_only_its_own_datastore(monkeypatch):
 
     nd45, smart = pipe.bridges
     assert nd45.store.snapshot()[0]["p_total"] == pytest.approx(-60000.0)
-    assert smart.store.snapshot()[0]["p_total"] == pytest.approx(1_234_500.0)
+    # the SmartLogger register holds +1 234 500 W; huawei_plant_source inverts it
+    assert smart.store.snapshot()[0]["p_total"] == pytest.approx(-1_234_500.0)
 
     # each bridge's DTSU register holds its own value, divided by its own CT ratio
     point = registers.dtsu_target.points["p_total"]
-    for bridge, expected in ((nd45, -60000.0), (smart, 1_234_500.0)):
+    for bridge, expected in ((nd45, -60000.0), (smart, -1_234_500.0)):
         regs = bridge.context[bridge.spec.dtsu.slave_id].getValues(3, point.addr, count=2)
         served = registers_to_float(regs, "big", "big")
         ct = bridge.spec.dtsu.identity.ir_at
@@ -593,7 +609,7 @@ def test_select_specs_rejects_an_unknown_bridge_and_says_what_exists():
 
 def test_select_specs_rejects_a_disabled_bridge():
     """`enabled: false` means there is nothing to run -- say so rather than idle."""
-    config = load_config("config/config.json")  # smartlogger ships disabled
+    config = _two_bridge_config(enabled=False)
     with pytest.raises(SystemExit, match="unknown bridge 'smartlogger'"):
         select_specs(config, "smartlogger")
 
@@ -655,10 +671,15 @@ def test_watchdog_heartbeat_follows_the_slowest_of_several_bridges(monkeypatch):
 
 
 def test_each_rtu_bridge_gets_its_own_bus_tracker(monkeypatch):
-    """Per bridge, like everything else -- one port's traffic must not count for another."""
+    """Per bridge, like everything else -- one port's traffic must not count for another.
+
+    Wire trackers only exist in an attended session (activity= passed
+    explicitly) since 2026-08-04 -- see build_bridge's incident note.
+    """
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     pipe = build_pipeline(
         _two_bridge_config(), load_registers("config/registers.json"), asyncio.Event(),
+        activity=RtuActivity(),
         clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
     )
     wires = [b.wire for b in pipe.bridges]
@@ -678,6 +699,7 @@ def test_a_tcp_output_bridge_has_no_bus_tracker(monkeypatch):
     )
     pipe = build_pipeline(
         config, load_registers("config/registers.json"), asyncio.Event(),
+        activity=RtuActivity(),
         clients={"nd45": _FakeSourceClient(), "smartlogger": _FakeSourceClient()},
     )
     assert pipe.bridge("smartlogger").wire is None

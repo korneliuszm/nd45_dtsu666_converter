@@ -565,8 +565,7 @@ def test_a_config_whose_every_bridge_is_disabled_is_rejected():
 
 
 def test_disabled_bridges_are_left_out_of_bridge_specs():
-    """The shipped smartlogger entry is a disabled template."""
-    config = load_config("config/config.json")
+    config = AppConfig.model_validate(_with_bridges({**SECOND_BRIDGE, "enabled": False}))
     assert [b.name for b in config.bridges] == ["nd45", "smartlogger"]
     assert config.bridges[1].enabled is False
     assert [b.name for b in config.bridge_specs] == ["nd45"]
@@ -684,7 +683,7 @@ def test_source_defaults_reflect_each_device_s_own_timing():
 def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():
     config = load_config("config/config.json")
     nd45, bridge = config.bridges
-    assert bridge.dtsu.rtu.port == "/dev/ttyAMA3"
+    assert bridge.dtsu.rtu.port == "/dev/ttyAMA4"
     assert bridge.dtsu.rtu.port != nd45.dtsu.rtu.port
     assert bridge.source.register_map == "huawei_plant_source"
     assert bridge.safety.max_data_age_s == 30.0

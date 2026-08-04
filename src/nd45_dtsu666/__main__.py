@@ -152,7 +152,16 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "static", help="serve stable JSON-configured values without connecting a source"
     )
-    sub.add_parser("diag", help="poll one bridge's source and print the decoded table")
+    diag = sub.add_parser(
+        "diag", help="poll one bridge's source and print the decoded table"
+    )
+    diag.add_argument(
+        "--interval", type=float, default=1.0,
+        help="seconds between polls (default 1.0). Set it to the bridge's own "
+             "source.poll_interval_s to see the source exactly as the running "
+             "bridge samples it -- a value that looks steady at 1s and jitters at "
+             "0.3s is telling you something about the meter, not the bridge.",
+    )
     sub.add_parser("selftest", help="serve synthetic data on one bridge for an mbpoll bench")
 
     args = parser.parse_args(argv)

@@ -106,6 +106,12 @@ async def poll_once(
     values: dict[str, float] = {}
     invalid_critical: list[str] = []
     for key, pt in source.points.items():
+        # The over-range test belongs on the value as the ND45 wrote it, not on
+        # the scaled result: OVERRANGE is a property of the meter's sentinel
+        # (2e20), and a map `scale` below 1 would otherwise shrink the sentinel
+        # under the threshold and let it through as a real reading. That is not
+        # hypothetical here -- the MV/LV voltage points scale by 1/37.5, which
+        # turns 2e20 into 5.3e18 and would serve it as a voltage.
         if pt.compose:
             parts = [registers_to_float(extract_registers(a, groups), wo, bo) for a in pt.compose]
             invalid_parts = [
@@ -114,14 +120,20 @@ async def poll_once(
                 if not math.isfinite(part) or abs(part) >= OVERRANGE
             ]
             if invalid_parts:
-                si = invalid_parts[0]
+                raw, si = invalid_parts[0], invalid_parts[0]
             else:
                 raw = compose(parts, pt.factors or [1.0] * len(parts))
                 si = raw * pt.scale * pt.sign + pt.offset
         else:
             regs = extract_registers(pt.addr, groups)
+            raw = registers_to_float(regs, wo, bo)
             si = decode_point(regs, pt.scale, pt.sign, pt.offset, wo, bo)
-        invalid = not math.isfinite(si) or abs(si) >= OVERRANGE
+        invalid = (
+            not math.isfinite(si)
+            or abs(si) >= OVERRANGE
+            or not math.isfinite(raw)
+            or abs(raw) >= OVERRANGE
+        )
         if invalid:
             optional = key in OPTIONAL_INVALID_ZERO_POINTS
             if overrange_seen is None or key not in overrange_seen:

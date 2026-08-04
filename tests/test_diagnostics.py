@@ -57,3 +57,49 @@ def test_synthetic_values_cover_every_dtsu_target_source():
     assert values["net_exp_energy_total"] == pytest.approx(67.8)
     assert values["reactive_imp_energy_total"] == 0.0
     assert values["reactive_exp_energy_total"] == 0.0
+
+
+# --- sample spread (telling a jittery source from a steady one) --------------
+
+
+def _stats(*samples, points=("p_total",)):
+    from nd45_dtsu666.diagnostics import SampleStats
+
+    stats = SampleStats(points)
+    for values in samples:
+        stats.record(values)
+    return stats
+
+
+def test_sample_stats_tracks_the_spread_of_each_point():
+    stats = _stats({"p_total": -100.0}, {"p_total": 40.0}, {"p_total": -20.0})
+    text = stats.render(interval=0.3)
+    assert "3 sample(s) at 0.3s" in text
+    assert "-100.000" in text and "40.000" in text
+    assert "140.000" in text  # peak-to-peak
+
+
+def test_sample_stats_counts_sign_changes():
+    """The number that answers "is it really crossing zero, or is it noise?"."""
+    stats = _stats(
+        {"p_total": 10.0}, {"p_total": -5.0}, {"p_total": 8.0}, {"p_total": 9.0}
+    )
+    assert stats.render(interval=1.0).split("\n")[-1].split()[-1] == "2"
+
+
+def test_sample_stats_does_not_count_a_pass_through_zero_twice():
+    stats = _stats({"p_total": 5.0}, {"p_total": 0.0}, {"p_total": -5.0})
+    assert stats.render(interval=1.0).split("\n")[-1].split()[-1] == "1"
+
+
+def test_sample_stats_skips_missing_and_non_finite_samples():
+    """A failed poll passes {} in; it must not be charted as a value."""
+    stats = _stats({"p_total": 7.0}, {}, {"p_total": float("nan")}, {"p_total": 7.0})
+    assert stats.samples == 4
+    line = stats.render(interval=1.0).split("\n")[-1]
+    assert line.split()[1:4] == ["7.000", "7.000", "7.000"]
+
+
+def test_sample_stats_renders_a_point_that_never_arrived():
+    stats = _stats({}, points=("p_total", "freq"))
+    assert "freq" in stats.render(interval=1.0)

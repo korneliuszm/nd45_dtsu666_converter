@@ -240,6 +240,31 @@ async def test_poll_once_rejects_invalid_directional_parts_that_cancel(
     assert len(warnings) == 1
 
 
+@pytest.mark.parametrize("point", ["u_l1", "u_l2", "u_l3", "u_l12", "u_l23", "u_l31"])
+async def test_poll_once_rejects_the_overrange_sentinel_on_a_scaled_down_point(point):
+    """The sentinel must be judged raw, not after the map's `scale`.
+
+    The MV/LV voltage points scale by 1/37.5, so testing the *scaled* value let
+    the ND45's 2e20 out-of-range marker land at 5.3e18 -- under the 1e20
+    threshold -- and be served as a real voltage instead of failing the sample.
+    """
+    src = load_registers("config/registers.json").nd45_source
+    addr = src.points[point].addr
+    assert src.points[point].scale < 1  # the condition that made this possible
+
+    with pytest.raises(PollError, match=point):
+        await poll_once(FakeClient({addr: _raw_float_registers(2e20)}), src, slave=1)
+
+
+async def test_poll_once_still_accepts_the_largest_plausible_reading():
+    """The tighter check must not reject a real MV reading (15.6 kV line)."""
+    src = load_registers("config/registers.json").nd45_source
+    values = await poll_once(
+        FakeClient(_image_for({140: 15_588.0 * 37.5})), src, slave=1
+    )
+    assert values["u_l12"] == pytest.approx(15_588.0)
+
+
 async def test_poll_once_reports_all_invalid_critical_points():
     src = load_registers("config/registers.json").nd45_source
     image = {

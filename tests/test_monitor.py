@@ -320,7 +320,9 @@ def test_select_bridge_by_source_finds_a_renamed_bridge():
 
 
 def test_select_bridge_by_source_explains_what_is_configured():
-    config = load_config("config/config.json")  # smartlogger bridge disabled
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    raw["bridges"] = [raw["bridges"][0], {**SMARTLOGGER_BRIDGE, "enabled": False}]
+    config = AppConfig.model_validate(raw)
     with pytest.raises(SystemExit, match="no enabled bridge with source type 'huawei'"):
         select_bridge_by_source(config, "huawei")
 

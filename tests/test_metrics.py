@@ -233,7 +233,7 @@ async def test_build_pipeline_counts_polls_through_the_existing_callbacks(monkey
 
             return _RR()
 
-    pipe = build_pipeline(config, registers, stop, client=_Client())
+    pipe = build_pipeline(config, registers, stop, client=_Client(), only="nd45")
     config.bridges[0].source.poll_interval_s = 0.0
     poller, supervisor = pipe.coros
     supervisor.close()

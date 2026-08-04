@@ -9,7 +9,7 @@
         "port": 502,
         "unit_id": 1,
         "register_map": "nd45_source",
-        "poll_interval_s": 0.3,
+        "poll_interval_s": 0.2,
         "timeout_s": 1.0,
         "reconnect_delay_s": 1.0,
         "reconnect_delay_max_s": 30.0,
@@ -44,14 +44,14 @@
     },
     {
       "name": "smartlogger",
-      "enabled": false,
+      "enabled": true,
       "source": {
         "type": "huawei",
-        "host": "",
+        "host": "192.168.22.15",
         "port": 502,
         "unit_id": 0,
         "register_map": "huawei_plant_source",
-        "poll_interval_s": 5.0,
+        "poll_interval_s": 1.0,
         "timeout_s": 6.0,
         "reconnect_delay_s": 1.0,
         "reconnect_delay_max_s": 30.0,
@@ -71,7 +71,7 @@
           "protocol": 0
         },
         "rtu": {
-          "port": "/dev/ttyAMA3",
+          "port": "/dev/ttyAMA4",
           "baudrate": 9600,
           "parity": "N",
           "stopbits": 1
