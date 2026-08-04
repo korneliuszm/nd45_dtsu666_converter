@@ -58,6 +58,19 @@ jednego mnożnika `scale`:
 scale = (1 / Gain) * (przelicznik jednostki Huawei → jednostka SI)
 ```
 
+### Odwrócony znak mocy (`sign: -1`)
+
+Obie sekcje Huawei mają **`sign: -1` na mocy czynnej, biernej i współczynniku
+mocy** (`p_*`, `q_total`, `pf_total`). SmartLogger raportuje produkcję jako
+wartość dodatnią; ten mostek udaje licznik DTSU666, a konwencja kierunku na tej
+instalacji jest odwrotna, więc znak odwracany jest **na wejściu** — cały model
+kanoniczny, metryki i monitor pokazują już wartość po odwróceniu.
+
+Moc pozorna (`s_*`) i energie **nie** są odwracane: to wielkości nieujemne, a
+kierunek niosą osobne liczniki import/eksport. Odwrócenie dotyczy wyłącznie
+sekcji `huawei_*` — mapy wyjściowe DTSU są wspólne dla obu mostków, więc zmiana
+w nich przestawiłaby także mostek ND45.
+
 Przykłady z tabel poniżej:
 
 | Rejestr | Gain | Jedn. Huawei | Jedn. SI | Wyliczenie | `scale` |
@@ -109,20 +122,20 @@ Jeden odczyt FC03 pokrywa wszystkie punkty. Do adresu na drucie doliczany jest
 
 <!-- BEGIN GENERATED: plant-source -->
 
-| Rejestr | Hex | Sygnał wg dokumentacji Huawei | Typ | Gain | Jedn. Huawei | → punkt kanoniczny | `scale` | Jedn. SI |
-|---:|---|---|---|---:|---|---|---:|---|
-| 40521 | 0x9E49 | Input power | U32 | 1000 | kW | `dc_power` | ×1 | W |
-| 40525 | 0x9E4D | Active power | I32 | 1000 | kW | `p_total` | ×1 | W |
-| 40532 | 0x9E54 | Power factor | I16 | 1000 | - | `pf_total` | ×0.001 | - |
-| 40544 | 0x9E60 | Reactive power | I32 | 1000 | kVar | `q_total` | ×1 | var |
-| 40560 | 0x9E70 | E-Total | U32 | 10 | kWh | `exp_energy_total` | ×0.1 | kWh |
-| 40562 | 0x9E72 | E-Daily | U32 | 10 | kWh | `e_daily` | ×0.1 | kWh |
-| 40572 | 0x9E7C | Phase A current | I16 | 1 | A | `i_l1` | ×1 | A |
-| 40573 | 0x9E7D | Phase B current | I16 | 1 | A | `i_l2` | ×1 | A |
-| 40574 | 0x9E7E | Phase C current | I16 | 1 | A | `i_l3` | ×1 | A |
-| 40575 | 0x9E7F | Uab | U16 | 10 | V | `u_l12` | ×0.1 | V |
-| 40576 | 0x9E80 | Ubc | U16 | 10 | V | `u_l23` | ×0.1 | V |
-| 40577 | 0x9E81 | Uca | U16 | 10 | V | `u_l31` | ×0.1 | V |
+| Rejestr | Hex | Sygnał wg dokumentacji Huawei | Typ | Gain | Jedn. Huawei | → punkt kanoniczny | `scale` | `sign` | Jedn. SI |
+|---:|---|---|---|---:|---|---|---:|---:|---|
+| 40521 | 0x9E49 | Input power | U32 | 1000 | kW | `dc_power` | ×1 | +1 | W |
+| 40525 | 0x9E4D | Active power | I32 | 1000 | kW | `p_total` | ×1 | **−1** | W |
+| 40532 | 0x9E54 | Power factor | I16 | 1000 | - | `pf_total` | ×0.001 | **−1** | - |
+| 40544 | 0x9E60 | Reactive power | I32 | 1000 | kVar | `q_total` | ×1 | **−1** | var |
+| 40560 | 0x9E70 | E-Total | U32 | 10 | kWh | `exp_energy_total` | ×0.1 | +1 | kWh |
+| 40562 | 0x9E72 | E-Daily | U32 | 10 | kWh | `e_daily` | ×0.1 | +1 | kWh |
+| 40572 | 0x9E7C | Phase A current | I16 | 1 | A | `i_l1` | ×1 | +1 | A |
+| 40573 | 0x9E7D | Phase B current | I16 | 1 | A | `i_l2` | ×1 | +1 | A |
+| 40574 | 0x9E7E | Phase C current | I16 | 1 | A | `i_l3` | ×1 | +1 | A |
+| 40575 | 0x9E7F | Uab | U16 | 10 | V | `u_l12` | ×0.1 | +1 | V |
+| 40576 | 0x9E80 | Ubc | U16 | 10 | V | `u_l23` | ×0.1 | +1 | V |
+| 40577 | 0x9E81 | Uca | U16 | 10 | V | `u_l31` | ×0.1 | +1 | V |
 
 <!-- END GENERATED: plant-source -->
 
@@ -199,28 +212,28 @@ Konfiguracja: `source.register_map: "huawei_meter_source"`,
 
 <!-- BEGIN GENERATED: meter-source -->
 
-| Rejestr | Hex | Sygnał wg dokumentacji Huawei | Typ | Gain | Jedn. Huawei | → punkt kanoniczny | `scale` | Jedn. SI |
-|---:|---|---|---|---:|---|---|---:|---|
-| 32260 | 0x7E04 | Phase A voltage | U32 | 100 | V | `u_l1` | ×0.01 | V |
-| 32262 | 0x7E06 | Phase B voltage | U32 | 100 | V | `u_l2` | ×0.01 | V |
-| 32264 | 0x7E08 | Phase C voltage | U32 | 100 | V | `u_l3` | ×0.01 | V |
-| 32266 | 0x7E0A | A-B line voltage | U32 | 100 | V | `u_l12` | ×0.01 | V |
-| 32268 | 0x7E0C | B-C line voltage | U32 | 100 | V | `u_l23` | ×0.01 | V |
-| 32270 | 0x7E0E | C-A line voltage | U32 | 100 | V | `u_l31` | ×0.01 | V |
-| 32272 | 0x7E10 | Phase A current | I32 | 10 | A | `i_l1` | ×0.1 | A |
-| 32274 | 0x7E12 | Phase B current | I32 | 10 | A | `i_l2` | ×0.1 | A |
-| 32276 | 0x7E14 | Phase C current | I32 | 10 | A | `i_l3` | ×0.1 | A |
-| 32278 | 0x7E16 | Active power | I32 | 1000 | kW | `p_total` | ×1 | W |
-| 32280 | 0x7E18 | Reactive power | I32 | 1000 | kVar | `q_total` | ×1 | var |
-| 32284 | 0x7E1C | Power factor | I16 | 1000 | - | `pf_total` | ×0.001 | - |
-| 32287 | 0x7E1F | Apparent power | I32 | 1000 | kVA | `s_total` | ×1 | VA |
-| 32335 | 0x7E4F | Phase A active power | I32 | 1000 | kW | `p_l1` | ×1 | W |
-| 32337 | 0x7E51 | Phase B active power | I32 | 1000 | kW | `p_l2` | ×1 | W |
-| 32339 | 0x7E53 | Phase C active power | I32 | 1000 | kW | `p_l3` | ×1 | W |
-| 32349 | 0x7E5D | Negative active electricity | I64 | 100 | kWh | `exp_energy_total` | ×0.01 | kWh |
-| 32353 | 0x7E61 | Negative reactive electricity | I64 | 100 | kvarh | `reactive_exp_energy_total` | ×0.01 | kvarh |
-| 32357 | 0x7E65 | Positive active electricity | I64 | 100 | kWh | `imp_energy_total` | ×0.01 | kWh |
-| 32361 | 0x7E69 | Positive reactive electricity | I64 | 100 | kvarh | `reactive_imp_energy_total` | ×0.01 | kvarh |
+| Rejestr | Hex | Sygnał wg dokumentacji Huawei | Typ | Gain | Jedn. Huawei | → punkt kanoniczny | `scale` | `sign` | Jedn. SI |
+|---:|---|---|---|---:|---|---|---:|---:|---|
+| 32260 | 0x7E04 | Phase A voltage | U32 | 100 | V | `u_l1` | ×0.01 | +1 | V |
+| 32262 | 0x7E06 | Phase B voltage | U32 | 100 | V | `u_l2` | ×0.01 | +1 | V |
+| 32264 | 0x7E08 | Phase C voltage | U32 | 100 | V | `u_l3` | ×0.01 | +1 | V |
+| 32266 | 0x7E0A | A-B line voltage | U32 | 100 | V | `u_l12` | ×0.01 | +1 | V |
+| 32268 | 0x7E0C | B-C line voltage | U32 | 100 | V | `u_l23` | ×0.01 | +1 | V |
+| 32270 | 0x7E0E | C-A line voltage | U32 | 100 | V | `u_l31` | ×0.01 | +1 | V |
+| 32272 | 0x7E10 | Phase A current | I32 | 10 | A | `i_l1` | ×0.1 | +1 | A |
+| 32274 | 0x7E12 | Phase B current | I32 | 10 | A | `i_l2` | ×0.1 | +1 | A |
+| 32276 | 0x7E14 | Phase C current | I32 | 10 | A | `i_l3` | ×0.1 | +1 | A |
+| 32278 | 0x7E16 | Active power | I32 | 1000 | kW | `p_total` | ×1 | **−1** | W |
+| 32280 | 0x7E18 | Reactive power | I32 | 1000 | kVar | `q_total` | ×1 | **−1** | var |
+| 32284 | 0x7E1C | Power factor | I16 | 1000 | - | `pf_total` | ×0.001 | **−1** | - |
+| 32287 | 0x7E1F | Apparent power | I32 | 1000 | kVA | `s_total` | ×1 | +1 | VA |
+| 32335 | 0x7E4F | Phase A active power | I32 | 1000 | kW | `p_l1` | ×1 | **−1** | W |
+| 32337 | 0x7E51 | Phase B active power | I32 | 1000 | kW | `p_l2` | ×1 | **−1** | W |
+| 32339 | 0x7E53 | Phase C active power | I32 | 1000 | kW | `p_l3` | ×1 | **−1** | W |
+| 32349 | 0x7E5D | Negative active electricity | I64 | 100 | kWh | `exp_energy_total` | ×0.01 | +1 | kWh |
+| 32353 | 0x7E61 | Negative reactive electricity | I64 | 100 | kvarh | `reactive_exp_energy_total` | ×0.01 | +1 | kvarh |
+| 32357 | 0x7E65 | Positive active electricity | I64 | 100 | kWh | `imp_energy_total` | ×0.01 | +1 | kWh |
+| 32361 | 0x7E69 | Positive reactive electricity | I64 | 100 | kvarh | `reactive_imp_energy_total` | ×0.01 | +1 | kvarh |
 
 <!-- END GENERATED: meter-source -->
 
@@ -457,13 +470,13 @@ Farma oddaje **1,2345 MW**, wariant plant, `ir_at = 200`.
 | Krok | Wartość |
 |---|---|
 | SmartLogger rejestr 40525 (I32, Gain 1000, kW) | `1234500` |
-| Dekodowanie: `raw × scale` = `1234500 × 1` | `p_total = 1234500.0` W |
-| `derive split_equal` | `p_l1 = p_l2 = p_l3 = 411500.0` W |
-| FC04 `0x151C`: `SI × 0.001` | `1234.5` (kW) |
-| FC03 `0x2012`: `(SI / 200) × 10` | `61725.0` (W×10, strona wtórna) |
+| Dekodowanie: `raw × scale × sign` = `1234500 × 1 × (−1)` | `p_total = −1234500.0` W |
+| `derive split_equal` | `p_l1 = p_l2 = p_l3 = −411500.0` W |
+| FC04 `0x151C`: `SI × 0.001` | `−1234.5` (kW) |
+| FC03 `0x2012`: `(SI / 200) × 10` | `−61725.0` (W×10, strona wtórna) |
 
 Sprawdzenie odwrotne po stronie Sigenergy dla FC03:
-`61725 / 10 × 200 = 1 234 500 W` ✓
+`−61725 / 10 × 200 = −1 234 500 W` ✓
 
 Napięcie w tym samym przebiegu:
 
@@ -530,7 +543,10 @@ Rzeczy, których nie da się sprawdzić testami:
    zmienia.
 2. **Adres RS485 licznika** (tylko wariant B) — do odczytania z LCD/WebUI
    SmartLoggera; wpisać w `source.unit_id`.
-3. **Znak `p_total`.** Czy rejestr 40525 jest dodatni przy produkcji.
+3. **Znak `p_total`.** Mapa odwraca znak (`sign: -1`), zakładając, że rejestr
+   40525 jest **dodatni przy produkcji**. Potwierdź to na obiekcie: jeśli
+   SmartLogger sam raportuje produkcję ujemnie, `sign` wraca do `1` — jedna
+   wartość w `config/registers.json`, bez zmiany kodu.
 4. **Przekładnia CT mostka B** (`ir_at`). Skopiowana z mostka A; przy 1,2 MW
    sprawdź, czy Sigenergy na tej szynie czyta sensowne wartości na mapie FC03
    (dzielonej przez `ir_at`).

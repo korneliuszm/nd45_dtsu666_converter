@@ -85,10 +85,16 @@ async def _poll_plant(overrides=None, **kwargs):
 
 
 async def test_plant_decodes_documented_registers():
+    """Power is sign-inverted on the way in (`sign: -1` in the map).
+
+    Huawei reports production as positive; this bridge serves a DTSU666, whose
+    Sigenergy-facing convention on this site has power flowing the other way, so
+    the map flips P, Q and PF. Everything else is taken as documented.
+    """
     _client, v = await _poll_plant()
-    assert v["p_total"] == pytest.approx(1_234_500.0)
-    assert v["q_total"] == pytest.approx(-50_000.0)
-    assert v["pf_total"] == pytest.approx(0.999)
+    assert v["p_total"] == pytest.approx(-1_234_500.0)  # register says +1 234 500
+    assert v["q_total"] == pytest.approx(50_000.0)  # register says -50 000
+    assert v["pf_total"] == pytest.approx(-0.999)
     assert v["u_l12"] == pytest.approx(400.1)
     assert v["u_l23"] == pytest.approx(400.2)
     assert v["u_l31"] == pytest.approx(400.3)
@@ -103,13 +109,14 @@ async def test_plant_derives_everything_the_smartlogger_omits():
     _client, v = await _poll_plant()
     # phase voltages: the plant table exposes line voltages only
     assert v["u_l1"] == pytest.approx(400.1 / math.sqrt(3.0))
-    # per-phase power: only totals are published
-    assert v["p_l1"] == pytest.approx(1_234_500.0 / 3)
-    assert v["q_l2"] == pytest.approx(-50_000.0 / 3)
-    # apparent power exists nowhere in the plant table
+    # per-phase power: only totals are published, and they inherit the flip
+    assert v["p_l1"] == pytest.approx(-1_234_500.0 / 3)
+    assert v["q_l2"] == pytest.approx(50_000.0 / 3)
+    # apparent power exists nowhere in the plant table; it is a magnitude, so the
+    # sign flip must not reach it
     assert v["s_total"] == pytest.approx(math.hypot(1_234_500.0, -50_000.0))
     assert v["s_l3"] == pytest.approx(v["s_total"] / 3)
-    assert v["pf_l1"] == v["pf_l2"] == v["pf_l3"] == pytest.approx(0.999)
+    assert v["pf_l1"] == v["pf_l2"] == v["pf_l3"] == pytest.approx(-0.999)
     assert v["exp_energy_l1"] == pytest.approx(12_345.6 / 3)
     # frequency appears nowhere in the SmartLogger manual at all
     assert v["freq"] == pytest.approx(50.0)
@@ -172,12 +179,13 @@ async def test_meter_decodes_documented_registers():
     assert v["u_l1"] == pytest.approx(230.12)
     assert v["u_l12"] == pytest.approx(398.5)
     assert v["i_l1"] == pytest.approx(123.4)
-    assert v["p_total"] == pytest.approx(-60_000.0)
-    assert v["q_total"] == pytest.approx(6_000.0)
-    assert v["pf_total"] == pytest.approx(-0.95)
-    assert v["s_total"] == pytest.approx(60_300.0)
-    assert v["p_l1"] == pytest.approx(-10_000.0)
-    assert v["p_l3"] == pytest.approx(-30_000.0)
+    # P/Q/PF are sign-inverted by the map (registers hold -60 000 / +6 000 / -0.95)
+    assert v["p_total"] == pytest.approx(60_000.0)
+    assert v["q_total"] == pytest.approx(-6_000.0)
+    assert v["pf_total"] == pytest.approx(0.95)
+    assert v["s_total"] == pytest.approx(60_300.0)  # magnitude: never flipped
+    assert v["p_l1"] == pytest.approx(10_000.0)
+    assert v["p_l3"] == pytest.approx(30_000.0)
     # I64 directional energy counters
     assert v["imp_energy_total"] == pytest.approx(7.0)
     assert v["exp_energy_total"] == pytest.approx(3.0)
@@ -187,13 +195,17 @@ async def test_meter_decodes_documented_registers():
 
 async def test_meter_derives_per_phase_reactive_by_active_power_share():
     _client, v = await _poll_meter()
-    # Q apportioned by each phase's share of |P|: 10/20/30 of 60 kW
-    assert v["q_l1"] == pytest.approx(1_000.0)
-    assert v["q_l2"] == pytest.approx(2_000.0)
-    assert v["q_l3"] == pytest.approx(3_000.0)
-    # S and PF then follow from the per-phase pair
-    assert v["s_l1"] == pytest.approx(math.hypot(-10_000.0, 1_000.0))
-    assert v["pf_l1"] == pytest.approx(-10_000.0 / math.hypot(-10_000.0, 1_000.0))
+    # Q apportioned by each phase's share of |P|: 10/20/30 of 60 kW. The split is
+    # taken on |weight|, so inverting P leaves the proportions untouched and only
+    # Q's own sign carries through.
+    assert v["q_l1"] == pytest.approx(-1_000.0)
+    assert v["q_l2"] == pytest.approx(-2_000.0)
+    assert v["q_l3"] == pytest.approx(-3_000.0)
+    # S and PF then follow from the per-phase pair, and the derived per-phase PF
+    # agrees in sign with the directly-read pf_total (both flipped).
+    assert v["s_l1"] == pytest.approx(math.hypot(10_000.0, 1_000.0))
+    assert v["pf_l1"] == pytest.approx(10_000.0 / math.hypot(10_000.0, 1_000.0))
+    assert (v["pf_l1"] > 0) == (v["pf_total"] > 0)
     assert v["imp_energy_l1"] == pytest.approx(7.0 / 3)
     assert v["exp_energy_l2"] == pytest.approx(3.0 / 3)
     assert v["freq"] == pytest.approx(50.0)
@@ -220,7 +232,7 @@ async def test_ratio_split_falls_back_to_equal_when_weights_vanish():
             32280: ("i32", 900),
         }
     )
-    assert v["q_l1"] == v["q_l2"] == v["q_l3"] == pytest.approx(300.0)
+    assert v["q_l1"] == v["q_l2"] == v["q_l3"] == pytest.approx(-300.0)  # 900 var, flipped
     # purely reactive phase: S comes from Q alone, so PF is legitimately zero
     assert v["s_l1"] == pytest.approx(300.0)
     assert v["pf_l1"] == pytest.approx(0.0)
@@ -285,7 +297,7 @@ async def test_invalid_sentinel_is_zeroed_and_does_not_reject_the_sample():
         overrides={40532: ("i16", int_sentinel("i16"))}
     )
     assert v["pf_total"] == 0.0
-    assert v["p_total"] == pytest.approx(1_234_500.0)  # unaffected
+    assert v["p_total"] == pytest.approx(-1_234_500.0)  # unaffected
 
 
 async def test_invalid_sentinel_warns_once_per_episode(caplog):

@@ -483,11 +483,12 @@ async def test_each_bridge_writes_only_its_own_datastore(monkeypatch):
 
     nd45, smart = pipe.bridges
     assert nd45.store.snapshot()[0]["p_total"] == pytest.approx(-60000.0)
-    assert smart.store.snapshot()[0]["p_total"] == pytest.approx(1_234_500.0)
+    # the SmartLogger register holds +1 234 500 W; huawei_plant_source inverts it
+    assert smart.store.snapshot()[0]["p_total"] == pytest.approx(-1_234_500.0)
 
     # each bridge's DTSU register holds its own value, divided by its own CT ratio
     point = registers.dtsu_target.points["p_total"]
-    for bridge, expected in ((nd45, -60000.0), (smart, 1_234_500.0)):
+    for bridge, expected in ((nd45, -60000.0), (smart, -1_234_500.0)):
         regs = bridge.context[bridge.spec.dtsu.slave_id].getValues(3, point.addr, count=2)
         served = registers_to_float(regs, "big", "big")
         ct = bridge.spec.dtsu.identity.ir_at
