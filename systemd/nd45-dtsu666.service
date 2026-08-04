@@ -4,7 +4,7 @@
 # deployment. Beyond a crash/restart here silencing both meters at once, running
 # more than one bridge in a single process has been observed to corrupt each
 # bridge's own source reads outright (2026-08-04 incident) -- see
-# /persistence/nd45-dtsu666-DEPLOY.md §0 before using this unit with more than
+# docs/DEPLOY.md §0 before using this unit with more than
 # one bridge enabled in config.json. Kept for a genuinely single-bridge install
 # or for bring-up, where having everything in one journal is easier.
 

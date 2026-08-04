@@ -12,7 +12,7 @@
 # An earlier version of this comment also claimed two pollers sharing one event
 # loop corrupt each other's register reads. That was wrong and is retracted --
 # the swing it described was the plant's own control loop hunting, not a data
-# fault. See /persistence/nd45-dtsu666-DEPLOY.md §0.1. The isolation reason
+# fault. See docs/DEPLOY.md §0.1. The isolation reason
 # above stands on its own.
 #
 # Both instances read the SAME config/config.json on purpose. The validators that
@@ -23,7 +23,7 @@
 #
 # WorkingDirectory/ExecStart point at /persistence/app/current_modbus_converter,
 # a symlink kept pointing at whichever checked-out version is live -- see
-# /persistence/nd45-dtsu666-DEPLOY.md for the full install/upgrade/rollback
+# docs/DEPLOY.md for the full install/upgrade/rollback
 # procedure this enables (swap the symlink, restart both instances).
 
 [Unit]

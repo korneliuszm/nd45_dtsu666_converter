@@ -40,7 +40,7 @@ Deployed installs live under `/persistence/app/<version-dir>`, with
 `/persistence/app/current_modbus_converter` kept as a symlink to whichever
 checked-out version is live — the systemd units always point at the symlink, so
 an upgrade is "check out the new version, repoint the symlink, restart".
-Full procedure, including upgrade/rollback: `/persistence/nd45-dtsu666-DEPLOY.md`.
+Full procedure, including upgrade/rollback: `docs/DEPLOY.md`.
 
 ```bash
 sudo mkdir -p /persistence/app
@@ -354,7 +354,7 @@ independent reader sees the same swing sample for sample — and `u_l1`/`freq`
 stay flat while `i_l1` moves — the measurement is real and the instability is in
 the plant's control loop, not in this code. That is exactly how the two
 "corruption" incidents of 2026-08-04 were found to be misattributed; see
-`CLAUDE.md` and `/persistence/nd45-dtsu666-DEPLOY.md` §0.
+`CLAUDE.md` and `docs/DEPLOY.md` §0.
 
 ## Interactive monitor (commissioning)
 
@@ -512,7 +512,7 @@ process still uses the shared `prometheus.port`.
 one journal is easier to follow — but for the two-bridge deployment prefer the
 per-instance unit: besides a restart dropping both buses, two Modbus TCP pollers
 sharing one event loop have been observed to corrupt each other's reads outright.
-See `/persistence/nd45-dtsu666-DEPLOY.md` §0 before running more than one bridge
+See `docs/DEPLOY.md` §0 before running more than one bridge
 in a single process.
 
 ### The watchdog
