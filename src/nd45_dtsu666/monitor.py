@@ -74,6 +74,9 @@ class BridgeSnapshot:
     server_up: bool = False
     server_starts: int = 0
     server_stops: int = 0
+    # SampleStats.summary() per point: the recent spread of the source's own
+    # readings, which the instantaneous value on screen cannot show.
+    spread: dict[str, dict | None] = field(default_factory=dict)
     # RtuActivity.summary() output for this bridge's output port, or None.
     activity: dict | None = None
     # WireActivity.summary(): raw RS-485 traffic, counted before pymodbus filters
@@ -115,6 +118,10 @@ def snapshot_bridge(bridge, loop_now: float, mono_now: float) -> BridgeSnapshot:
         server_up=bridge.server_status.running,
         server_starts=bridge.server_status.starts,
         server_stops=bridge.server_status.stops,
+        spread={
+            name: bridge.spread.summary(name)
+            for name in getattr(bridge.spread, "_points", ())
+        } if getattr(bridge, "spread", None) else {},
         activity=bridge.activity.summary(mono_now) if bridge.activity else None,
         wire=bridge.wire.summary(mono_now) if getattr(bridge, "wire", None) else None,
     )
@@ -203,6 +210,7 @@ def _render_source(snap: BridgeSnapshot) -> list[str]:
         f"{_fmt(snap.canonical.get('pf_total'), 3):>8}"
         f"   f={_fmt(snap.canonical.get('freq'), 2)} Hz"
     )
+    lines.extend(_render_spread(snap))
     lines.append(
         f"   Direction: {_direction(p_total)}      "
         f"E_imp={_fmt(snap.canonical.get('imp_energy_total'))}  "
@@ -218,6 +226,28 @@ def _render_source(snap: BridgeSnapshot) -> list[str]:
             "   " + "   ".join(f"{label}={_fmt(value)}" for label, value in extra)
         )
     return lines
+
+
+def _render_spread(snap: BridgeSnapshot) -> list[str]:
+    """How much the source's own reading moved over the last few polls.
+
+    Without this, a value that swings faster than the eye can follow looks like a
+    fault in the bridge. It is the same statistic `diag` prints, so the two can
+    be compared -- and comparing them at different poll rates is exactly how a
+    real swing gets mistaken for one.
+    """
+    stat = snap.spread.get("p_total")
+    if stat is None:
+        return []
+    flips = stat["sign_changes"]
+    line = (
+        f"   P spread (last {stat['n']} polls): "
+        f"{stat['min']:.0f} .. {stat['max']:.0f} W"
+        f"   peak-peak {stat['max'] - stat['min']:.0f}"
+    )
+    if flips:
+        line += f"   sign flips: {flips}"
+    return [line]
 
 
 def _render_output(snap: BridgeSnapshot) -> list[str]:

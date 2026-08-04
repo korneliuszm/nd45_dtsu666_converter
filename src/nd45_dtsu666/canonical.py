@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import deque
 
 from .config import DeriveOp
 
@@ -114,6 +115,73 @@ def _apply_ratio_split(values: dict[str, float], op: DeriveOp) -> None:
         return
     for target, weight in zip(op.targets, weights):
         values[target] = total * abs(weight) / weight_sum
+
+
+class SampleStats:
+    """Spread of recent canonical samples, per point.
+
+    A single instantaneous reading cannot answer "is this value jittering?", and
+    a refreshing screen is a bad instrument -- the same signal reads differently
+    at 1s and at 0.3s, because sampling slower than the source's own measurement
+    cycle aliases the swing away instead of removing it. Min/max and the number
+    of zero crossings make that comparable as numbers.
+
+    `window` bounds the history: the monitor wants the last few seconds, diag a
+    whole bring-up session.
+    """
+
+    def __init__(self, points: tuple[str, ...], window: int = 30) -> None:
+        self._points = points
+        self._history: dict[str, deque[float]] = {
+            name: deque(maxlen=window) for name in points
+        }
+        self.samples = 0
+
+    def record(self, values: dict[str, float]) -> None:
+        self.samples += 1
+        for name in self._points:
+            value = values.get(name)
+            if value is not None and math.isfinite(value):
+                self._history[name].append(value)
+
+    def summary(self, name: str) -> dict | None:
+        """min/max/last/sign_changes for one point, or None if it never arrived."""
+        history = self._history.get(name)
+        if not history:
+            return None
+        crossings, last_signed = 0, None
+        for value in history:
+            # Compared against the last *signed* sample: a walk 5 -> 0 -> -5
+            # crossed zero once, and comparing with the 0.0 in between scores none.
+            if last_signed is not None and value * last_signed < 0:
+                crossings += 1
+            if value != 0.0:
+                last_signed = value
+        return {
+            "n": len(history), "min": min(history), "max": max(history),
+            "last": history[-1], "sign_changes": crossings,
+        }
+
+    def render(self, interval: float) -> str:
+        lines = [
+            "",
+            f"spread over {self.samples} sample(s) at {interval:g}s "
+            f"({self.samples * interval:.0f}s of history)",
+            f"{'point':<12}{'last':>14}{'min':>14}{'max':>14}"
+            f"{'peak-peak':>14}{'sign flips':>12}",
+            "-" * 80,
+        ]
+        for name in self._points:
+            stat = self.summary(name)
+            if stat is None:
+                lines.append(f"{name:<12}{'-':>14}")
+                continue
+            lines.append(
+                f"{name:<12}{stat['last']:>14.3f}{stat['min']:>14.3f}"
+                f"{stat['max']:>14.3f}{stat['max'] - stat['min']:>14.3f}"
+                f"{int(stat['sign_changes']):>12}"
+            )
+        return "\n".join(lines)
 
 
 class HealthGate:

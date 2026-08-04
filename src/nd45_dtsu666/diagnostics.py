@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import math
 import time
 
-from .canonical import CanonicalStore, HealthGate, compute_derived
+from .canonical import CanonicalStore, HealthGate, SampleStats, compute_derived
 from .codec import registers_to_float
 from .config import AppConfig, BridgeConf, RegisterMap, load_config, load_registers
 from .dtsu_server import encode_target_point
@@ -36,66 +35,6 @@ def render_table(
             raw_txt = f"{registers_to_float(regs, target.word_order, target.byte_order):.1f}"
         lines.append(f"{pt.from_:<18}{si_txt:>14}   {pt.addr:>9}{raw_txt:>14}")
     return "\n".join(lines)
-
-
-class SampleStats:
-    """Per-point spread across a diag session.
-
-    A single instantaneous reading cannot answer "is this value jittering?", and
-    watching a refreshing screen is a bad instrument -- the eye reports the same
-    noise differently at 1s and at 0.3s. This accumulates min/max and counts sign
-    changes so two poll rates can be compared as numbers.
-    """
-
-    def __init__(self, points: tuple[str, ...]) -> None:
-        self._points = points
-        self._stats: dict[str, dict[str, float]] = {}
-        self.samples = 0
-
-    def record(self, values: dict[str, float]) -> None:
-        self.samples += 1
-        for name in self._points:
-            value = values.get(name)
-            if value is None or not math.isfinite(value):
-                continue
-            stat = self._stats.get(name)
-            if stat is None:
-                self._stats[name] = {
-                    "min": value, "max": value, "last": value,
-                    "last_signed": value, "sign_changes": 0,
-                }
-                continue
-            # Compared against the last *signed* sample, not simply the previous
-            # one: a value that walks 5 -> 0 -> -5 crossed zero once, and
-            # comparing with the 0.0 in the middle would score that as none.
-            if value * stat["last_signed"] < 0:
-                stat["sign_changes"] += 1
-            if value != 0.0:
-                stat["last_signed"] = value
-            stat["min"] = min(stat["min"], value)
-            stat["max"] = max(stat["max"], value)
-            stat["last"] = value
-
-    def render(self, interval: float) -> str:
-        lines = [
-            "",
-            f"spread over {self.samples} sample(s) at {interval:g}s "
-            f"({self.samples * interval:.0f}s of history)",
-            f"{'point':<12}{'last':>14}{'min':>14}{'max':>14}"
-            f"{'peak-peak':>14}{'sign flips':>12}",
-            "-" * 80,
-        ]
-        for name in self._points:
-            stat = self._stats.get(name)
-            if stat is None:
-                lines.append(f"{name:<12}{'-':>14}")
-                continue
-            lines.append(
-                f"{name:<12}{stat['last']:>14.3f}{stat['min']:>14.3f}"
-                f"{stat['max']:>14.3f}{stat['max'] - stat['min']:>14.3f}"
-                f"{int(stat['sign_changes']):>12}"
-            )
-        return "\n".join(lines)
 
 
 def select_bridge(config: AppConfig, name: str | None = None) -> BridgeConf:
@@ -205,7 +144,7 @@ def _run_diag(registers, spec: BridgeConf, interval: float = 1.0) -> int:
         client = AsyncModbusTcpClient(spec.source.host, port=spec.source.port,
                                       timeout=spec.source.timeout_s)
         await client.connect()
-        stats = SampleStats(WATCHED_POINTS)
+        stats = SampleStats(WATCHED_POINTS, window=600)
         try:
             while True:
                 t0 = time.monotonic()
