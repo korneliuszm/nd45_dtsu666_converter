@@ -104,8 +104,61 @@ sudo systemctl reset-failed nd45-dtsu666@nd45
 sudo systemctl start nd45-dtsu666@nd45
 ```
 
-Worth raising `StartLimitIntervalSec`/`StartLimitBurst` or `RestartSec` in the
-unit; not yet done.
+Fixed 2026-08-04: the unit now sets `StartLimitIntervalSec=0` (in `[Unit]`) and
+`RestartSec=5`, so systemd retries forever instead of latching. Note the
+directive belongs in `[Unit]`, **not** `[Service]` -- systemd moved it in v229
+and silently ignores it in the wrong section, which looks like it worked until
+you run `systemctl show -p StartLimitIntervalUSec`.
+
+### 0.4 If `/` is an overlayroot, systemd changes evaporate on reboot
+
+This host mounts `/` as an overlay with the writable layer **on tmpfs**:
+
+```
+/dev/mmcblk0p2 on /media/root-ro   type ext4  (ro)
+tmpfs-root     on /media/root-rw   type tmpfs (rw)
+overlayroot    on /                type overlay (lowerdir=/media/root-ro, upperdir=/media/root-rw/overlay)
+```
+
+Everything written to `/etc` since boot lives in RAM. `/persistence` is a
+separate real partition (`/dev/mmcblk0p3`), so the checkout and its config are
+safe -- but **`systemctl enable`, unit files copied into
+`/etc/systemd/system/`, and `systemctl disable` of an old unit are all lost on
+the next reboot.** Check before trusting any of §3.3:
+
+```bash
+mount | grep -E 'overlayroot|root-ro'          # is / an overlay at all?
+diff /media/root-ro/etc/systemd/system/nd45-dtsu666@.service \
+     /etc/systemd/system/nd45-dtsu666@.service  # on-disk vs live
+ls /media/root-ro/etc/systemd/system/multi-user.target.wants/ | grep nd45
+```
+
+Found for real on this host 2026-08-04, hours after the cutover: the
+`nd45-dtsu666@.service` template and both enable symlinks existed **only** in
+tmpfs, while the disk still carried the retired single-process
+`nd45-dtsu666.service` from July, still enabled, still pointing at the stale
+pre-refactor checkout at `/persistence/app/nd45_dtsu666`. A reboot would have
+silently reverted the site to a bridge with no SmartLogger support and without
+the over-range fix.
+
+To persist, write through `overlayroot-chroot`, which remounts the real root
+read-write and chroots into it:
+
+```bash
+sudo overlayroot-chroot sh -s <<'EOF'
+W=/etc/systemd/system/multi-user.target.wants
+cp /path/to/nd45-dtsu666@.service /etc/systemd/system/    # see note below
+chmod 644 /etc/systemd/system/nd45-dtsu666@.service
+ln -sfn /etc/systemd/system/nd45-dtsu666@.service $W/nd45-dtsu666@nd45.service
+ln -sfn /etc/systemd/system/nd45-dtsu666@.service $W/nd45-dtsu666@smartlogger.service
+EOF
+```
+
+`/persistence` is **not** mounted inside that chroot, so a `cp` from the
+checkout will not work -- feed the unit's contents in through the heredoc, or
+stage it somewhere under `/` first. Afterwards verify all three copies agree
+(repo, `/etc/systemd/system/`, `/media/root-ro/etc/systemd/system/`) with
+`md5sum`, then `systemctl daemon-reload`.
 
 ---
 
@@ -210,6 +263,10 @@ The unit file as checked in already points at
 base path, edit the unit (WorkingDirectory, both `--config`/`--registers`
 paths, ExecStart's venv path, `ConditionPathExists`) before copying it in, and
 update this doc's §1 to match.
+
+**If `/` is an overlayroot on this device, none of the three commands above
+survive a reboot** -- neither the copied unit file nor either `enable`. Do
+§0.4 as well, and verify there before considering this step done.
 
 ### 3.4 Verify
 
