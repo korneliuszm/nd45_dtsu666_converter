@@ -13,12 +13,12 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pymodbus.client import AsyncModbusTcpClient
 
 from . import huawei_poller, metrics, nd45_poller
-from .canonical import CanonicalStore, HealthGate
+from .canonical import CanonicalStore, HealthGate, SampleStats
 from .config import AppConfig, BridgeConf, RegisterMap
 from .dtsu_server import (
     RtuActivity,
@@ -36,6 +36,11 @@ log = logging.getLogger(__name__)
 # The only place a source type is dispatched on. Both poll_once functions share
 # the signature (client, source, slave, overrange_seen=None), so run_poller can
 # drive either one.
+# Points whose short-term spread the monitor reports. The signed flows plus the
+# two inputs they are computed from, so an unstable P can be traced to U, I or
+# neither.
+SPREAD_POINTS = ("p_total", "p_l1", "p_l2", "p_l3", "pf_total", "u_l1", "i_l1")
+
 _POLL_ONCE: dict[str, Callable] = {
     "nd45": nd45_poller.poll_once,
     "huawei": huawei_poller.poll_once,
@@ -57,6 +62,10 @@ class BridgeRuntime:
     poll_stats: PollStats
     server_status: ServerStatus
     recovery: RecoveryStats
+    # Rolling spread of the last few seconds of samples. The store holds only the
+    # latest value, which cannot answer the question a jittering meter raises:
+    # is the swing in the measurement, or in how we read it?
+    spread: SampleStats = field(default_factory=lambda: SampleStats(SPREAD_POINTS))
     activity: RtuActivity | None = None
     # Raw RS-485 traffic on this bridge's output port, counted before pymodbus
     # filters by slave id -- the only way to tell "nobody is polling this bus"
@@ -375,6 +384,7 @@ def _bridge_coros(
     def on_update(values: dict[str, float], ts: float) -> None:
         bridge.heartbeat.touch(time.monotonic())
         reporter.success()  # a good poll clears any active fault state
+        bridge.spread.record(values)
         base_on_update(values, ts)
         # after base_on_update: a datastore write failure raises out of it and
         # lands in the poller's except -> on_error, so it must not count as OK

@@ -305,11 +305,24 @@ u_l1               230.000       230.000       230.000         0.000           0
 
 **Reading a value that looks unstable in `monitor` but steady in `diag`:** the
 two differ in sample rate, not in arithmetic — `diag` polls every 1s by default
-while the bridge polls at `source.poll_interval_s` (0.3s for the ND45). Re-run
-`diag --interval 0.3`; if the spread and the sign flips appear, the meter really
-does deliver that at 3 Hz and the monitor is being honest. Raising
-`poll_interval_s` toward 1s then smooths what Sigenergy sees (`max_data_age_s`
-must stay at least twice it — config load enforces that).
+while the bridge polls at `source.poll_interval_s` (0.3s for the ND45). Both
+redraw once a second, so the screens look comparable when they are not.
+
+Sampling slower does not make a signal steadier; it *aliases* the swing away.
+A quantity that swings with a period near the slow sample interval reads almost
+constant at that interval and shows its full range at a faster one — measured
+against one synthetic meter swinging with a 0.5s period:
+
+| sampled every | peak-peak | sign flips in 20s |
+|---|---:|---:|
+| 1.0s (diag default) | 3.2 kW | 0 |
+| 0.3s (the bridge) | 16.8 kW | 53 |
+
+Same meter, same instant, same decoder. So a steady `diag` at 1s does **not**
+mean the bridge is inventing the swing — and `monitor` now prints the same
+`P spread` line so both can be read off one screen. Confirm with
+`diag --interval 0.3`: if the spread matches the monitor's, the swing is in the
+measurement, and it is what Sigenergy is being fed.
 
 Do this with the bridge's service **stopped**. `diag` and `monitor` each open
 their own Modbus TCP connection, so running one alongside `nd45-dtsu666@nd45`

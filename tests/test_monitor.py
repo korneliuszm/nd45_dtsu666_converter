@@ -388,3 +388,49 @@ def test_bytes_without_a_decodable_frame_point_at_framing():
 def test_a_tcp_output_has_no_bus_line():
     text = render_bridge_monitor(_healthy_nd45(wire=None))
     assert "bus traffic" not in text
+
+
+# --- source spread (a swinging meter vs a swinging bridge) -------------------
+
+
+def _spread(**stat):
+    base = {"n": 30, "min": -3000.0, "max": 2600.0, "last": -100.0, "sign_changes": 0}
+    base.update(stat)
+    return {"p_total": base}
+
+
+def test_spread_line_reports_the_window_and_the_swing():
+    text = render_bridge_monitor(_healthy_nd45(spread=_spread()))
+    assert "P spread (last 30 polls): -3000 .. 2600 W" in text
+    assert "peak-peak 5600" in text
+
+
+def test_spread_line_calls_out_sign_flips_only_when_there_are_any():
+    flipping = render_bridge_monitor(_healthy_nd45(spread=_spread(sign_changes=17)))
+    assert "sign flips: 17" in flipping
+    steady = render_bridge_monitor(_healthy_nd45(spread=_spread(sign_changes=0)))
+    assert "sign flips" not in steady
+
+
+def test_a_bridge_that_has_never_polled_shows_no_spread_line():
+    assert "P spread" not in render_bridge_monitor(_dead_smartlogger(spread={}))
+
+
+async def test_snapshot_carries_the_spread_the_poller_recorded():
+    """The rolling history is fed by on_update, so it reaches the screen."""
+    from nd45_dtsu666.app import SPREAD_POINTS, build_pipeline
+    from nd45_dtsu666.canonical import SampleStats
+
+    config = load_config("config/config.json")
+    registers = load_registers("config/registers.json")
+    pipe = build_pipeline(config, registers, asyncio.Event(), client=object())
+    bridge = pipe.bridges[0]
+    assert isinstance(bridge.spread, SampleStats)
+    for value in (-500.0, 400.0, -300.0):
+        bridge.spread.record({name: value for name in SPREAD_POINTS})
+
+    snap = monitor_mod.snapshot_bridge(bridge, loop_now=1.0, mono_now=1.0)
+    assert snap.spread["p_total"]["sign_changes"] == 2
+    assert snap.spread["p_total"]["min"] == -500.0
+    for coro in pipe.coros:
+        coro.close()
