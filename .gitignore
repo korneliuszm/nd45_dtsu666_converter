@@ -27,3 +27,6 @@ Thumbs.db
 
 # SDD scratch
 .superpowers/
+
+# Local Claude Code harness settings
+.claude/settings.local.json

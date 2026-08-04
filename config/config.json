@@ -9,7 +9,7 @@
         "port": 502,
         "unit_id": 1,
         "register_map": "nd45_source",
-        "poll_interval_s": 0.2,
+        "poll_interval_s": 0.05,
         "timeout_s": 1.0,
         "reconnect_delay_s": 1.0,
         "reconnect_delay_max_s": 30.0,
