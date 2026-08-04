@@ -83,14 +83,17 @@ def num(value: float) -> str:
 def source_table(side) -> str:
     rows = [
         "| Rejestr | Hex | Sygnał wg dokumentacji Huawei | Typ | Gain | Jedn. Huawei "
-        "| → punkt kanoniczny | `scale` | Jedn. SI |",
-        "|---:|---|---|---|---:|---|---|---:|---|",
+        "| → punkt kanoniczny | `scale` | `sign` | Jedn. SI |",
+        "|---:|---|---|---|---:|---|---|---:|---:|---|",
     ]
     for name, pt in sorted(side.points.items(), key=lambda kv: kv[1].addr):
         doc_name, unit, gain = HUAWEI_DOC.get(pt.addr, ("?", "?", "?"))
+        # sign is a column of its own: -1 means the served value is the negative
+        # of what Huawei reports, which is too easy to miss folded into `scale`.
+        sign = "**−1**" if pt.sign < 0 else "+1"
         rows.append(
             f"| {pt.addr} | 0x{pt.addr:04X} | {doc_name} | {pt.dtype.upper()} | {gain} "
-            f"| {unit} | `{name}` | ×{num(pt.scale)} | {si_unit(name)} |"
+            f"| {unit} | `{name}` | ×{num(pt.scale)} | {sign} | {si_unit(name)} |"
         )
     return "\n".join(rows)
 

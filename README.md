@@ -4,7 +4,7 @@ Temporary Modbus bridge: one or more independent source → DTSU666 translators,
 served as Modbus RTU or Modbus TCP (config-selectable) so a Sigenergy storage system
 can read it as a "Power Sensor". The deployment here runs two, **as separate systemd
 services**: a Lumel ND45 on `/dev/ttyAMA2` (grid-tie balance) and a Huawei
-SmartLogger on `/dev/ttyAMA3` (PV farm production). See "Independent bridges".
+SmartLogger on `/dev/ttyAMA4` (PV farm production). See "Independent bridges".
 
 The output exposes both the standard DTSU666 holding-register map over FC03 (secondary/
 CT side, `0x2000`/`0x101E`) and the Sigenergy OEM map over FC04 (primary side, `0x150A`
@@ -35,10 +35,20 @@ Full register layouts, address by address:
   generated from `config/registers.json`, so they cannot drift.
 
 ## Install (reComputer R1000, Ubuntu)
+
+Deployed installs live under `/persistence/app/<version-dir>`, with
+`/persistence/app/current_modbus_converter` kept as a symlink to whichever
+checked-out version is live — the systemd units always point at the symlink, so
+an upgrade is "check out the new version, repoint the symlink, restart".
+Full procedure, including upgrade/rollback: `/persistence/nd45-dtsu666-DEPLOY.md`.
+
 ```bash
-sudo mkdir -p /opt/nd45_dtsu666 && sudo chown $USER /opt/nd45_dtsu666
-git clone https://github.com/korneliuszm/nd45_dtsu666_converter.git /opt/nd45_dtsu666
-cd /opt/nd45_dtsu666
+sudo mkdir -p /persistence/app
+cd /persistence/app
+git clone https://github.com/korneliuszm/nd45_dtsu666_converter.git nd45_hsm_dtsu666
+sudo chown -R $USER:$USER nd45_hsm_dtsu666
+sudo ln -s /persistence/app/nd45_hsm_dtsu666 /persistence/app/current_modbus_converter
+cd /persistence/app/current_modbus_converter
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e .
 ```
@@ -66,7 +76,7 @@ deployment here is two, each running as its own systemd service:
 | | bridge `nd45` | bridge `smartlogger` |
 |---|---|---|
 | source | Lumel ND45 (Modbus TCP, float32) | Huawei SmartLogger (Modbus TCP) |
-| output | RS-485 `/dev/ttyAMA2` | RS-485 `/dev/ttyAMA3` |
+| output | RS-485 `/dev/ttyAMA2` | RS-485 `/dev/ttyAMA4` |
 | what Sigenergy sees | grid-tie balance | PV farm production |
 | `safety.max_data_age_s` | 3.0s (polled every 0.3s) | 30.0s (polled every 5s) |
 
@@ -117,7 +127,7 @@ SmartLogger bridge differ only in their values, so the two are read side by side
     "dtsu": {
       "transport": "rtu", "slave_id": 10,
       "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10},
-      "rtu": {"port": "/dev/ttyAMA3", "baudrate": 9600, "parity": "N", "stopbits": 1}
+      "rtu": {"port": "/dev/ttyAMA4", "baudrate": 9600, "parity": "N", "stopbits": 1}
     },
     "safety": {"max_data_age_s": 30.0, "check_interval_s": 0.5},
     "metrics_port": 8082
@@ -288,8 +298,35 @@ mbpoll -m tcp -a 1 -t 4:float -r 8193 -c 4 127.0.0.1 -p 502
 
 ## Diagnostics
 ```bash
-python -m nd45_dtsu666 diag   # live table: canonical SI, DTSU addr/raw, age, status
+python -m nd45_dtsu666 diag                  # live table: canonical SI, DTSU addr/raw, age, status
+python -m nd45_dtsu666 diag --interval 0.3   # sample as fast as the bridge itself does
 ```
+
+`diag` talks to the source directly and serves nothing, so it isolates the meter
+from the rest of the bridge. Under the table it prints the spread of each watched
+point across the session:
+
+```
+spread over 26 sample(s) at 0.3s (8s of history)
+point                 last           min           max     peak-peak  sign flips
+p_total           -960.228     -3219.326      1607.461      4826.787          10
+u_l1               230.000       230.000       230.000         0.000           0
+```
+
+**Reading a value that looks unstable in `monitor` but steady in `diag`:** the
+two differ in sample rate, not in arithmetic — `diag` polls every 1s by default
+while the bridge polls at `source.poll_interval_s` (0.3s for the ND45). Re-run
+`diag --interval 0.3`; if the spread and the sign flips appear, the meter really
+does deliver that at 3 Hz and the monitor is being honest. Raising
+`poll_interval_s` toward 1s then smooths what Sigenergy sees (`max_data_age_s`
+must stay at least twice it — config load enforces that).
+
+Do this with the bridge's service **stopped**. `diag` and `monitor` each open
+their own Modbus TCP connection, so running one alongside `nd45-dtsu666@nd45`
+puts two masters on a meter that is being polled three times a second — which is
+itself enough to make readings erratic on a small analyser. `monitor` also
+cannot open the RS-485 port while the service holds it (see the `bus traffic:`
+line).
 
 ## Interactive monitor (commissioning)
 
@@ -320,7 +357,7 @@ Each screen answers the two questions bring-up actually asks, per bridge:
    Direction: IMPORT (P>0)      E_imp=0.0  E_exp=12345.6 kWh
    E_daily=456.7   P_dc=1250000.0
 ------------------------------------------------------------------------
- OUTPUT  DTSU666 slave 10  on /dev/ttyAMA3 @9600 8N1
+ OUTPUT  DTSU666 slave 10  on /dev/ttyAMA4 @9600 8N1
    server: UP                  starts: 1  stops: 0
    Sigenergy reads: 1203    rate: 1.1/s    last seen: 0.9s ago
    blocks read:  FC03 @8192 x40 (601)   FC04 @5386 x50 (602)
@@ -395,14 +432,15 @@ The checked-in image represents about 7 kWh import and 3 kWh export, including
 power and PF are negative. `active_energy_total`, both `net_*` values,
 CT-side values, and coarse aliases are derived automatically.
 
-Only one process can own an RTU serial port. Stop the normal service or monitor
-before starting static mode:
+Only one process can own an RTU serial port. Stop that bridge's service (or
+`monitor`) before starting static mode -- `static` targets one bridge at a
+time (`--bridge`, default the first configured):
 
 ```bash
-sudo systemctl stop nd45-dtsu666
+sudo systemctl stop nd45-dtsu666@nd45
 python -m nd45_dtsu666 static
 # Ctrl-C when finished
-sudo systemctl start nd45-dtsu666
+sudo systemctl start nd45-dtsu666@nd45
 ```
 
 Static mode is strictly opt-in: the `run`, `monitor`, `rtudebug`, and `selftest`
@@ -444,7 +482,10 @@ process still uses the shared `prometheus.port`.
 `systemd/nd45-dtsu666.service` runs **every** enabled bridge in one service
 (`run` with no `--bridge`). Fine for a single-bridge install or for bring-up, where
 one journal is easier to follow — but for the two-bridge deployment prefer the
-per-instance unit, since a restart there drops both buses.
+per-instance unit: besides a restart dropping both buses, two Modbus TCP pollers
+sharing one event loop have been observed to corrupt each other's reads outright.
+See `/persistence/nd45-dtsu666-DEPLOY.md` §0 before running more than one bridge
+in a single process.
 
 ### The watchdog
 
@@ -497,7 +538,7 @@ freshness gate silences that bridge's output on its own.
    phase order, and scaling against the connected ND45.
 11. **Second bridge** (only if a `bridges` entry is enabled) — checks the test suite
     cannot cover:
-    - **`/dev/ttyAMA3` exists.** `ls -l /dev/ttyAMA*` on the device. If the second
+    - **`/dev/ttyAMA4` exists.** `ls -l /dev/ttyAMA*` on the device. If the second
       UART is not enabled in the device tree it will not be there, and that is a
       system-level fix (overlay), not a code one. Config load rejects two bridges
       sharing a port, but it cannot conjure a port that does not exist.

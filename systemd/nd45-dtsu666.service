@@ -1,34 +1,43 @@
 # Single-process unit: runs EVERY enabled bridge in one service.
 #
 # Prefer nd45-dtsu666@.service (one instance per bridge) for the two-bridge
-# deployment -- there a crash or restart here silences both meters at once. This
-# unit is kept for a single-bridge install and for bring-up, where having
-# everything in one journal is easier.
+# deployment. Beyond a crash/restart here silencing both meters at once, running
+# more than one bridge in a single process has been observed to corrupt each
+# bridge's own source reads outright (2026-08-04 incident) -- see
+# /persistence/nd45-dtsu666-DEPLOY.md §0 before using this unit with more than
+# one bridge enabled in config.json. Kept for a genuinely single-bridge install
+# or for bring-up, where having everything in one journal is easier.
 
 [Unit]
 Description=Modbus bridges -> DTSU666, all in one process (Sigenergy Power Sensor)
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/persistence/app/current_modbus_converter/.venv/bin/python
 
 [Service]
 Type=notify
+User=ems_admin
+SupplementaryGroups=dialout
 # Tracks the least-progressing poll loop in the process. With several bridges here
 # a restart takes them all down, which is why the per-instance unit is preferred.
 # supervise_poller still tries an in-process client rebuild first.
 WatchdogSec=90
 # One process serves every bridge in config.json -- with two bridges that is two
-# RS-485 ports (/dev/ttyAMA2 and /dev/ttyAMA3). Make sure the service user can open
+# RS-485 ports (/dev/ttyAMA2 and /dev/ttyAMA4). Make sure the service user can open
 # both (dialout group) and that the second UART is enabled in the device tree.
-WorkingDirectory=/opt/nd45_dtsu666
-ExecStart=/opt/nd45_dtsu666/.venv/bin/python -m nd45_dtsu666 \
-  --config /opt/nd45_dtsu666/config/config.json \
-  --registers /opt/nd45_dtsu666/config/registers.json \
+WorkingDirectory=/persistence/app/current_modbus_converter
+ExecStart=/persistence/app/current_modbus_converter/.venv/bin/python -m nd45_dtsu666 \
+  --config /persistence/app/current_modbus_converter/config/config.json \
+  --registers /persistence/app/current_modbus_converter/config/registers.json \
   run
 Restart=always
 RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
 # Logs go to journald via stdout/stderr
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=nd45-dtsu666
 
 [Install]
 WantedBy=multi-user.target

@@ -3,44 +3,59 @@
 #   systemctl enable --now nd45-dtsu666@nd45
 #   systemctl enable --now nd45-dtsu666@smartlogger
 #
-# Running them as separate services is deliberate. Each bridge already owns its
-# canonical store, datastore, fail-safe and RS-485 port inside the process, but
-# the process itself was still a shared fate: a crash, an OOM, a bad deploy or a
-# plain `systemctl restart` silenced BOTH meters. One instance per bridge means a
-# failure -- or a routine restart -- on the PV bridge cannot take the grid-tie
-# meter Sigenergy regulates on down with it.
+# Running them as separate PROCESSES (not just separate BridgeRuntime objects
+# inside one process) is deliberate and load-bearing, not just for shared-fate
+# protection: on 2026-08-04 it was reproduced live that two Modbus TCP pollers
+# (ND45 + SmartLogger) sharing one asyncio event loop can corrupt each other's
+# register reads even though each bridge owns its own client/store/output port
+# -- one process per bridge closes that off completely. Never run
+# `nd45_dtsu666 run` (no --bridge) or `monitor` as the production service with
+# more than one bridge enabled.
 #
 # Both instances read the SAME config/config.json on purpose. The validators that
 # reject two bridges sharing a serial port (or colliding ports) only work when one
 # configuration sees every bridge; splitting the file would lose that check, and
 # pymodbus 3.6.9 swallows the resulting bind error so the loser would hang in
 # silence rather than fail. Each bridge sets its own `metrics_port`.
+#
+# WorkingDirectory/ExecStart point at /persistence/app/current_modbus_converter,
+# a symlink kept pointing at whichever checked-out version is live -- see
+# /persistence/nd45-dtsu666-DEPLOY.md for the full install/upgrade/rollback
+# procedure this enables (swap the symlink, restart both instances) and for a
+# second, separate incident: app.build_bridge currently disables the
+# Sigenergy-read-activity tracker (RtuActivity/WireActivity) for this `run` path
+# on purpose, because attaching it was found to corrupt the source poll under
+# real RS-485 traffic. Do not re-enable it there without reading that note.
 
 [Unit]
 Description=Modbus bridge %i -> DTSU666 (Sigenergy Power Sensor)
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/persistence/app/current_modbus_converter/.venv/bin/python
 
 [Service]
 Type=notify
+User=ems_admin
+SupplementaryGroups=dialout
+WorkingDirectory=/persistence/app/current_modbus_converter
+ExecStart=/persistence/app/current_modbus_converter/.venv/bin/python -m nd45_dtsu666 \
+  --config /persistence/app/current_modbus_converter/config/config.json \
+  --registers /persistence/app/current_modbus_converter/config/registers.json \
+  --bridge %i \
+  run
 # Tracks this instance's poll-loop progress. supervise_poller tries an in-process
 # client rebuild first (source.stall_timeout_s, 60s < 90s here), so a restart only
 # happens if that recovery is itself looping. An unreachable source is NOT a stall:
 # the poller keeps cycling and the freshness gate silences the output on its own.
 WatchdogSec=90
-WorkingDirectory=/opt/nd45_dtsu666
-ExecStart=/opt/nd45_dtsu666/.venv/bin/python -m nd45_dtsu666 \
-  --config /opt/nd45_dtsu666/config/config.json \
-  --registers /opt/nd45_dtsu666/config/registers.json \
-  --bridge %i \
-  run
 Restart=always
 RestartSec=2
-# The service user must be able to open this bridge's RS-485 device.
-SupplementaryGroups=dialout
+NoNewPrivileges=true
+PrivateTmp=true
 # Logs go to journald via stdout/stderr; filter with `journalctl -u nd45-dtsu666@%i`
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=nd45-dtsu666-%i
 
 [Install]
 WantedBy=multi-user.target
