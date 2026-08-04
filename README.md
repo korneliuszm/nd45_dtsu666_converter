@@ -288,8 +288,35 @@ mbpoll -m tcp -a 1 -t 4:float -r 8193 -c 4 127.0.0.1 -p 502
 
 ## Diagnostics
 ```bash
-python -m nd45_dtsu666 diag   # live table: canonical SI, DTSU addr/raw, age, status
+python -m nd45_dtsu666 diag                  # live table: canonical SI, DTSU addr/raw, age, status
+python -m nd45_dtsu666 diag --interval 0.3   # sample as fast as the bridge itself does
 ```
+
+`diag` talks to the source directly and serves nothing, so it isolates the meter
+from the rest of the bridge. Under the table it prints the spread of each watched
+point across the session:
+
+```
+spread over 26 sample(s) at 0.3s (8s of history)
+point                 last           min           max     peak-peak  sign flips
+p_total           -960.228     -3219.326      1607.461      4826.787          10
+u_l1               230.000       230.000       230.000         0.000           0
+```
+
+**Reading a value that looks unstable in `monitor` but steady in `diag`:** the
+two differ in sample rate, not in arithmetic — `diag` polls every 1s by default
+while the bridge polls at `source.poll_interval_s` (0.3s for the ND45). Re-run
+`diag --interval 0.3`; if the spread and the sign flips appear, the meter really
+does deliver that at 3 Hz and the monitor is being honest. Raising
+`poll_interval_s` toward 1s then smooths what Sigenergy sees (`max_data_age_s`
+must stay at least twice it — config load enforces that).
+
+Do this with the bridge's service **stopped**. `diag` and `monitor` each open
+their own Modbus TCP connection, so running one alongside `nd45-dtsu666@nd45`
+puts two masters on a meter that is being polled three times a second — which is
+itself enough to make readings erratic on a small analyser. `monitor` also
+cannot open the RS-485 port while the service holds it (see the `bus traffic:`
+line).
 
 ## Interactive monitor (commissioning)
 
