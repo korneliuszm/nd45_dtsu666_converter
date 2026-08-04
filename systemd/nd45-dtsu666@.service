@@ -4,13 +4,16 @@
 #   systemctl enable --now nd45-dtsu666@smartlogger
 #
 # Running them as separate PROCESSES (not just separate BridgeRuntime objects
-# inside one process) is deliberate and load-bearing, not just for shared-fate
-# protection: on 2026-08-04 it was reproduced live that two Modbus TCP pollers
-# (ND45 + SmartLogger) sharing one asyncio event loop can corrupt each other's
-# register reads even though each bridge owns its own client/store/output port
-# -- one process per bridge closes that off completely. Never run
-# `nd45_dtsu666 run` (no --bridge) or `monitor` as the production service with
-# more than one bridge enabled.
+# inside one process) is deliberate and load-bearing, for shared-fate
+# protection: a crash, an OOM or a `systemctl restart` on one bridge must not
+# silence the other bridge's meter. Never run `nd45_dtsu666 run` (no --bridge)
+# or `monitor` as the production service with more than one bridge enabled.
+#
+# An earlier version of this comment also claimed two pollers sharing one event
+# loop corrupt each other's register reads. That was wrong and is retracted --
+# the swing it described was the plant's own control loop hunting, not a data
+# fault. See /persistence/nd45-dtsu666-DEPLOY.md §0.1. The isolation reason
+# above stands on its own.
 #
 # Both instances read the SAME config/config.json on purpose. The validators that
 # reject two bridges sharing a serial port (or colliding ports) only work when one
@@ -21,17 +24,17 @@
 # WorkingDirectory/ExecStart point at /persistence/app/current_modbus_converter,
 # a symlink kept pointing at whichever checked-out version is live -- see
 # /persistence/nd45-dtsu666-DEPLOY.md for the full install/upgrade/rollback
-# procedure this enables (swap the symlink, restart both instances) and for a
-# second, separate incident: app.build_bridge currently disables the
-# Sigenergy-read-activity tracker (RtuActivity/WireActivity) for this `run` path
-# on purpose, because attaching it was found to corrupt the source poll under
-# real RS-485 traffic. Do not re-enable it there without reading that note.
+# procedure this enables (swap the symlink, restart both instances).
 
 [Unit]
 Description=Modbus bridge %i -> DTSU666 (Sigenergy Power Sensor)
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/persistence/app/current_modbus_converter/.venv/bin/python
+# See the Restart=/RestartSec= note in [Service]: 0 disables start rate
+# limiting so a crash-loop can never latch this instance into `failed` and
+# leave the Sigenergy Power Sensor unserved until a human intervenes.
+StartLimitIntervalSec=0
 
 [Service]
 Type=notify
@@ -49,7 +52,24 @@ ExecStart=/persistence/app/current_modbus_converter/.venv/bin/python -m nd45_dts
 # the poller keeps cycling and the freshness gate silences the output on its own.
 WatchdogSec=90
 Restart=always
-RestartSec=2
+RestartSec=5
+# NOTE: the matching StartLimitIntervalSec=0 lives in [Unit] above, not here --
+# systemd moved the start-limit directives to [Unit] in v229 and silently
+# ignores them in [Service], which looks like it worked until you check
+# `systemctl show -p StartLimitIntervalUSec`.
+# Never latch into `failed` and stop trying. With systemd's defaults
+# (StartLimitBurst=5 per StartLimitIntervalSec=10s) a crash-loop -- or any
+# transient that keeps the process from coming up, e.g. the RS-485 device not
+# present yet after a boot -- trips the limit within ten seconds, systemd gives
+# up permanently, and this instance sits dead until a human runs
+# `systemctl reset-failed`. That leaves the Sigenergy Power Sensor unserved
+# indefinitely and defeats the whole point of the watchdog above, which assumes
+# systemd is the backstop. Observed for real on 2026-08-04. Setting the interval
+# to 0 disables the rate limiting: worst case is one restart attempt every
+# RestartSec forever, which is noisy in the journal but always self-recovers
+# once the transient clears. Availability wins here -- a silenced bridge is
+# already handled safely (Sigenergy times out and enters its own safe mode),
+# but only if we keep trying to come back.
 NoNewPrivileges=true
 PrivateTmp=true
 # Logs go to journald via stdout/stderr; filter with `journalctl -u nd45-dtsu666@%i`
