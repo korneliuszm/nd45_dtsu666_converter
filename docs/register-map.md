@@ -17,6 +17,12 @@ slave ID:
 > FC03 tylko blok konfiguracyjny (`0x0003`/qty5), `0x0046` i handshake
 > (`0xF114`). Klasyczny blok FC03 `0x2000`/`0x101E` jest utrzymywany dla
 > zgodności z narzędziami (mbpoll) i dla wierności emulacji.
+>
+> Potwierdzone pomiarem na obiekcie (2026-08-04, licznik odczytów w
+> `RecordingSlaveContext`): Sigenergy reguluje wyłącznie na bloku
+> **`fc=4, addr=5404 (0x151C), count=16`** — `p_total`..`q_l3` z
+> `dtsu_sigen_ext_target`, ok. 9,5 odczytu/s — i **nie czyta `dtsu_target`
+> w ogóle**. Zmieniając mapy, patrz najpierw na FC04.
 
 ## Model kanoniczny (SI)
 

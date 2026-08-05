@@ -78,7 +78,7 @@ deployment here is two, each running as its own systemd service:
 | source | Lumel ND45 (Modbus TCP, float32) | Huawei SmartLogger (Modbus TCP) |
 | output | RS-485 `/dev/ttyAMA2` | RS-485 `/dev/ttyAMA4` |
 | what Sigenergy sees | grid-tie balance | PV farm production |
-| `safety.max_data_age_s` | 3.0s (polled every 0.3s) | 30.0s (polled every 5s) |
+| `safety.max_data_age_s` | 3.0s (polled every 0.05s) | 30.0s (polled every 1s) |
 
 Two levels of isolation, and both matter:
 
@@ -106,7 +106,7 @@ SmartLogger bridge differ only in their values, so the two are read side by side
     "source": {
       "type": "nd45", "host": "192.168.22.109", "port": 502, "unit_id": 1,
       "register_map": "nd45_source",
-      "poll_interval_s": 0.3, "timeout_s": 1.0, "stall_timeout_s": 30.0
+      "poll_interval_s": 0.05, "timeout_s": 1.0, "stall_timeout_s": 30.0
     },
     "dtsu": {
       "transport": "rtu", "slave_id": 10,
@@ -118,11 +118,11 @@ SmartLogger bridge differ only in their values, so the two are read side by side
   },
   {
     "name": "smartlogger",
-    "enabled": false,
+    "enabled": true,
     "source": {
-      "type": "huawei", "host": "192.168.22.120", "port": 502, "unit_id": 0,
+      "type": "huawei", "host": "192.168.22.15", "port": 502, "unit_id": 0,
       "register_map": "huawei_plant_source",
-      "poll_interval_s": 5.0, "timeout_s": 6.0, "stall_timeout_s": 60.0
+      "poll_interval_s": 1.0, "timeout_s": 6.0, "stall_timeout_s": 60.0
     },
     "dtsu": {
       "transport": "rtu", "slave_id": 10,
@@ -138,10 +138,19 @@ SmartLogger bridge differ only in their values, so the two are read side by side
 Outside `bridges` there are only the two process-wide sections, `prometheus` and
 `static_debug`.
 
-The `smartlogger` entry ships with `enabled: false` — fill in `source.host` and flip
-it to turn the second bridge on. `slave_id` may repeat across bridges (the RS-485
-buses are electrically independent); the serial port may not. Config load fails fast
-on:
+Both bridges ship enabled, pointing at this site's sources; set `enabled: false` on
+one to run a single-bridge install. `slave_id` may repeat across bridges (the RS-485
+buses are electrically independent); the serial port may not.
+
+The poll intervals differ by 20x on purpose, and neither number is arbitrary. The
+ND45 refreshes its own registers about every 134 ms (measured 2026-08-04), so
+anything slower than that aliases the source — 0.05s leaves margin, and the link
+sustains 837 reads/s at 0.8 ms round-trip, so it costs nothing (~5% CPU either way).
+The SmartLogger is a concentrator aggregating inverters over RS-485 behind its TCP
+front end; polling it fast returns the same value repeatedly, hence 1s and a
+correspondingly relaxed `max_data_age_s`.
+
+Config load fails fast on:
 
 - two bridges on one serial port (or one TCP bind) — pymodbus 3.6.9's `listen()`
   swallows the resulting `OSError`, so the loser would hang silently instead of
@@ -215,7 +224,7 @@ endpoint, so the bridge can be checked from Grafana instead of over SSH:
 
 ```bash
 curl -s http://<device>:8081/metrics
-curl -s http://<device>:8081/healthz    # "ok" while ND45 data is fresh, 503 when stale
+curl -s http://<device>:8081/healthz    # "ok" while every bridge is fresh, 503 naming the stale one
 ```
 
 Configured in `config/config.json` (all fields optional):
@@ -299,7 +308,7 @@ mbpoll -m tcp -a 1 -t 4:float -r 8193 -c 4 127.0.0.1 -p 502
 ## Diagnostics
 ```bash
 python -m nd45_dtsu666 diag                  # live table: canonical SI, DTSU addr/raw, age, status
-python -m nd45_dtsu666 diag --interval 0.3   # sample as fast as the bridge itself does
+python -m nd45_dtsu666 diag --interval 0.05  # sample as fast as the bridge itself does
 ```
 
 `diag` talks to the source directly and serves nothing, so it isolates the meter
@@ -307,7 +316,7 @@ from the rest of the bridge. Under the table it prints the spread of each watche
 point across the session:
 
 ```
-spread over 26 sample(s) at 0.3s (8s of history)
+spread over 160 sample(s) at 0.05s (8s of history)
 point                 last           min           max     peak-peak  sign flips
 p_total           -960.228     -3219.326      1607.461      4826.787          10
 u_l1               230.000       230.000       230.000         0.000           0
@@ -315,8 +324,8 @@ u_l1               230.000       230.000       230.000         0.000           0
 
 **Reading a value that looks unstable in `monitor` but steady in `diag`:** the
 two differ in sample rate, not in arithmetic — `diag` polls every 1s by default
-while the bridge polls at `source.poll_interval_s` (0.3s for the ND45). Both
-redraw once a second, so the screens look comparable when they are not.
+while the bridge polls at `source.poll_interval_s` (0.05s for the ND45, a 20x
+gap). Both redraw once a second, so the screens look comparable when they are not.
 
 Sampling slower does not make a signal steadier; it *aliases* the swing away.
 A quantity that swings with a period near the slow sample interval reads almost
@@ -326,12 +335,12 @@ against one synthetic meter swinging with a 0.5s period:
 | sampled every | peak-peak | sign flips in 20s |
 |---|---:|---:|
 | 1.0s (diag default) | 3.2 kW | 0 |
-| 0.3s (the bridge) | 16.8 kW | 53 |
+| 0.3s (a fast sample) | 16.8 kW | 53 |
 
 Same meter, same instant, same decoder. So a steady `diag` at 1s does **not**
 mean the bridge is inventing the swing — and `monitor` now prints the same
 `P spread` line so both can be read off one screen. Confirm with
-`diag --interval 0.3`: if the spread matches the monitor's, the swing is in the
+`diag --interval 0.05`: if the spread matches the monitor's, the swing is in the
 measurement, and it is what Sigenergy is being fed.
 
 Running `diag` with the bridge's service **stopped** keeps two masters off the
@@ -375,8 +384,8 @@ Each screen answers the two questions bring-up actually asks, per bridge:
 ```
  bridge 'smartlogger'   Huawei SmartLogger -> DTSU666   state: SERVING
 ------------------------------------------------------------------------
- SOURCE  Huawei SmartLogger  192.168.22.120:502 unit 0
-   link: CONNECTED  data age: 2.40s / 30.0s   poll: OK (every 5s)
+ SOURCE  Huawei SmartLogger  192.168.22.15:502 unit 0
+   link: CONNECTED  data age: 2.40s / 30.0s   poll: OK (every 1s)
    polls: 721 ok / 0 err   consecutive fails: 0   last ok: 2.4s ago
    Phase      U [V]    I [A]       P [W]     Q [var]      PF
    L1         231.0   100.00    411500.0    -16666.7   0.999
@@ -510,19 +519,39 @@ process still uses the shared `prometheus.port`.
 `systemd/nd45-dtsu666.service` runs **every** enabled bridge in one service
 (`run` with no `--bridge`). Fine for a single-bridge install or for bring-up, where
 one journal is easier to follow — but for the two-bridge deployment prefer the
-per-instance unit: besides a restart dropping both buses, two Modbus TCP pollers
-sharing one event loop have been observed to corrupt each other's reads outright.
-See `docs/DEPLOY.md` §0 before running more than one bridge
-in a single process.
+per-instance unit, because a restart, a crash or an OOM there drops both buses at
+once.
+
+An earlier version of this section also claimed that two Modbus TCP pollers sharing
+one event loop corrupt each other's reads. **That was wrong and has been retracted**
+— the swing behind it was the plant's own control loop hunting, not a data fault
+(`docs/DEPLOY.md` §0.1). Fault isolation is reason enough on its own; there is no
+known data-integrity problem with running several bridges in one process.
 
 ### The watchdog
 
 `WatchdogSec=90` tracks **this instance's poll-loop progress**. A stalled loop is
-first rebuilt in place by `app.supervise_poller` (`source.stall_timeout_s`, 60s),
-and only if that recovery keeps looping does systemd restart the service — which is
-now safe, because the restart no longer touches the sibling bridge. An unreachable
-source is *not* a stall: the poller keeps cycling, the data goes stale, and the
-freshness gate silences that bridge's output on its own.
+first rebuilt in place by `app.supervise_poller` (`source.stall_timeout_s` — 30s for
+the ND45 bridge, 60s for the SmartLogger, both deliberately under 90s so the cheap
+in-process rebuild always goes first), and only if that recovery keeps looping does
+systemd restart the service — which is now safe, because the restart no longer
+touches the sibling bridge. An unreachable source is *not* a stall: the poller keeps
+cycling, the data goes stale, and the freshness gate silences that bridge's output
+on its own.
+
+The unit also sets `StartLimitIntervalSec=0` with `RestartSec=5`. Without it,
+systemd's default rate limit (5 starts per 10s) makes any crash-loop — or a
+transient like the RS-485 device not being present yet after a boot — latch the
+instance into `failed` **permanently**, leaving that Power Sensor unserved until
+someone runs `systemctl reset-failed`. That happened on this site 2026-08-04.
+The directive belongs in `[Unit]`; systemd silently ignores it in `[Service]`.
+
+> **Before trusting `systemctl enable`, check whether `/` is an overlayroot.** On a
+> host that mounts the root filesystem as an overlay with a tmpfs upper layer,
+> everything written to `/etc` since boot — unit files, enable symlinks, disables of
+> an old unit — is **lost on the next reboot**. This site's device is one, and the
+> trap was caught hours after cutover. `docs/DEPLOY.md` §0.4 has the check and the
+> `overlayroot-chroot` procedure to write through it.
 
 ## On-site verification checklist (before leaving unattended)
 1. **Sign convention** — with known import/export, confirm Sigenergy sees correct grid

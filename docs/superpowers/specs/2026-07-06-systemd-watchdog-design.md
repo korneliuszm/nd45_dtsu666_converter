@@ -1,7 +1,16 @@
 # Spec: systemd watchdog integration (sd_notify heartbeat)
 
 **Data:** 2026-07-06
-**Status:** zatwierdzony design
+**Status:** zatwierdzony design, wdrożony
+
+> **Nota po wdrożeniu (2026-08-04).** Ten design zakłada, że `Restart=always`
+> jest niezawodnym backstopem — a to nie było prawdą przy domyślnym limicie
+> startów systemd (`StartLimitBurst=5` / `StartLimitIntervalSec=10s`), który
+> potrafił trwale zatrzasnąć instancję w stanie `failed`. Unit ustawia teraz
+> `StartLimitIntervalSec=0` (w sekcji `[Unit]`) i `RestartSec=5`. Doszła też
+> tańsza warstwa *przed* watchdogiem: `app.supervise_poller` odbudowuje
+> zawieszony poller w procesie po `source.stall_timeout_s` (30 s / 60 s,
+> poniżej `WatchdogSec=90`). Szczegóły: `docs/DEPLOY.md` §0.3 i `CLAUDE.md`.
 **Kontekst:** stabilność długoterminowa — `Restart=always` w service już łapie crash
 procesu, ale nie łapie zawieszenia (proces żyje, ale utknął). Urządzenie ma
 skonfigurowanego sprzętowego watchdoga na poziomie systemu, ale to chroni tylko
