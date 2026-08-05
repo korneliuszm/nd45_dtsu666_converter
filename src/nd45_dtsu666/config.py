@@ -278,6 +278,15 @@ class StaticIdentitySide(BaseModel):
     points: dict[str, StaticIdentityPoint]
 
 
+# Canonical keys every source gets for free from canonical.compute_derived, so a
+# target point may reference them even though no source section declares them.
+# Duplicated here rather than imported because canonical.py imports this module;
+# tests/test_config.py pins the two lists together.
+DERIVED_CANONICAL_KEYS = frozenset(
+    {"active_energy_total", "net_imp_energy_total", "net_exp_energy_total"}
+)
+
+
 class RegisterMap(BaseModel):
     nd45_source: SourceSide
     dtsu_target: TargetSide
@@ -288,6 +297,44 @@ class RegisterMap(BaseModel):
     # keeps validating. Required only for a bridge whose source names it.
     huawei_plant_source: SourceSide | None = None
     huawei_meter_source: SourceSide | None = None
+
+    @model_validator(mode="after")
+    def _check_every_source_produces_every_target_point(self) -> "RegisterMap":
+        """Every target point's `from` must be produced by every source section.
+
+        Without this a typo in a `from` -- or a target point added before the
+        canonical point that feeds it -- is completely silent: update_datastore
+        finds no value, the register keeps whatever it last held (0.0 from the
+        initial datastore), and the store is still stamped fresh, so the
+        freshness gate never fires. Sigenergy then regulates on a constant.
+
+        Checked against *each* source separately, not their union: the output
+        maps are shared by every bridge, so a point only nd45_source declares
+        would leave that register frozen on a SmartLogger bridge alone --
+        the same fault, harder to see.
+        """
+        sources = [
+            (name, side)
+            for name, side in vars(self).items()
+            if isinstance(side, SourceSide)
+        ]
+        needed = {
+            pt.from_ for _name, side in self.targets for pt in side.points.values()
+        }
+        for name, side in sources:
+            produced = (
+                set(side.points)
+                | {t for op in side.derive for t in op.targets}
+                | DERIVED_CANONICAL_KEYS
+            )
+            missing = sorted(needed - produced)
+            if missing:
+                raise ValueError(
+                    f"source section {name!r} produces no canonical value for "
+                    f"target point(s) {missing}; add the point (or a 'derive' "
+                    f"rule for it) or correct the 'from' name in the output map"
+                )
+        return self
 
     # The output maps are shared by every bridge -- they all emulate the same
     # meter. Only the source section and the runtime CT ratio differ.
@@ -407,33 +454,43 @@ class DtsuTcpConf(BaseModel):
 
 
 class DtsuIdentityConf(BaseModel):
-    rev: int = 100
-    ucode: int = 0
-    clr_e: int = 0
-    net: int = 0
+    """The DTSU666 identity/config block (0x0000-0x002E).
+
+    Every field is one *holding register*, so it has to fit an unsigned 16-bit
+    word. pymodbus's datastore stores whatever it is given and only fails when
+    the response is packed, which happens on Sigenergy's read of the config
+    block (~every 5.4s) -- the server task then dies, restarts, and dies again
+    on the next read, with a log line that points at the server rather than at
+    the configuration. Bound it here instead, where the message names the field.
+    """
+
+    rev: int = Field(default=100, ge=0, le=0xFFFF)
+    ucode: int = Field(default=0, ge=0, le=0xFFFF)
+    clr_e: int = Field(default=0, ge=0, le=0xFFFF)
+    net: int = Field(default=0, ge=0, le=0xFFFF)
     # CT ratio (register 0x0006, "IrAt"): unlike UrAt, this is used directly as
     # the primary/secondary current-transformer ratio (not x0.1-scaled) --
     # verified against a live meter's current, power, and energy-accumulation
     # readings. Doubles as the translator's single CT-ratio parameter: classic
     # DTSU666 (secondary-side) points divide by it, see TargetPoint.divide_by_ct.
-    ir_at: int = 10
-    ur_at: int = 10
-    disp: int = 0
-    b_lcd: int = 0
-    endian: int = 0
-    protocol: int = 0
-
-    @field_validator("ir_at")
-    @classmethod
-    def _check_ir_at_positive(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("dtsu.identity.ir_at (CT ratio) must be positive")
-        return value
+    # ge=1: it is also the divisor in encode_target_point, so 0 is not merely
+    # out of register range, it would make every classic-map point unencodable.
+    ir_at: int = Field(default=10, ge=1, le=0xFFFF)
+    ur_at: int = Field(default=10, ge=0, le=0xFFFF)
+    disp: int = Field(default=0, ge=0, le=0xFFFF)
+    b_lcd: int = Field(default=0, ge=0, le=0xFFFF)
+    endian: int = Field(default=0, ge=0, le=0xFFFF)
+    protocol: int = Field(default=0, ge=0, le=0xFFFF)
 
 
 class DtsuConf(BaseModel):
     transport: Literal["rtu", "tcp"] = "rtu"
-    slave_id: int = 1
+    # 1..247 is the Modbus RTU address range; it is also written to the Addr
+    # register (0x002E) and into every RTU response header, both of which are
+    # single bytes. Applied to the TCP transport too -- the unit id there is one
+    # byte as well, and a bridge should not be reconfigurable into a slave id
+    # that stops working the moment its transport changes.
+    slave_id: int = Field(default=1, ge=1, le=247)
     identity: DtsuIdentityConf = DtsuIdentityConf()
     rtu: DtsuRtuConf | None = None
     tcp: DtsuTcpConf | None = None

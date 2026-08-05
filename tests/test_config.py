@@ -765,3 +765,84 @@ def test_shipped_config_gives_each_service_its_own_metrics_port():
     assert set(ports) == {"nd45", "smartlogger"}
     assert None not in ports.values()  # neither falls back to the shared port
     assert len(set(ports.values())) == len(ports)
+
+
+# --- P1 audit regressions (2026-08-05) -------------------------------------
+
+
+def test_derived_canonical_keys_match_compute_derived():
+    """config.py duplicates these names because canonical.py imports config.
+
+    If compute_derived ever produces a different set, the RegisterMap validator
+    below would either reject a valid map or let an unfeedable `from` through.
+    """
+    from nd45_dtsu666.canonical import compute_derived
+    from nd45_dtsu666.config import DERIVED_CANONICAL_KEYS
+
+    values = {"imp_energy_total": 1.0, "exp_energy_total": 2.0}
+    before = set(values)
+    compute_derived(values)
+    assert set(values) - before == set(DERIVED_CANONICAL_KEYS)
+
+
+def test_target_point_from_must_be_produced_by_every_source():
+    """A `from` no source can feed leaves that register frozen, silently.
+
+    update_datastore would find no value, keep the previous register image (0.0
+    at startup) and the store would still be stamped fresh -- so the freshness
+    gate never fires and Sigenergy regulates on a constant.
+    """
+    raw = json.loads(open("config/registers.json", encoding="utf-8").read())
+    raw["dtsu_target"]["points"]["u_l1"]["from"] = "u_l1_typo"
+    with pytest.raises(ValidationError, match="u_l1_typo"):
+        RegisterMap.model_validate(raw)
+
+
+def test_a_from_only_one_source_produces_is_rejected():
+    """The output maps are shared by every bridge, so partial coverage is a fault.
+
+    A point only nd45_source declares would leave that register frozen on the
+    SmartLogger bridge alone -- the same defect, harder to notice.
+    """
+    raw = json.loads(open("config/registers.json", encoding="utf-8").read())
+    raw["nd45_source"]["points"]["spare"] = {"addr": 50, "scale": 1.0}
+    raw["dtsu_target"]["points"]["u_l1"]["from"] = "spare"
+    with pytest.raises(ValidationError, match="huawei_plant_source"):
+        RegisterMap.model_validate(raw)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("ir_at", 100_000),  # a CT ratio above one register -- plausible at MV
+        ("ir_at", 0),  # also the divisor in encode_target_point
+        ("rev", -1),
+        ("ucode", 0x1_0000),
+        ("protocol", -5),
+        ("ur_at", 70_000),
+    ],
+)
+def test_identity_values_outside_one_register_are_rejected(field, value):
+    """pymodbus stores these unvalidated and only fails when packing a response.
+
+    Sigenergy reads the config block about every 5.4s, so an out-of-range value
+    kills the server task on the first read and again on every retry -- with a
+    log line naming the server, not the setting that caused it.
+    """
+    with pytest.raises(ValidationError):
+        DtsuIdentityConf(**{field: value})
+
+
+@pytest.mark.parametrize("slave_id", [0, 248, 300, -1])
+def test_slave_id_outside_the_modbus_address_range_is_rejected(slave_id):
+    with pytest.raises(ValidationError):
+        DtsuConf(transport="rtu", slave_id=slave_id, rtu=DtsuRtuConf(port="/dev/null"))
+
+
+def test_every_identity_field_fits_a_holding_register():
+    """Whatever the shipped config says must survive response encoding."""
+    from pymodbus.register_read_message import ReadHoldingRegistersResponse
+
+    identity = load_config("config/config.json").bridge_specs[0].dtsu.identity
+    values = list(identity.model_dump().values())
+    ReadHoldingRegistersResponse(values).encode()  # must not raise

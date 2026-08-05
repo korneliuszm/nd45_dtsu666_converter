@@ -502,9 +502,15 @@ async def supervise_poller(
             bridge.recovery.record(now())
             _close_quietly(bridge.client, bridge.name)
             bridge.replace_client()
+            # heartbeat= matters here as much as in run_app: an unreachable
+            # source can keep this retrying for as long as it likes, and without
+            # the heartbeat being touched the watchdog would read that as a
+            # wedged process and restart the service -- the exact escalation
+            # this supervisor exists to avoid.
             await connect_fn(
                 bridge.client, stop_event,
                 spec.source.reconnect_delay_s, spec.source.reconnect_delay_max_s,
+                heartbeat=bridge.heartbeat,
             )
             task = start()
     finally:

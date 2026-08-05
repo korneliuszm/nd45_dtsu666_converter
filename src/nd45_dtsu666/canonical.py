@@ -36,8 +36,9 @@ def compute_derived(values: dict[str, float]) -> None:
 
     Lives here rather than in a source driver: every source (ND45 poller,
     static debug, diagnostics, Huawei poller) must produce these, since
-    `dtsu_target` and `dtsu_sigen_ext_energy` reference them via `from` and
-    `update_datastore` silently skips a missing canonical key.
+    `dtsu_target` and `dtsu_sigen_ext_energy` reference them via `from`, and
+    `update_datastore` rejects a sample that is missing any referenced key --
+    so a source that skipped this would put its bridge into permanent fail-safe.
     """
     imp = values.get("imp_energy_total", 0.0)
     exp = values.get("exp_energy_total", 0.0)

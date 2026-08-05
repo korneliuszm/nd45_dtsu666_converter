@@ -495,3 +495,66 @@ def test_config_rejects_two_bridges_on_one_serial_port():
                 "rtu": {"port": "/dev/ttyAMA2"},  # same port as the ND45 bridge
             }
         )
+
+
+async def test_recovery_reconnect_keeps_the_watchdog_heartbeat_alive(monkeypatch):
+    """A source unreachable *during* stall recovery must not restart the process.
+
+    supervise_poller rebuilds the client and then reconnects. If that reconnect
+    runs without touching the heartbeat, an unreachable source keeps it retrying
+    with backoff forever while SlowestHeartbeat ages without bound -- and at
+    WatchdogSec (90s on this deployment) systemd kills the service. That is the
+    exact escalation this supervisor exists to prevent: an unreachable source is
+    not a stall, and the freshness gate alone should handle it.
+
+    Measured before the fix: heartbeat age tracked elapsed time 1:1, reaching
+    150s while the reconnect was still retrying.
+    """
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = two_bridge_config()
+    stop = asyncio.Event()
+    pipe = build_pipeline(
+        config, REGISTERS, stop,
+        clients={"nd45": FakeSourceClient(), "smartlogger": HangingClient()},
+    )
+    _close_coros(pipe)
+    smart = pipe.bridge("smartlogger")
+    smart.client_factory = HangingClient
+    clock = {"t": 0.0}
+    seen_heartbeats: list[object] = []
+
+    async def _never_connects(client, stop_event, *args, heartbeat=None, **kwargs):
+        """What connect_with_retry does against a dead source: retry forever."""
+        seen_heartbeats.append(heartbeat)
+        while not stop_event.is_set():
+            if heartbeat is not None:
+                heartbeat.touch(clock["t"])
+            clock["t"] += 10.0  # 10s of backoff per attempt
+            await asyncio.sleep(0)
+            if clock["t"] > 300.0:
+                return False
+        return False
+
+    task = asyncio.create_task(
+        supervise_poller(
+            smart, REGISTERS, stop,
+            on_update=lambda values, ts: None,
+            on_error=lambda exc: None,
+            now=lambda: clock["t"],
+            connect=_never_connects,
+        )
+    )
+    try:
+        await _settle()
+        clock["t"] = 61.0  # past the SmartLogger bridge's 60s stall_timeout_s
+        await _settle(0.3)
+
+        assert seen_heartbeats, "recovery never reached the reconnect"
+        assert seen_heartbeats[0] is smart.heartbeat, (
+            "supervise_poller must pass the bridge's heartbeat to connect_with_retry"
+        )
+        # The watchdog reads exactly this; 90s is WatchdogSec on the deployment.
+        assert smart.heartbeat.age(clock["t"]) <= 90.0
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, timeout=5.0)

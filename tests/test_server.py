@@ -24,6 +24,26 @@ from nd45_dtsu666.dtsu_server import (
 )
 
 
+_CANONICAL_NAMES = frozenset(
+    pt.from_
+    for _name, side in load_registers("config/registers.json").targets
+    for pt in side.points.values()
+)
+
+
+def _full(**overrides) -> dict[str, float]:
+    """A complete canonical sample: zeros everywhere, `overrides` on top.
+
+    update_datastore refuses a sample that is missing any `from` name an output
+    map references, because encoding only part of the image would leave the rest
+    of the registers holding the previous sample. These tests assert on one or
+    two points at a time, so they state those and let the rest be zero.
+    """
+    values = dict.fromkeys(_CANONICAL_NAMES, 0.0)
+    values.update(overrides)
+    return values
+
+
 def _read_point(context, slave_id, pt, target):
     # Inverse of encode_point (raw = si*sign*scale + offset): recover SI from the
     # DTSU register. decode_point cannot be used here because it multiplies by
@@ -36,7 +56,7 @@ def _read_point(context, slave_id, pt, target):
 def test_update_datastore_encodes_voltage_and_power():
     target = load_registers("config/registers.json").dtsu_target
     context = build_context(target, slave_id=1)
-    update_datastore(context, 1, {"u_l1": 230.0, "p_total": 1500.0}, target)
+    update_datastore(context, 1, _full(u_l1=230.0, p_total=1500.0), target)
 
     u = _read_point(context, 1, target.points["u_l1"], target)
     p = _read_point(context, 1, target.points["p_total"], target)
@@ -47,7 +67,7 @@ def test_update_datastore_encodes_voltage_and_power():
 def test_datastore_raw_scaling_matches_dtsu_spec():
     target = load_registers("config/registers.json").dtsu_target
     context = build_context(target, slave_id=1)
-    update_datastore(context, 1, {"u_l1": 230.0}, target)
+    update_datastore(context, 1, _full(u_l1=230.0), target)
     # DTSU voltage is x10 -> raw register float must be 2300.0
     regs = context[1].getValues(3, target.points["u_l1"].addr, count=2)
     assert registers_to_float(regs, target.word_order, target.byte_order) == pytest.approx(2300.0)
@@ -56,7 +76,7 @@ def test_datastore_raw_scaling_matches_dtsu_spec():
 def test_update_datastore_divides_classic_ct_points_by_ct_ratio():
     target = load_registers("config/registers.json").dtsu_target
     context = build_context(target, slave_id=1)
-    update_datastore(context, 1, {"p_total": 40000.0}, target, ct_ratio=200)
+    update_datastore(context, 1, _full(p_total=40000.0), target, ct_ratio=200)
 
     # classic (secondary-side) p_total: (40000/200) W x10 scale = 2000.0 raw
     regs = context[1].getValues(3, target.points["p_total"].addr, count=2)
@@ -74,7 +94,7 @@ def test_encode_target_point_rejects_a_non_positive_or_non_finite_ct_ratio(bad_r
 def test_update_datastore_default_ct_ratio_is_a_no_op():
     target = load_registers("config/registers.json").dtsu_target
     context = build_context(target, slave_id=1)
-    update_datastore(context, 1, {"p_total": 1500.0}, target)  # ct_ratio defaults to 1.0
+    update_datastore(context, 1, _full(p_total=1500.0), target)  # ct_ratio defaults to 1.0
 
     regs = context[1].getValues(3, target.points["p_total"].addr, count=2)
     assert registers_to_float(regs, "big", "big") == pytest.approx(15000.0)  # x10 scale only
@@ -86,7 +106,7 @@ def test_update_datastore_validation_failure_preserves_previous_image():
     update_datastore(
         context,
         1,
-        {"u_l1": 111.0, "p_total": 222.0},
+        _full(u_l1=111.0, p_total=222.0),
         target,
     )
     before_u = context[1].getValues(
@@ -100,7 +120,7 @@ def test_update_datastore_validation_failure_preserves_previous_image():
         update_datastore(
             context,
             1,
-            {"u_l1": 230.0, "p_total": 1e38},
+            _full(u_l1=230.0, p_total=1e38),
             target,
         )
 
@@ -118,7 +138,7 @@ def test_sigen_ext_target_reports_primary_power_in_kw():
     context = build_context(targets, slave_id=1)
     # p_total is already the primary-side ND45 reading; the classic (secondary)
     # map still divides by ct_ratio, the Sigen ext map does not.
-    update_datastore(context, 1, {"p_total": 40000.0}, targets, ct_ratio=200)
+    update_datastore(context, 1, _full(p_total=40000.0), targets, ct_ratio=200)
 
     ext = registers.dtsu_sigen_ext_target.points["p_total"]
     regs = context[1].getValues(4, ext.addr, count=2)
@@ -152,7 +172,7 @@ def test_apparent_power_encoded_both_maps_matches_real_meter():
     targets = [registers.dtsu_target, registers.dtsu_sigen_ext_target]
     context = build_context(targets, slave_id=1)
     # S is a direct ND45 canonical measurement.
-    update_datastore(context, 1, {"s_total": 5339.1}, targets, ct_ratio=200)
+    update_datastore(context, 1, _full(s_total=5339.1), targets, ct_ratio=200)
 
     # classic (FC03, secondary side): (5339.1/200)*10 = 266.955 raw
     classic = registers.dtsu_target.points["s_total"]
@@ -176,7 +196,7 @@ def test_classic_and_sigen_measurements_use_separate_data_spaces_and_scales():
         sigen_identity=registers.dtsu_sigen_identity,
     )
 
-    update_datastore(context, 1, {"u_l1": 230.0}, targets)
+    update_datastore(context, 1, _full(u_l1=230.0), targets)
 
     classic = registers.dtsu_target.points["u_l1"]
     classic_regs = context[1].getValues(3, classic.addr, count=2)
@@ -270,7 +290,7 @@ def test_energy_maps_match_physical_reverse_flow_scan():
         "exp_energy_l3": 1.0,
         "net_exp_energy_total": 3.0,
     }
-    update_datastore(context, 1, canonical, targets, ct_ratio=200)
+    update_datastore(context, 1, _full(**canonical), targets, ct_ratio=200)
     slave = context[1]
 
     assert slave.getValues(4, 0x1800, count=2) == _coarse_float(10.0)
@@ -322,12 +342,36 @@ def test_energy_maps_match_physical_reverse_flow_scan():
     )
 
 
-def test_missing_canonical_key_is_skipped():
+def test_missing_canonical_key_raises_and_preserves_the_previous_image():
+    """A partial sample must not be encoded at all.
+
+    Skipping the missing points (the behaviour before 2026-08-05) left those
+    registers holding the previous sample while the rest of the image moved on,
+    and build_on_update stamps the store fresh straight afterwards -- so
+    Sigenergy would read a mixed image with no way to tell. Raising puts it on
+    the poller's error path, where the store stays stale and the freshness gate
+    silences the output instead.
+    """
     target = load_registers("config/registers.json").dtsu_target
     context = build_context(target, slave_id=1)
-    update_datastore(context, 1, {}, target)  # no values -> no crash
-    regs = context[1].getValues(3, target.points["u_l1"].addr, count=2)
-    assert regs == [0, 0]
+    update_datastore(context, 1, _full(u_l1=230.0), target)
+    before = context[1].getValues(3, target.points["u_l1"].addr, count=2)
+
+    partial = _full(u_l1=400.0)
+    del partial["p_total"]
+    with pytest.raises(KeyError, match="p_total"):
+        update_datastore(context, 1, partial, target)
+
+    assert context[1].getValues(3, target.points["u_l1"].addr, count=2) == before
+
+
+def test_update_datastore_names_every_missing_key_at_once():
+    target = load_registers("config/registers.json").dtsu_target
+    context = build_context(target, slave_id=1)
+    with pytest.raises(KeyError) as excinfo:
+        update_datastore(context, 1, {}, target)
+    message = str(excinfo.value)
+    assert "u_l1" in message and "p_total" in message
 
 
 def test_static_registers_absent_without_dtsu_cfg():
@@ -480,7 +524,7 @@ def test_recording_context_records_reads_and_delegates():
     target = load_registers("config/registers.json").dtsu_target
     activity = RtuActivity()
     context = build_context(target, slave_id=1, activity=activity)
-    update_datastore(context, 1, {"u_l1": 230.0}, target)
+    update_datastore(context, 1, _full(u_l1=230.0), target)
     addr = target.points["u_l1"].addr
 
     regs = context[1].getValues(3, addr, count=2)

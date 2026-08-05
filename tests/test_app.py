@@ -20,13 +20,25 @@ from nd45_dtsu666.dtsu_server import RecordingSlaveContext, RtuActivity, build_c
 from nd45_dtsu666.watchdog import Heartbeat
 
 
+def _full(**overrides) -> dict[str, float]:
+    """A complete canonical sample -- update_datastore rejects a partial one."""
+    names = {
+        pt.from_
+        for _name, side in load_registers("config/registers.json").targets
+        for pt in side.points.values()
+    }
+    values = dict.fromkeys(names, 0.0)
+    values.update(overrides)
+    return values
+
+
 def test_on_update_writes_store_and_datastore():
     target = load_registers("config/registers.json").dtsu_target
     store = CanonicalStore()
     context = build_context(target, slave_id=1)
     on_update = build_on_update(store, context, 1, target)
 
-    on_update({"u_l1": 230.0}, ts=5.0)
+    on_update(_full(u_l1=230.0), ts=5.0)
 
     values, ts = store.snapshot()
     assert values["u_l1"] == 230.0 and ts == 5.0
@@ -54,7 +66,7 @@ def test_on_update_leaves_store_stale_when_datastore_write_fails():
     # and must NOT have stamped the store fresh -- otherwise the fail-safe would
     # keep serving a half-written datastore as if it were valid.
     with pytest.raises(RuntimeError):
-        on_update({"u_l1": 230.0}, ts=5.0)
+        on_update(_full(u_l1=230.0), ts=5.0)
     values, ts = store.snapshot()
     assert values == {}
     assert math.isnan(ts)  # never stamped -> age() stays infinite -> fail-safe
