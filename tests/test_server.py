@@ -12,6 +12,7 @@ from nd45_dtsu666.dtsu_server import (
     WireActivity,
     _server_action,
     build_context,
+    encode_target_point,
     make_serial_server,
     make_server,
     make_tcp_server,
@@ -60,6 +61,14 @@ def test_update_datastore_divides_classic_ct_points_by_ct_ratio():
     # classic (secondary-side) p_total: (40000/200) W x10 scale = 2000.0 raw
     regs = context[1].getValues(3, target.points["p_total"].addr, count=2)
     assert registers_to_float(regs, "big", "big") == pytest.approx(2000.0)
+
+
+@pytest.mark.parametrize("bad_ratio", [0.0, -200.0, float("nan"), float("inf")])
+def test_encode_target_point_rejects_a_non_positive_or_non_finite_ct_ratio(bad_ratio):
+    target = load_registers("config/registers.json").dtsu_target
+    point = target.points["p_total"]  # classic (secondary-side) point: divide_by_ct=True
+    with pytest.raises(ValueError, match="CT ratio"):
+        encode_target_point(1500.0, point, target, ct_ratio=bad_ratio)
 
 
 def test_update_datastore_default_ct_ratio_is_a_no_op():

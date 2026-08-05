@@ -1,7 +1,7 @@
 import pytest
 
-from nd45_dtsu666.config import load_registers
-from nd45_dtsu666.diagnostics import _synthetic_values, render_table
+from nd45_dtsu666.config import load_config, load_registers
+from nd45_dtsu666.diagnostics import _synthetic_values, render_table, select_bridge
 
 
 def test_render_table_contains_key_columns_and_values():
@@ -41,6 +41,26 @@ def test_render_table_matches_ct_divided_coarse_energy_encoding():
 
     coarse_line = next(line for line in table.splitlines() if "4096" in line)
     assert coarse_line.split()[-1] == "123.0"
+
+
+# --- select_bridge (the shared --bridge resolver for diag/selftest/static) ---
+
+
+def test_select_bridge_defaults_to_the_first_bridge():
+    config = load_config("config/config.json")
+    assert select_bridge(config, None).name == config.bridge_specs[0].name
+
+
+def test_select_bridge_returns_the_named_bridge():
+    config = load_config("config/config.json")
+    spec = select_bridge(config, "smartlogger")
+    assert spec.name == "smartlogger"
+
+
+def test_select_bridge_rejects_an_unknown_name():
+    config = load_config("config/config.json")
+    with pytest.raises(SystemExit, match="unknown bridge 'bogus' \\(configured: nd45, smartlogger\\)"):
+        select_bridge(config, "bogus")
 
 
 def test_synthetic_values_cover_every_dtsu_target_source():
