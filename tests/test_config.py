@@ -21,7 +21,9 @@ from nd45_dtsu666.config import (
     SourcePoint,
     SourceSide,
     StaticDebugConf,
+    StaticIdentityPoint,
     TargetPoint,
+    TargetSide,
     load_config,
     load_registers,
 )
@@ -194,6 +196,28 @@ def test_load_registers_reads_sigen_identity():
     assert handshake.static_value == 5376
 
 
+def test_static_identity_point_rejects_non_ascii_value():
+    with pytest.raises(ValidationError, match="ASCII characters only"):
+        StaticIdentityPoint(addr=1, type="ascii", static_value="café", length=4)
+
+
+def test_static_identity_point_rejects_ascii_value_too_long_for_its_length():
+    with pytest.raises(ValidationError, match="does not fit"):
+        StaticIdentityPoint(addr=1, type="ascii", static_value="TOOLONG", length=2)
+
+
+def test_static_identity_point_rejects_uint32_value_out_of_range():
+    with pytest.raises(ValidationError, match="0..0xFFFFFFFF"):
+        StaticIdentityPoint(addr=1, type="uint32", static_value=0x1_0000_0000)
+
+
+def test_static_identity_point_rejects_uint32_point_with_a_length_set():
+    # length is an ascii-only field; setting it on a uint32 point is a config
+    # mistake the validator must catch rather than silently ignore.
+    with pytest.raises(ValidationError, match="0..0xFFFFFFFF"):
+        StaticIdentityPoint(addr=1, type="uint32", static_value=42, length=1)
+
+
 def test_load_config_reads_seed():
     cfg = load_config("config/config.json")
     nd45 = cfg.bridge_specs[0]
@@ -294,6 +318,24 @@ def test_target_point_defaults(tmp_path):
     assert pf.divide_by_ct is False
     assert pf.zero_low_word is False
     assert TargetPoint(addr=1, **{"from": "x"}).zero_low_word is False
+
+
+def test_target_side_rejects_overlapping_point_addresses():
+    # point "a" occupies registers 100-101 (float32); point "b" starts at 101,
+    # one register into "a" -- a real config typo this validator exists to catch.
+    with pytest.raises(ValidationError, match="overlap"):
+        TargetSide(points={
+            "a": {"addr": 100, "from": "u_l1"},
+            "b": {"addr": 101, "from": "u_l2"},
+        })
+
+
+def test_target_side_allows_adjacent_non_overlapping_point_addresses():
+    side = TargetSide(points={
+        "a": {"addr": 100, "from": "u_l1"},
+        "b": {"addr": 102, "from": "u_l2"},
+    })
+    assert side.points["b"].addr == 102
 
 
 def test_dtsu_identity_conf_rejects_non_positive_ir_at():
