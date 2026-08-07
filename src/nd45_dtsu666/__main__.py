@@ -147,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
         help="run every bridge, showing the Huawei SmartLogger bridge's dashboard",
     )
     sub.add_parser(
+        "monitor_etango",
+        help="run every bridge, showing the eTango bridge's dashboard",
+    )
+    sub.add_parser(
         "rtudebug", help="run every bridge, tracing register reads on one of them"
     )
     sub.add_parser(
@@ -175,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_monitor(args, source_type="nd45")
     if args.command == "monitor_hsm":
         return _cmd_monitor(args, source_type="huawei")
+    if args.command == "monitor_etango":
+        return _cmd_monitor(args, source_type="etango")
     if args.command == "rtudebug":
         return _cmd_rtudebug(args)
     if args.command == "static":

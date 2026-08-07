@@ -131,12 +131,21 @@ def _since(ts: float | None, now: float) -> float:
     return math.inf if ts is None else now - ts
 
 
+_SOURCE_KIND = {
+    "nd45": "ND45",
+    "huawei": "Huawei SmartLogger",
+    "etango": "CHINT e2TANGO (4x)",
+}
+
+
 def source_kind(spec: BridgeConf) -> str:
-    return "ND45" if spec.source.type == "nd45" else "Huawei SmartLogger"
+    return _SOURCE_KIND[spec.source.type]
 
 
 def source_desc(spec: BridgeConf) -> str:
     src = spec.source
+    if src.type == "etango":
+        return ", ".join(f"{d.host}:{d.port}/{d.unit_id}" for d in src.devices)
     return f"{src.host}:{src.port} unit {src.unit_id}"
 
 

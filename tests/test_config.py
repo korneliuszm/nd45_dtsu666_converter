@@ -12,6 +12,8 @@ from nd45_dtsu666.config import (
     DtsuIdentityConf,
     DtsuRtuConf,
     DtsuTcpConf,
+    EtangoDeviceConf,
+    EtangoSourceConf,
     HuaweiSourceConf,
     Nd45Conf,
     Nd45SourceConf,
@@ -438,6 +440,22 @@ def test_register_map_huawei_sections_are_optional():
     assert stripped.huawei_meter_source is None
 
 
+def test_register_map_etango_section_is_optional():
+    """Every registers.json written before this source landed must still load."""
+    minimal = load_registers("config/registers.json").model_dump(by_alias=True)
+    del minimal["etango_source"]
+    stripped = RegisterMap.model_validate(minimal)
+    assert stripped.etango_source is None
+
+
+def test_source_point_aggregate_defaults_to_avg():
+    assert SourcePoint(addr=1).aggregate == "avg"
+
+
+def test_derive_op_aggregate_defaults_to_avg():
+    assert DeriveOp(op="constant", targets=["x"], value=1.0).aggregate == "avg"
+
+
 def test_source_point_rejects_compose_with_an_integer_dtype():
     with pytest.raises(ValidationError, match="only supported for dtype 'float32'"):
         SourcePoint.model_validate({"compose": [100, 102], "dtype": "i32"})
@@ -720,6 +738,85 @@ def test_source_defaults_reflect_each_device_s_own_timing():
     assert nd45.register_map == "nd45_source"
     assert huawei.register_map == "huawei_plant_source"
     assert huawei.unit_id == 0  # the SmartLogger's own aggregated registers
+
+
+def test_etango_source_conf_requires_at_least_one_device():
+    with pytest.raises(ValidationError, match="at least one entry in 'devices'"):
+        EtangoSourceConf(type="etango", devices=[])
+
+
+def test_etango_source_conf_requires_at_least_one_aggregating_device():
+    with pytest.raises(ValidationError, match="no device with aggregate=true"):
+        EtangoSourceConf(
+            type="etango",
+            devices=[EtangoDeviceConf(host="192.168.30.5", aggregate=False)],
+        )
+
+
+def test_etango_source_conf_accepts_a_device_list():
+    source = EtangoSourceConf(
+        type="etango",
+        devices=[
+            EtangoDeviceConf(host="192.168.30.5"),
+            EtangoDeviceConf(host="192.168.30.7"),
+            EtangoDeviceConf(host="192.168.30.9"),
+            EtangoDeviceConf(host="192.168.30.11"),
+        ],
+    )
+    assert [d.host for d in source.devices] == [
+        "192.168.30.5", "192.168.30.7", "192.168.30.9", "192.168.30.11",
+    ]
+    assert source.register_map == "etango_source"
+    assert (source.poll_interval_s, source.timeout_s) == (2.0, 3.0)
+
+
+THIRD_BRIDGE = {
+    "name": "etango",
+    "source": {
+        "type": "etango",
+        "devices": [
+            {"host": "192.168.30.5"},
+            {"host": "192.168.30.7"},
+            {"host": "192.168.30.9"},
+            {"host": "192.168.30.11"},
+        ],
+    },
+    "dtsu": {"transport": "rtu", "slave_id": 10, "rtu": {"port": "/dev/ttyAMA5"}},
+    "safety": {"max_data_age_s": 10.0},
+}
+
+
+def test_an_enabled_etango_bridge_with_no_aggregating_device_host_is_rejected():
+    """An aggregating device with a blank host: BridgeConf's own check, distinct
+    from EtangoSourceConf's "no aggregating device at all" check."""
+    empty_host = {
+        **THIRD_BRIDGE,
+        "source": {"type": "etango", "devices": [{"host": "  ", "aggregate": True}]},
+    }
+    with pytest.raises(ValidationError, match="no aggregating etango device"):
+        AppConfig.model_validate(_with_bridges(SECOND_BRIDGE, empty_host))
+
+
+def test_a_disabled_etango_bridge_may_ship_with_empty_device_hosts():
+    template = {
+        **THIRD_BRIDGE, "enabled": False,
+        "source": {"type": "etango", "devices": [{"host": ""}]},
+    }
+    config = AppConfig.model_validate(_with_bridges(template))
+    assert [b.name for b in config.bridge_specs] == ["nd45"]
+
+
+def test_an_enabled_etango_bridge_appears_in_bridge_specs():
+    config = AppConfig.model_validate(_with_bridges(SECOND_BRIDGE, THIRD_BRIDGE))
+    assert [b.name for b in config.bridge_specs] == ["nd45", "smartlogger", "etango"]
+
+
+def test_etango_source_conf_freshness_threshold_check_uses_poll_interval_s():
+    raw = _with_bridges(
+        SECOND_BRIDGE, {**THIRD_BRIDGE, "safety": {"max_data_age_s": 1.0}}
+    )
+    with pytest.raises(ValidationError, match="at least twice"):
+        AppConfig.model_validate(raw)
 
 
 def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():

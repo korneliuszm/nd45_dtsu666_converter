@@ -128,21 +128,22 @@ WATCHED_POINTS = ("p_total", "q_total", "pf_total", "u_l1", "i_l1", "freq")
 
 def _run_diag(registers, spec: BridgeConf, interval: float = 1.0) -> int:
     """Poll one bridge's source and print the decoded table. Serves nothing."""
-    from pymodbus.client import AsyncModbusTcpClient
-
-    from .app import _POLL_ONCE
+    from .app import _make_client_factory, _POLL_ONCE, _VALIDATE_COVERAGE
+    from .config import EtangoSourceConf
 
     source_side = registers.source_by_name(spec.source.register_map)
-    if spec.source.type == "nd45":
-        from .nd45_poller import validate_source_coverage
-    else:
-        from .huawei_poller import validate_source_coverage
-    validate_source_coverage(source_side)
+    _VALIDATE_COVERAGE[spec.source.type](source_side)
     poll_once = _POLL_ONCE[spec.source.type]
 
+    if isinstance(spec.source, EtangoSourceConf):
+        where = "@ " + ", ".join(
+            f"{d.host}:{d.port}/{d.unit_id}" for d in spec.source.devices
+        )
+    else:
+        where = f"@ {spec.source.host}:{spec.source.port} unit {spec.source.unit_id}"
+
     async def _main() -> None:
-        client = AsyncModbusTcpClient(spec.source.host, port=spec.source.port,
-                                      timeout=spec.source.timeout_s)
+        client = _make_client_factory(spec)()
         await client.connect()
         stats = SampleStats(WATCHED_POINTS, window=600)
         try:
@@ -158,7 +159,7 @@ def _run_diag(registers, spec: BridgeConf, interval: float = 1.0) -> int:
                 stats.record(values)
                 print("\033[2J\033[H", end="")  # clear screen
                 print(f"bridge {spec.name!r}  source {spec.source.type} "
-                      f"@ {spec.source.host}:{spec.source.port} unit {spec.source.unit_id}"
+                      f"{where}"
                       f"   polling every {interval:g}s "
                       f"(the bridge itself uses {spec.source.poll_interval_s:g}s)")
                 print(

@@ -19,6 +19,7 @@ from nd45_dtsu666.app import build_pipeline, supervise_poller
 from nd45_dtsu666.canonical import HealthGate
 from nd45_dtsu666.config import AppConfig, load_config, load_registers
 from nd45_dtsu666.dtsu_server import supervise_server
+from nd45_dtsu666.etango_poller import DeviceLink, MultiHostClient
 from nd45_dtsu666.metrics import ServerStatus
 
 REGISTERS = load_registers("config/registers.json")
@@ -60,6 +61,101 @@ def two_bridge_config(**overrides) -> AppConfig:
     raw["bridges"][0]["safety"]["check_interval_s"] = 0.01
     raw["bridges"] = [raw["bridges"][0], {**SMARTLOGGER_BRIDGE, **overrides}]
     return AppConfig.model_validate(raw)
+
+
+ETANGO_BRIDGE = {
+    "name": "etango",
+    "enabled": True,
+    "source": {
+        "type": "etango",
+        "register_map": "etango_source",
+        "poll_interval_s": 2.0,
+        "stall_timeout_s": 30.0,
+        "devices": [
+            {"host": "192.168.30.5", "unit_id": 1, "aggregate": True},
+            {"host": "192.168.30.7", "unit_id": 1, "aggregate": True},
+            {"host": "192.168.30.9", "unit_id": 1, "aggregate": True},
+            {"host": "192.168.30.11", "unit_id": 1, "aggregate": True},
+        ],
+    },
+    "dtsu": {
+        "transport": "rtu",
+        "slave_id": 10,
+        "identity": {"ir_at": 200},
+        "rtu": {"port": "/dev/ttyAMA5"},
+    },
+    "safety": {"max_data_age_s": 10.0, "check_interval_s": 0.01},
+}
+
+
+def three_bridge_config(**overrides) -> AppConfig:
+    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
+    raw["bridges"][0]["safety"]["check_interval_s"] = 0.01
+    raw["bridges"] = [
+        raw["bridges"][0], SMARTLOGGER_BRIDGE, {**ETANGO_BRIDGE, **overrides},
+    ]
+    return AppConfig.model_validate(raw)
+
+
+class FakeEtangoDeviceClient:
+    """FC04 stand-in for one e2TANGO controller (see FakeSourceClient)."""
+
+    connected = True
+
+    def __init__(self):
+        self.requests = 0
+        self.closed = 0
+
+    async def connect(self):
+        return True
+
+    async def read_input_registers(self, address, count, slave=0):
+        self.requests += 1
+
+        class _Resp:
+            registers = [0] * count
+
+            def isError(self):
+                return False
+
+        return _Resp()
+
+    def close(self):
+        self.closed += 1
+
+
+def fake_multi_host_client() -> MultiHostClient:
+    return MultiHostClient([
+        DeviceLink(client=FakeEtangoDeviceClient(), unit_id=1, aggregate=True, host=host)
+        for host in ("192.168.30.5", "192.168.30.7", "192.168.30.9", "192.168.30.11")
+    ])
+
+
+class HangingEtangoDeviceClient:
+    """FC04 stand-in whose reads never return (see HangingClient)."""
+
+    connected = True
+
+    def __init__(self):
+        self.closed = 0
+        self.calls = 0
+
+    async def connect(self):
+        return True
+
+    async def read_input_registers(self, address, count, slave=0):
+        self.calls += 1
+        await asyncio.Event().wait()  # never returns
+
+    def close(self):
+        self.closed += 1
+
+
+def hanging_multi_host_client() -> MultiHostClient:
+    return MultiHostClient([
+        DeviceLink(client=HangingEtangoDeviceClient(), unit_id=1, aggregate=True, host=host)
+        for host in ("192.168.30.5", "192.168.30.7", "192.168.30.9", "192.168.30.11")
+    ])
 
 
 class FakeServer:
@@ -495,6 +591,98 @@ def test_config_rejects_two_bridges_on_one_serial_port():
                 "rtu": {"port": "/dev/ttyAMA2"},  # same port as the ND45 bridge
             }
         )
+
+
+# --- three bridges: nd45 + smartlogger + etango -----------------------------
+
+
+async def test_a_stale_etango_bridge_silences_only_its_own_output():
+    """The third source type must fail independently too, same as SmartLogger."""
+    config = three_bridge_config()
+    clock = {"t": 1000.0}
+    ages = {"nd45": 0.5, "smartlogger": 2.0, "etango": 60.0}
+    stop, servers, statuses, tasks = await _run_two_supervisors(config, ages, clock)
+    try:
+        await _settle()
+        assert statuses["nd45"].running is True
+        assert statuses["smartlogger"].running is True
+        assert statuses["etango"].running is False
+        assert servers["etango"].serving is False
+    finally:
+        stop.set()
+        await asyncio.gather(*tasks)
+
+
+async def test_build_pipeline_accepts_an_injected_multi_host_client():
+    """build_pipeline's `clients=` injection must accept an etango-shaped client
+    (MultiHostClient wrapping several fakes), not just a single-host fake."""
+    config = three_bridge_config()
+    stop = asyncio.Event()
+    etango_client = fake_multi_host_client()
+    pipe = build_pipeline(
+        config, REGISTERS, stop,
+        clients={
+            "nd45": FakeSourceClient(),
+            "smartlogger": FakeSourceClient(),
+            "etango": etango_client,
+        },
+    )
+    _close_coros(pipe)
+    etango = pipe.bridge("etango")
+    assert etango.client is etango_client
+    assert len(etango.client.devices) == 4
+
+
+async def test_recovering_the_etango_bridge_leaves_its_siblings_polling(monkeypatch):
+    """A rebuild of the third bridge must not disturb the other two."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    config = three_bridge_config()
+    stop = asyncio.Event()
+    nd45_client = FakeSourceClient()
+    pipe = build_pipeline(
+        config, REGISTERS, stop,
+        clients={
+            "nd45": nd45_client,
+            "smartlogger": FakeSourceClient(),
+            "etango": hanging_multi_host_client(),
+        },
+    )
+    _close_coros(pipe)
+    nd45, _smart, etango = pipe.bridges
+    etango.client_factory = hanging_multi_host_client
+    etango_clock = {"t": 0.0}
+    nd45_clock = {"t": 0.0}
+
+    async def _no_connect(client, stop_event, *args, **kwargs):
+        return True
+
+    stalled = asyncio.create_task(
+        supervise_poller(
+            etango, REGISTERS, stop,
+            on_update=lambda values, ts: None, on_error=lambda exc: None,
+            now=lambda: etango_clock["t"], connect=_no_connect,
+        )
+    )
+    healthy = asyncio.create_task(
+        supervise_poller(
+            nd45, REGISTERS, stop,
+            on_update=lambda values, ts: nd45.heartbeat.touch(nd45_clock["t"]),
+            on_error=lambda exc: None,
+            now=lambda: nd45_clock["t"], connect=_no_connect,
+        )
+    )
+    try:
+        await _settle(0.12)
+        before = nd45_client.requests
+        etango_clock["t"] = 31.0  # only the etango bridge stalls (stall_timeout_s=30.0)
+        await _settle(0.3)
+
+        assert etango.recovery.restarts >= 1
+        assert nd45.recovery.restarts == 0
+        assert nd45_client.requests > before
+    finally:
+        stop.set()
+        await asyncio.gather(stalled, healthy)
 
 
 async def test_recovery_reconnect_keeps_the_watchdog_heartbeat_alive(monkeypatch):
