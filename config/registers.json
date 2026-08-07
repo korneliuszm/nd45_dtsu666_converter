@@ -149,7 +149,7 @@
     "address_offset": 0,
     "read_groups": [
       {"base": 0, "count": 32},
-      {"base": 48, "count": 18}
+      {"base": 48, "count": 6}
     ],
     "points": {
       "i_l1":  {"addr": 0,  "aggregate": "avg"},
@@ -169,22 +169,20 @@
       "reactive_exp_energy_total": {"addr": 30, "scale": 0.001, "aggregate": "sum"},
       "u_l1": {"addr": 48, "aggregate": "avg"},
       "u_l2": {"addr": 50, "aggregate": "avg"},
-      "u_l3": {"addr": 52, "aggregate": "avg"},
-      "p_l1": {"addr": 54, "sign": -1, "aggregate": "sum"},
-      "p_l2": {"addr": 56, "sign": -1, "aggregate": "sum"},
-      "p_l3": {"addr": 58, "sign": -1, "aggregate": "sum"},
-      "q_l1": {"addr": 60, "sign": -1, "aggregate": "sum"},
-      "q_l2": {"addr": 62, "sign": -1, "aggregate": "sum"},
-      "q_l3": {"addr": 64, "sign": -1, "aggregate": "sum"}
+      "u_l3": {"addr": 52, "aggregate": "avg"}
     },
     "derive": [
-      {"op": "hypot",
-       "targets": ["s_l1", "s_l2", "s_l3"],
-       "from": ["p_l1", "q_l1", "p_l2", "q_l2", "p_l3", "q_l3"],
+      {"op": "split_equal",
+       "targets": ["p_l1", "p_l2", "p_l3"], "from": ["p_total"],
        "aggregate": "sum"},
-      {"op": "pf_from_p_s",
-       "targets": ["pf_l1", "pf_l2", "pf_l3"],
-       "from": ["p_l1", "s_l1", "p_l2", "s_l2", "p_l3", "s_l3"],
+      {"op": "split_equal",
+       "targets": ["q_l1", "q_l2", "q_l3"], "from": ["q_total"],
+       "aggregate": "sum"},
+      {"op": "split_equal",
+       "targets": ["s_l1", "s_l2", "s_l3"], "from": ["s_total"],
+       "aggregate": "sum"},
+      {"op": "copy",
+       "targets": ["pf_l1", "pf_l2", "pf_l3"], "from": ["pf_total"],
        "aggregate": "avg"},
       {"op": "split_equal",
        "targets": ["imp_energy_l1", "imp_energy_l2", "imp_energy_l3"],
