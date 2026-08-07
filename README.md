@@ -3,8 +3,10 @@
 Temporary Modbus bridge: one or more independent source → DTSU666 translators, each
 served as Modbus RTU or Modbus TCP (config-selectable) so a Sigenergy storage system
 can read it as a "Power Sensor". The deployment here runs two, **as separate systemd
-services**: a Lumel ND45 on `/dev/ttyAMA2` (grid-tie balance) and a Huawei
-SmartLogger on `/dev/ttyAMA4` (PV farm production). See "Independent bridges".
+services**: a Lumel ND45 on `/dev/ttyAMA2` (grid-tie balance) and, on `/dev/ttyAMA4`
+(PV farm production), a second bridge whose source is a config choice — four CHINT
+e2TANGO relays (currently enabled) or a Huawei SmartLogger (shipped disabled as the
+alternative). See "Independent bridges" and "Switching the second bridge's source".
 
 The output exposes both the standard DTSU666 holding-register map over FC03 (secondary/
 CT side, `0x2000`/`0x101E`) and the Sigenergy OEM map over FC04 (primary side, `0x150A`
@@ -73,12 +75,15 @@ A **bridge** is a complete source → DTSU666 translator with its own upstream c
 canonical store, served datastore, freshness gate and output transport. The intended
 deployment here is two, each running as its own systemd service:
 
-| | bridge `nd45` | bridge `smartlogger` |
-|---|---|---|
-| source | Lumel ND45 (Modbus TCP, float32) | Huawei SmartLogger (Modbus TCP) |
-| output | RS-485 `/dev/ttyAMA2` | RS-485 `/dev/ttyAMA4` |
-| what Sigenergy sees | grid-tie balance | PV farm production |
-| `safety.max_data_age_s` | 3.0s (polled every 0.05s) | 30.0s (polled every 1s) |
+| | bridge `nd45` | bridge `etango` | bridge `smartlogger` *(disabled)* |
+|---|---|---|---|
+| source | Lumel ND45 (Modbus TCP, float32) | 4x CHINT e2TANGO (Modbus TCP) | Huawei SmartLogger (Modbus TCP) |
+| output | RS-485 `/dev/ttyAMA2` | RS-485 `/dev/ttyAMA4` | RS-485 `/dev/ttyAMA4` (same bus) |
+| what Sigenergy sees | grid-tie balance | PV farm production | PV farm production |
+| `safety.max_data_age_s` | 3.0s (polled every 0.05s) | 3.0s (polled every 0.2s) | 30.0s (polled every 1s) |
+
+`etango` and `smartlogger` are **alternatives for the same bus**, not siblings —
+exactly one is enabled at a time. See "Switching the second bridge's source".
 
 Two levels of isolation, and both matter:
 
@@ -118,7 +123,7 @@ SmartLogger bridge differ only in their values, so the two are read side by side
   },
   {
     "name": "smartlogger",
-    "enabled": true,
+    "enabled": false,
     "source": {
       "type": "huawei", "host": "192.168.22.15", "port": 502, "unit_id": 0,
       "register_map": "huawei_plant_source",
@@ -131,6 +136,27 @@ SmartLogger bridge differ only in their values, so the two are read side by side
     },
     "safety": {"max_data_age_s": 30.0, "check_interval_s": 0.5},
     "metrics_port": 8082
+  },
+  {
+    "name": "etango",
+    "enabled": true,
+    "source": {
+      "type": "etango", "register_map": "etango_source",
+      "poll_interval_s": 0.2, "timeout_s": 1.0, "stall_timeout_s": 30.0,
+      "devices": [
+        {"host": "192.168.30.5",  "port": 502, "unit_id": 1, "aggregate": true},
+        {"host": "192.168.30.7",  "port": 502, "unit_id": 1, "aggregate": true},
+        {"host": "192.168.30.9",  "port": 502, "unit_id": 1, "aggregate": true},
+        {"host": "192.168.30.11", "port": 502, "unit_id": 1, "aggregate": true}
+      ]
+    },
+    "dtsu": {
+      "transport": "rtu", "slave_id": 10,
+      "identity": {"rev": 103, "ucode": 701, "ir_at": 200, "ur_at": 10},
+      "rtu": {"port": "/dev/ttyAMA4", "baudrate": 9600, "parity": "N", "stopbits": 1}
+    },
+    "safety": {"max_data_age_s": 3.0, "check_interval_s": 0.5},
+    "metrics_port": 8082
   }
 ]
 ```
@@ -138,9 +164,30 @@ SmartLogger bridge differ only in their values, so the two are read side by side
 Outside `bridges` there are only the two process-wide sections, `prometheus` and
 `static_debug`.
 
-Both bridges ship enabled, pointing at this site's sources; set `enabled: false` on
-one to run a single-bridge install. `slave_id` may repeat across bridges (the RS-485
-buses are electrically independent); the serial port may not.
+`slave_id` may repeat across bridges (the RS-485 buses are electrically
+independent); the serial port may not — **among enabled bridges**, which is what
+lets the two second-bridge alternatives share `/dev/ttyAMA4` while only one runs.
+
+An `etango` source is the only multi-host one: instead of `host`/`port`/`unit_id`
+it takes a `devices` list, each entry carrying `aggregate` — the flag marking it as
+part of the group combined into this bridge's single reading. Voltages, currents,
+frequency and power factor are **averaged** across those devices; powers and
+energies are **summed** (apparent power from each relay's own S register, not
+recomputed from the summed P/Q). Which applies to which point is declared in
+`config/registers.json` per point and per derive rule, so it is editable without
+touching code. If any device fails a read, the whole sample is rejected and the
+bridge's data goes stale rather than silently under-reporting the total.
+
+### Switching the second bridge's source
+
+Flip the two `enabled` flags in `config/config.json`, then swap the systemd
+instance (`sudo systemctl disable --now nd45-dtsu666@smartlogger` /
+`enable --now nd45-dtsu666@etango`). Do **not** skip the `disable` — a
+`run --bridge` on a disabled bridge exits with "unknown bridge" and retries every
+5s forever instead of failing visibly. Enabling both at once is rejected at config
+load with "both serve RTU on /dev/ttyAMA4". Full procedure, including the
+overlayroot trap that makes `systemctl enable` evaporate on reboot, is in
+[`docs/DEPLOY.md`](docs/DEPLOY.md) §4.1.
 
 The poll intervals differ by 20x on purpose, and neither number is arbitrary. The
 ND45 refreshes its own registers about every 134 ms (measured 2026-08-04), so
@@ -369,15 +416,17 @@ the plant's control loop, not in this code. That is exactly how the two
 
 ```bash
 python -m nd45_dtsu666 monitor_nd45    # the ND45 bridge's screen
+python -m nd45_dtsu666 monitor_etango  # the eTango bridge's screen
 python -m nd45_dtsu666 monitor_hsm     # the Huawei SmartLogger bridge's screen
 python -m nd45_dtsu666 monitor         # one screen per bridge, stacked
-python -m nd45_dtsu666 --bridge smartlogger monitor   # by name
+python -m nd45_dtsu666 --bridge etango monitor        # by name
 ```
 
 **Every configured bridge runs in all of these** — the flag only chooses what is on
 screen, so watching one bridge never changes the other's timing or leaves its output
-unserved. `monitor_nd45` / `monitor_hsm` resolve by *source type*, so they still find
-the right bridge if you renamed it in `config.json`.
+unserved. `monitor_nd45` / `monitor_hsm` / `monitor_etango` resolve by *source type*,
+so they still find the right bridge if you renamed it in `config.json` (and exit with
+a clear error if that source is not the one currently enabled).
 
 Each screen answers the two questions bring-up actually asks, per bridge:
 
@@ -495,14 +544,18 @@ one service and watching the other keep serving.
 sudo cp systemd/nd45-dtsu666@.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now nd45-dtsu666@nd45
-sudo systemctl enable --now nd45-dtsu666@smartlogger
+sudo systemctl enable --now nd45-dtsu666@etango
 
-systemctl status nd45-dtsu666@smartlogger
-journalctl -u nd45-dtsu666@smartlogger -f
-sudo systemctl restart nd45-dtsu666@smartlogger   # grid-tie meter untouched
+systemctl status nd45-dtsu666@etango
+journalctl -u nd45-dtsu666@etango -f
+sudo systemctl restart nd45-dtsu666@etango   # grid-tie meter untouched
 ```
 
 `%i` is the bridge `name` from `config.json`, passed through as `run --bridge %i`.
+Enable an instance only for a bridge that is `enabled` in the config — one named
+after a disabled bridge exits with "unknown bridge" and, because the unit disables
+systemd's start rate limiting, retries every 5s indefinitely rather than latching
+into `failed` where you would notice it.
 
 **Both instances read the same `config/config.json`, deliberately.** The validators
 that reject two bridges sharing a serial port (or colliding TCP/metrics ports) only

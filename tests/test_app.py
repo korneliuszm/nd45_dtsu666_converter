@@ -360,23 +360,26 @@ def _two_bridge_config(**bridge_overrides):
     return AppConfig.model_validate(raw)
 
 
-def test_shipped_config_builds_both_bridges(monkeypatch):
+def test_shipped_config_builds_every_enabled_bridge(monkeypatch):
     """Regression guard on the live deployment's actual shape.
 
-    Both bridges ship enabled since the SmartLogger bridge went live alongside
-    the ND45 bridge (2026-08-04 cutover) -- a stock install now runs both.
+    Three entries ship, two of them enabled: the ND45 bridge plus one source
+    for the second RS-485 bus. SmartLogger and eTango are alternatives on that
+    bus -- the disabled one stays in the file so the swap is a two-flag edit --
+    so the pipeline must build exactly the enabled pair, whichever it is.
     """
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     config = load_config("config/config.json")
-    assert [b.enabled for b in config.bridges] == [True, True]
+    enabled = [b.name for b in config.bridges if b.enabled]
+    assert len(enabled) == 2, "one service per enabled bridge"
+    assert enabled[0] == "nd45"
 
     pipe = build_pipeline(
         config, load_registers("config/registers.json"), asyncio.Event(),
-        clients={"nd45": object(), "smartlogger": object()},
+        clients={name: object() for name in enabled},
     )
 
-    assert len(pipe.bridges) == 2
-    assert [b.name for b in pipe.bridges] == ["nd45", "smartlogger"]
+    assert [b.name for b in pipe.bridges] == enabled
     assert len(pipe.coros) == 4  # poller + supervisor, per bridge
     for coro in pipe.coros:
         coro.close()
