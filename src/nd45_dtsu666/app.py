@@ -425,12 +425,20 @@ def _bridge_coros(
     reporter = FaultReporter(label=f"bridge {spec.name!r}")
 
     def on_update(values: dict[str, float], ts: float) -> None:
+        # heartbeat first, deliberately: the poll loop itself made progress even
+        # if the datastore write below fails, and a persistent write failure
+        # must not look like a hung await to supervise_poller's stall recovery.
         bridge.heartbeat.touch(time.monotonic())
+        base_on_update(values, ts)
+        # everything below runs only once the write actually succeeds -- a
+        # datastore write failure raises out of base_on_update and lands in the
+        # poller's except -> on_error, so none of this may count as a good poll.
+        # Getting this wrong flip-flops FaultReporter every cycle (a "recovered"
+        # INFO immediately followed by a "failed" WARNING, defeating its whole
+        # point of muting repeats) and records unserved samples into the spread
+        # table the monitor reads.
         reporter.success()  # a good poll clears any active fault state
         bridge.spread.record(values)
-        base_on_update(values, ts)
-        # after base_on_update: a datastore write failure raises out of it and
-        # lands in the poller's except -> on_error, so it must not count as OK
         bridge.poll_stats.record_ok(time.monotonic())
 
     def on_error(exc: Exception) -> None:

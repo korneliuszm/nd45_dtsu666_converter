@@ -308,9 +308,16 @@ def update_datastore(
 
     `ct_ratio` is the configured CT ratio (`dtsu.identity.ir_at`): points with
     `divide_by_ct` (the classic DTSU666 map's secondary-side current, power,
-    and energy points) are divided by it before scaling, since the ND45
-    source and Sigen OEM map (`dtsu_sigen_ext_target`/`_ext_energy`) carry
-    primary-side values. See docs/superpowers/specs for the CT-ratio design.
+    and energy points) are divided by it before scaling, since every current
+    source (ND45, Huawei, etango) is assumed to report primary-side values,
+    which is what the Sigen OEM map (`dtsu_sigen_ext_target`/`_ext_energy`)
+    also carries undivided. This assumption is unverified for etango's four
+    e2TANGO protection relays specifically -- confirm at bring-up. In
+    practice it is low-stakes either way: Sigenergy has been observed reading
+    only `fc=4, addr=5404` (the ext map, `divide_by_ct: false` throughout), so
+    `ir_at` affects only the legacy fc3 block and the served IrAt register,
+    not the numbers Sigenergy actually regulates on. See docs/superpowers/specs
+    for the CT-ratio design.
     """
     slave = context[slave_id]
     pending: list[tuple[int, int, list[int]]] = []
