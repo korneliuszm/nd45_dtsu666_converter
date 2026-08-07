@@ -81,12 +81,10 @@ BASE_IMAGE = {
     48: 230.1,   # u_l1
     50: 230.2,   # u_l2
     52: 230.3,   # u_l3
-    54: 10_000.0,   # p_l1
-    56: 10_000.0,   # p_l2
-    58: 10_000.0,   # p_l3
-    60: 1_500.0,    # q_l1
-    62: 1_700.0,    # q_l2
-    64: 1_800.0,    # q_l3
+    # No addr 54-64: the e2TANGO-450 does not expose per-phase P/Q registers
+    # there (those addresses hold angles/symmetrical components instead --
+    # see the "1.1 Pomiary bieżące" table in the vendor doc). p_l1..3/q_l1..3
+    # are produced entirely by derive (split_equal from the totals).
 }
 
 
@@ -108,9 +106,9 @@ def _multi(images: list[dict[int, float]], aggregate: list[bool] | None = None) 
     ])
 
 
-async def _poll(images, aggregate=None):
+async def _poll(images, aggregate=None, side=None):
     client = _multi(images, aggregate)
-    values = await etango_poller.poll_once(client, SIDE, 0)
+    values = await etango_poller.poll_once(client, side or SIDE, 0)
     return client, values
 
 
@@ -168,13 +166,53 @@ async def test_sums_power_and_energy_across_four_devices():
     assert v["s_total"] == pytest.approx(summed_s_direct)
 
 
-async def test_per_phase_apparent_power_and_pf_are_derived_before_combination():
-    """hypot/pf_from_p_s are non-linear: derive-then-sum != sum-then-derive."""
+async def test_per_phase_power_is_an_equal_split_of_the_total_not_a_measurement():
+    """The e2TANGO-450 has no per-phase P/Q registers (see BASE_IMAGE's note),
+    so p_l1..3/q_l1..3/s_l1..3 are declared as split_equal derives from the
+    totals in etango_source -- an approximation, not a genuine per-phase
+    reading, unlike the meter-behind-SmartLogger map which does measure them.
+    """
     images = [
-        _image({54: 3_000.0, 60: 4_000.0}),  # device 1: p_l1=3000, q_l1=4000 -> s=5000
-        _image({54: 6_000.0, 60: -8_000.0}),  # device 2: p_l1=6000, q_l1=-8000 -> s=10000
+        _image({14: 9_000.0, 16: 300.0}),
+        _image({14: 6_000.0, 16: 900.0}),
     ]
     _client, v = await _poll(images)
+    # p_total/q_total carry sign: -1 (see the sign-convention tests), applied
+    # per device before the split, so the raw positive registers sum negative.
+    assert v["p_l1"] == v["p_l2"] == v["p_l3"] == pytest.approx(-(9_000.0 + 6_000.0) / 3)
+    assert v["q_l1"] == v["q_l2"] == v["q_l3"] == pytest.approx(-(300.0 + 900.0) / 3)
+    assert v["pf_l1"] == v["pf_l2"] == v["pf_l3"] == v["pf_total"]
+
+
+async def test_non_linear_derive_rules_run_before_combination_not_after():
+    """A property of etango_poller.poll_once itself, not of the real
+    e2TANGO-450 map (which only declares linear split_equal/copy derives,
+    since it has no genuine per-phase P/Q to feed a non-linear rule).
+    Exercised with a synthetic source so the ordering guarantee -- correct
+    for ANY map a source might declare -- stays covered even though nothing
+    in the shipped etango_source triggers it today.
+
+    hypot is non-linear: derive-then-sum != sum-then-derive, so this also
+    proves the derive step runs on each device's own reading before
+    combination, not on the already-combined totals.
+    """
+    side = SourceSide.model_validate({
+        "word_order": "little", "byte_order": "big",
+        "read_groups": [{"base": 0, "count": 4}],
+        "points": {
+            "p_l1": {"addr": 0, "aggregate": "sum"},
+            "q_l1": {"addr": 2, "aggregate": "sum"},
+        },
+        "derive": [
+            {"op": "hypot", "targets": ["s_l1"], "from": ["p_l1", "q_l1"],
+             "aggregate": "sum"},
+        ],
+    })
+    images = [
+        {0: 3_000.0, 2: 4_000.0},   # device 1: p=3000, q=4000 -> s=5000
+        {0: 6_000.0, 2: -8_000.0},  # device 2: p=6000, q=-8000 -> s=10000
+    ]
+    _client, v = await _poll(images, side=side)
     derive_then_sum = math.hypot(3_000.0, 4_000.0) + math.hypot(6_000.0, -8_000.0)
     sum_then_derive = math.hypot(3_000.0 + 6_000.0, 4_000.0 + -8_000.0)
     assert derive_then_sum != pytest.approx(sum_then_derive)
@@ -319,8 +357,14 @@ async def test_a_raw_value_at_or_above_overrange_fails_the_whole_sample():
 
 # --- unit table: catches a scale edited without rethinking the vendor unit --
 
-# addr -> (documented signal name, vendor unit), from the e2TANGO Modbus manual
-# ("Protokół MODBUS", 1.1 Pomiary bieżące).
+# addr -> (documented signal name, vendor unit), from the e2TANGO-450 Modbus
+# manual ("Protokół MODBUS", firmware 9.1.1.x, 1.1 Pomiary bieżące). No entry
+# for 0x36-0x40 (54-64): that range holds per-phase angles (phi1..phiU1_3)
+# and symmetrical components in this model, NOT per-phase P/Q as the older
+# e2TANGO (firmware 1.1.11.x) manual documented -- confirmed the two models'
+# maps diverge there, which is exactly what corrupted p_l1..3/q_l1..3 before
+# this was caught. p_l1..3/q_l1..3/s_l1..3 are derived (split_equal from the
+# totals), not read, so they need no entry here at all.
 ETANGO_DOC: dict[int, tuple[str, str]] = {
     0: ("I1", "A"), 2: ("I2", "A"), 4: ("I3", "A"),
     6: ("U12", "V"), 8: ("U23", "V"), 10: ("U31", "V"),
@@ -330,8 +374,6 @@ ETANGO_DOC: dict[int, tuple[str, str]] = {
     24: ("Ec+", "Wh"), 26: ("Ec-", "Wh"),
     28: ("Eb+", "varh"), 30: ("Eb-", "varh"),
     48: ("U1", "V"), 50: ("U2", "V"), 52: ("U3", "V"),
-    54: ("P1", "W"), 56: ("P2", "W"), 58: ("P3", "W"),
-    60: ("Q1", "var"), 62: ("Q2", "var"), 64: ("Q3", "var"),
 }
 
 # vendor unit -> multiplier onto this project's canonical unit for that
