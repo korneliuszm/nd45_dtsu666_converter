@@ -44,7 +44,7 @@
     },
     {
       "name": "smartlogger",
-      "enabled": true,
+      "enabled": false,
       "source": {
         "type": "huawei",
         "host": "192.168.22.15",
@@ -79,6 +79,51 @@
       },
       "safety": {
         "max_data_age_s": 30.0,
+        "check_interval_s": 0.5,
+        "min_restart_interval_s": 5.0
+      },
+      "metrics_port": 8082
+    },
+    {
+      "name": "etango",
+      "enabled": true,
+      "source": {
+        "type": "etango",
+        "register_map": "etango_source",
+        "poll_interval_s": 0.2,
+        "timeout_s": 1.0,
+        "reconnect_delay_s": 1.0,
+        "reconnect_delay_max_s": 30.0,
+        "stall_timeout_s": 30.0,
+        "devices": [
+          {"host": "192.168.30.5", "port": 502, "unit_id": 1, "aggregate": true},
+          {"host": "192.168.30.7", "port": 502, "unit_id": 1, "aggregate": true},
+          {"host": "192.168.30.9", "port": 502, "unit_id": 1, "aggregate": true},
+          {"host": "192.168.30.11", "port": 502, "unit_id": 1, "aggregate": true}
+        ]
+      },
+      "dtsu": {
+        "transport": "rtu",
+        "slave_id": 10,
+        "identity": {
+          "rev": 103,
+          "ucode": 701,
+          "ir_at": 200,
+          "ur_at": 10,
+          "disp": 10,
+          "b_lcd": 1,
+          "endian": 4,
+          "protocol": 0
+        },
+        "rtu": {
+          "port": "/dev/ttyAMA4",
+          "baudrate": 9600,
+          "parity": "N",
+          "stopbits": 1
+        }
+      },
+      "safety": {
+        "max_data_age_s": 3.0,
         "check_interval_s": 0.5,
         "min_restart_interval_s": 5.0
       },

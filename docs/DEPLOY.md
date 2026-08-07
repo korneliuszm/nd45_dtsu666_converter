@@ -1,9 +1,12 @@
 # nd45_hsm_dtsu666 -- Deployment Guide
 
-Modbus bridge: Lumel ND45 (grid-tie meter, TCP) and Huawei SmartLogger (PV farm,
-TCP) each re-served as a CHINT DTSU666 power meter over RS-485, so a Sigenergy
-battery system can read them as its "Power Sensor". Two independent bridges,
-two independent RS-485 buses, one process **per bridge**.
+Modbus bridge: a Lumel ND45 (grid-tie meter, TCP) and a second source -- either
+a Huawei SmartLogger (PV farm, TCP) or four CHINT e2TANGO relays (TCP,
+averaged/summed into one reading) -- each re-served as a CHINT DTSU666 power
+meter over RS-485, so a Sigenergy battery system can read them as its "Power
+Sensor". Two independent bridges, two independent RS-485 buses, one process
+**per bridge**. Which source feeds the second bridge is a config choice; see
+§4.1 for switching between them.
 
 Written 2026-08-04 after cutting this host (`wgro1`) over from a stale,
 single-bridge, pre-refactor install to the current `nd45_hsm_dtsu666` codebase.
@@ -170,7 +173,7 @@ W=/etc/systemd/system/multi-user.target.wants
 cp /path/to/nd45-dtsu666@.service /etc/systemd/system/    # see note below
 chmod 644 /etc/systemd/system/nd45-dtsu666@.service
 ln -sfn /etc/systemd/system/nd45-dtsu666@.service $W/nd45-dtsu666@nd45.service
-ln -sfn /etc/systemd/system/nd45-dtsu666@.service $W/nd45-dtsu666@smartlogger.service
+ln -sfn /etc/systemd/system/nd45-dtsu666@.service $W/nd45-dtsu666@etango.service
 EOF
 ```
 
@@ -257,8 +260,12 @@ One bridge at a time, nothing else running against that source:
 
 ```bash
 .venv/bin/python -m nd45_dtsu666 --bridge nd45 diag --interval 0.05       # match source.poll_interval_s
-.venv/bin/python -m nd45_dtsu666 --bridge smartlogger diag --interval 1.0
+.venv/bin/python -m nd45_dtsu666 --bridge etango diag --interval 0.2      # or --bridge smartlogger, whichever is enabled
 ```
+
+For the eTango bridge this screen is also where the four controllers' combined
+reading is first sanity-checked: voltages/currents/frequency/PF should read
+like a plausible *average* of the four, and P/Q/S/energies like their *sum*.
 
 Watch the "spread over N samples" table at the bottom for implausible
 peak-to-peak / sign flips. See `README.md` "Diagnostics" section for how to
@@ -275,7 +282,7 @@ sudo systemctl daemon-reload
 
 # bridge names must match config/config.json's bridges[].name
 sudo systemctl enable --now nd45-dtsu666@nd45
-sudo systemctl enable --now nd45-dtsu666@smartlogger
+sudo systemctl enable --now nd45-dtsu666@etango        # the enabled second bridge (see 4.1)
 ```
 
 The unit file as checked in already points at
@@ -291,8 +298,8 @@ survive a reboot** -- neither the copied unit file nor either `enable`. Do
 ### 3.4 Verify
 
 ```bash
-systemctl status nd45-dtsu666@nd45 nd45-dtsu666@smartlogger
-journalctl -u nd45-dtsu666@nd45 -u nd45-dtsu666@smartlogger -f
+systemctl status nd45-dtsu666@nd45 nd45-dtsu666@etango
+journalctl -u nd45-dtsu666@nd45 -u nd45-dtsu666@etango -f
 ```
 
 Expect one "DTSU server started (transport=rtu, data fresh...)" per bridge and
@@ -325,20 +332,47 @@ UI** as well — that is the only end-to-end confirmation.
 For sanity-checking a second device's config against a working one -- **do
 not copy these values**, only the shape:
 
-| | ND45 bridge | SmartLogger bridge |
-|---|---|---|
-| bridge name | `nd45` | `smartlogger` |
-| source type | `nd45` | `huawei` |
-| poll interval | 0.05 s | 1.0 s |
-| `max_data_age_s` | 3.0 s | 30.0 s |
-| RS-485 port | `/dev/ttyAMA2` | `/dev/ttyAMA4` |
-| `slave_id` | 10 | 10 (different bus, fine to repeat) |
-| `metrics_port` | 8081 | 8082 |
+| | ND45 bridge | second bridge: eTango *(enabled)* | second bridge: SmartLogger *(disabled)* |
+|---|---|---|---|
+| bridge name | `nd45` | `etango` | `smartlogger` |
+| source type | `nd45` | `etango` | `huawei` |
+| source address | one host | **four** hosts, `192.168.30.5/7/9/11` | one host |
+| poll interval | 0.05 s | 0.2 s | 1.0 s |
+| `max_data_age_s` | 3.0 s | 3.0 s | 30.0 s |
+| RS-485 port | `/dev/ttyAMA2` | `/dev/ttyAMA4` | `/dev/ttyAMA4` (same bus) |
+| `slave_id` | 10 | 10 (different bus, fine to repeat) | 10 |
+| `metrics_port` | 8081 | 8082 | 8082 (same port) |
 
-The SmartLogger port is `/dev/ttyAMA4` on this host, confirmed against the
+The second RS-485 port is `/dev/ttyAMA4` on this host, confirmed against the
 physical wiring 2026-08-04. (An earlier `/dev/ttyAMA3` in the docs was wrong
 and has been corrected everywhere.) Check your own device's wiring rather than
 trusting any document for this.
+
+### 4.1 Switching the second bridge between SmartLogger and eTango
+
+Both entries ship in `config.json` describing the **same** RS-485 bus and
+metrics port, and **exactly one is enabled**. That is deliberate: the
+collision validators only consider *enabled* bridges, so the idle alternative
+may keep the same port, and switching sources is a two-flag edit rather than a
+rewrite. Enabling both at once is rejected at load time with
+`bridges 'smartlogger' and 'etango' both serve RTU on /dev/ttyAMA4`.
+
+```bash
+# in config/config.json: flip the two "enabled" flags, then swap the services
+sudo systemctl disable --now nd45-dtsu666@smartlogger
+sudo systemctl enable  --now nd45-dtsu666@etango
+```
+
+Two traps, both previously hit for real on this host:
+
+1. **Do not skip the `disable`.** The unit is a template (`%i` = bridge name),
+   and `run --bridge smartlogger` on a disabled bridge exits with
+   `unknown bridge 'smartlogger'`. With `StartLimitIntervalSec=0` the instance
+   never lands in `failed` — it just retries every 5 s forever, noisily, while
+   looking superficially alive in `systemctl list-units`.
+2. **`/etc` here is a tmpfs overlay** (§0.4): both `enable` and `disable`
+   evaporate on reboot unless written through `overlayroot-chroot`. Do them
+   there and confirm with `systemctl is-enabled` on both instances afterwards.
 
 ---
 
@@ -356,7 +390,7 @@ cp /persistence/app/current_modbus_converter/config/registers.json config/
 
 sudo ln -sfn /persistence/app/nd45_hsm_dtsu666_<date-or-tag> \
              /persistence/app/current_modbus_converter
-sudo systemctl restart nd45-dtsu666@nd45 nd45-dtsu666@smartlogger
+sudo systemctl restart nd45-dtsu666@nd45 nd45-dtsu666@etango
 ```
 
 Verify per §3.4, then optionally remove the old version directory once
@@ -368,7 +402,7 @@ re-copy and `daemon-reload` before restarting.
 ```bash
 sudo ln -sfn /persistence/app/<previous-version-dir> \
              /persistence/app/current_modbus_converter
-sudo systemctl restart nd45-dtsu666@nd45 nd45-dtsu666@smartlogger
+sudo systemctl restart nd45-dtsu666@nd45 nd45-dtsu666@etango
 ```
 
 ---
@@ -385,7 +419,8 @@ sudo systemctl restart nd45-dtsu666@nd45 nd45-dtsu666@smartlogger
   anything -- safe to archive/delete once this cutover has proven itself.
 - `/persistence/app/current_modbus_converter` now points at
   `/persistence/app/nd45_hsm_dtsu666`.
-- Both bridges run as `nd45-dtsu666@nd45` / `nd45-dtsu666@smartlogger`.
+- Both bridges run as `nd45-dtsu666@nd45` / `nd45-dtsu666@etango`
+  (`@smartlogger` is the disabled alternative for the second bus -- see 4.1).
 - Two "corruption" incidents were written up during this cutover and both were
   later retracted (§0.1). The workaround for one of them -- disabling the
   read-activity tracker in `build_bridge` -- has been **reverted**; the tracker

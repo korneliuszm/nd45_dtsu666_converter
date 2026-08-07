@@ -52,14 +52,20 @@ def test_select_bridge_defaults_to_the_first_bridge():
 
 
 def test_select_bridge_returns_the_named_bridge():
+    # The second bridge's name is read from the config rather than hardcoded:
+    # which source feeds it is a config choice (huawei or etango), and this
+    # test is about name resolution, not about which meter is wired up today.
     config = load_config("config/config.json")
-    spec = select_bridge(config, "smartlogger")
-    assert spec.name == "smartlogger"
+    second = config.bridge_specs[1].name
+    assert select_bridge(config, second).name == second
 
 
 def test_select_bridge_rejects_an_unknown_name():
     config = load_config("config/config.json")
-    with pytest.raises(SystemExit, match="unknown bridge 'bogus' \\(configured: nd45, smartlogger\\)"):
+    configured = ", ".join(s.name for s in config.bridge_specs)
+    with pytest.raises(
+        SystemExit, match=f"unknown bridge 'bogus' \\(configured: {configured}\\)"
+    ):
         select_bridge(config, "bogus")
 
 

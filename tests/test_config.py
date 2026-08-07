@@ -568,17 +568,41 @@ SECOND_BRIDGE = {
 
 
 def test_every_shipped_bridge_has_the_same_structure():
-    """The point of the uniform layout: nd45 and smartlogger differ only in values."""
+    """The point of the uniform layout: bridges differ only in values.
+
+    Uniformity is required at the *bridge* level -- name/enabled/source/dtsu/
+    safety/metrics_port -- which is what lets one systemd template run any of
+    them. The inside of `source` is deliberately exempt: it is discriminated by
+    `type`, and a multi-host source (etango) carries a `devices` list where a
+    single-host one carries host/port/unit_id.
+    """
     raw = json.load(open("config/config.json", encoding="utf-8"))
     assert set(raw) == {"bridges", "prometheus", "static_debug"}
     shapes = [
-        (tuple(b), tuple(b["source"]), tuple(b["dtsu"]), tuple(b["safety"]))
-        for b in raw["bridges"]
+        (tuple(b), tuple(b["dtsu"]), tuple(b["safety"])) for b in raw["bridges"]
     ]
     assert len(set(shapes)) == 1, "bridge entries must share one key layout"
     assert tuple(raw["bridges"][0]) == (
         "name", "enabled", "source", "dtsu", "safety", "metrics_port"
     )
+
+
+def test_every_shipped_source_has_the_shape_its_type_requires():
+    """Sources differ by type, but each type's own key set must be complete."""
+    raw = json.load(open("config/config.json", encoding="utf-8"))
+    common = {
+        "type", "register_map", "poll_interval_s", "timeout_s",
+        "reconnect_delay_s", "reconnect_delay_max_s", "stall_timeout_s",
+    }
+    for bridge in raw["bridges"]:
+        source = bridge["source"]
+        assert common <= set(source), bridge["name"]
+        if source["type"] == "etango":
+            assert "devices" in source and source["devices"], bridge["name"]
+            for device in source["devices"]:
+                assert {"host", "port", "unit_id", "aggregate"} == set(device)
+        else:
+            assert {"host", "port", "unit_id"} <= set(source), bridge["name"]
 
 
 def test_legacy_keys_become_the_first_bridge():
@@ -819,13 +843,35 @@ def test_etango_source_conf_freshness_threshold_check_uses_poll_interval_s():
         AppConfig.model_validate(raw)
 
 
-def test_shipped_smartlogger_bridge_is_wired_for_the_second_rs485_port():
+def test_the_second_rs485_port_is_served_by_exactly_one_enabled_bridge():
+    """SmartLogger and eTango are alternatives for the same bus, not siblings.
+
+    Both ship wired to /dev/ttyAMA4 with the same metrics port, and exactly one
+    of them is enabled -- which is what makes swapping the second bridge's
+    source a two-flag edit. The collision validators only look at enabled
+    bridges, so the disabled alternative may legally keep the same port.
+    """
     config = load_config("config/config.json")
-    nd45, bridge = config.bridges
-    assert bridge.dtsu.rtu.port == "/dev/ttyAMA4"
-    assert bridge.dtsu.rtu.port != nd45.dtsu.rtu.port
-    assert bridge.source.register_map == "huawei_plant_source"
-    assert bridge.safety.max_data_age_s == 30.0
+    nd45 = config.bridges[0]
+    second = [b for b in config.bridges if b.name in ("smartlogger", "etango")]
+    assert len(second) == 2
+    for bridge in second:
+        assert bridge.dtsu.rtu.port == "/dev/ttyAMA4"
+        assert bridge.dtsu.rtu.port != nd45.dtsu.rtu.port
+        assert bridge.metrics_port == 8082
+    assert [b.name for b in second if b.enabled] == ["etango"]
+
+    smartlogger = next(b for b in second if b.name == "smartlogger")
+    assert smartlogger.source.register_map == "huawei_plant_source"
+    assert smartlogger.safety.max_data_age_s == 30.0
+
+    etango = next(b for b in second if b.name == "etango")
+    assert etango.source.register_map == "etango_source"
+    # four controllers, all part of the group that is averaged/summed
+    assert [d.host for d in etango.source.devices] == [
+        "192.168.30.5", "192.168.30.7", "192.168.30.9", "192.168.30.11",
+    ]
+    assert all(d.aggregate for d in etango.source.devices)
 
 
 def test_two_bridges_may_not_share_a_metrics_port():
@@ -853,14 +899,17 @@ def test_metrics_port_falls_back_to_the_shared_one_when_unset():
 
 
 def test_shipped_config_gives_each_service_its_own_metrics_port():
-    """The two systemd instances must not fight over one scrape port."""
-    raw = load_config("config/config.json").model_dump(mode="json", by_alias=True)
-    raw["bridges"][1]["enabled"] = True
-    raw["bridges"][1]["source"]["host"] = "192.168.22.120"
-    config = AppConfig.model_validate(raw)
-    ports = {s.name: config.metrics_port_for(s.name) for s in config.bridge_specs}
-    assert set(ports) == {"nd45", "smartlogger"}
-    assert None not in ports.values()  # neither falls back to the shared port
+    """The systemd instances must not fight over one scrape port.
+
+    Asserted over whichever bridges are enabled rather than by name, so
+    swapping the second bridge's source in config.json does not touch this.
+    A bridge that fell back to the shared prometheus.port would collide with
+    the first one, which the distinctness check below catches.
+    """
+    config = load_config("config/config.json")
+    specs = config.bridge_specs
+    assert len(specs) >= 2, "the deployment runs one service per enabled bridge"
+    ports = {s.name: config.metrics_port_for(s.name) for s in specs}
     assert len(set(ports.values())) == len(ports)
 
 
