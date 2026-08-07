@@ -33,7 +33,7 @@ import math
 from dataclasses import dataclass, field
 
 from .canonical import apply_derive, compute_derived
-from .codec import decode_point
+from .codec import OVERRANGE, registers_to_float
 from .config import SourceSide
 
 log = logging.getLogger(__name__)
@@ -138,18 +138,36 @@ async def read_groups(
 
 
 def decode_source(
-    source: SourceSide, groups: list[tuple[int, list[int]]]
+    source: SourceSide, groups: list[tuple[int, list[int]]], host: str = ""
 ) -> dict[str, float]:
     """Decode one device's blocks into SI values (before derive).
 
     Every e2TANGO point is float32 -- unlike Huawei there are no sized
     integers in the live-measurement table.
+
+    The over-range test runs on the raw register value, not the scaled
+    result: `codec.OVERRANGE` (1e20) describes a meter's own out-of-range
+    sentinel, and a map `scale` below 1 -- which the energy points now carry
+    (0.001, Wh -> kWh) -- would otherwise shrink a sentinel under the
+    threshold and let it through as a real reading (see
+    `nd45_poller.poll_once` for the identical reasoning on the ND45 side,
+    where the MV/LV voltage scale of 1/37.5 has the same effect). e2TANGO has
+    no documented sentinel; this is a defensive bound, not a confirmed
+    vendor convention, but it is cheap insurance against a garbage-but-finite
+    reading being summed into the combined total and served as real data.
+    `host` is included in the error message only, to identify the offending
+    controller.
     """
     wo, bo = source.word_order, source.byte_order
     values: dict[str, float] = {}
     for key, pt in source.points.items():
         regs = extract_registers(pt.addr, groups, pt.width)
-        values[key] = decode_point(regs, pt.scale, pt.sign, pt.offset, wo, bo)
+        raw = registers_to_float(regs, wo, bo)
+        if not math.isfinite(raw) or abs(raw) >= OVERRANGE:
+            raise PollError(
+                f"e2TANGO device {host} point {key!r} out of range (raw={raw!r})"
+            )
+        values[key] = raw * pt.scale * pt.sign + pt.offset
     return values
 
 
@@ -208,7 +226,7 @@ async def poll_once(
     per_device: list[dict[str, float]] = []
     for link in client.devices:
         groups = await read_groups(link.client, source, link.unit_id, host=link.host)
-        values = decode_source(source, groups)
+        values = decode_source(source, groups, host=link.host)
         apply_derive(values, source.derive)
         for key, value in values.items():
             if not math.isfinite(value):
