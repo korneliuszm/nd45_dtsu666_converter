@@ -117,8 +117,10 @@ async def test_decodes_documented_registers_with_the_cdab_word_order():
     assert v["u_l12"] == pytest.approx(400.1)
     assert v["u_l1"] == pytest.approx(230.1)
     assert v["freq"] == pytest.approx(50.0)
-    assert v["p_total"] == pytest.approx(30_000.0)
-    assert v["pf_total"] == pytest.approx(0.95)
+    # P/Q/PF are sign-inverted by the map (registers hold +30000/+0.95); S is
+    # a magnitude and is never flipped.
+    assert v["p_total"] == pytest.approx(-30_000.0)
+    assert v["pf_total"] == pytest.approx(-0.95)
 
 
 async def test_averages_voltage_current_frequency_pf_across_four_devices():
@@ -132,7 +134,8 @@ async def test_averages_voltage_current_frequency_pf_across_four_devices():
     assert v["i_l1"] == pytest.approx((100.0 + 102.0 + 104.0 + 106.0) / 4)
     assert v["u_l12"] == pytest.approx((400.0 + 402.0 + 404.0 + 406.0) / 4)
     assert v["freq"] == pytest.approx((50.00 + 50.02 + 49.98 + 50.00) / 4)
-    assert v["pf_total"] == pytest.approx((0.90 + 0.92 + 0.94 + 0.96) / 4)
+    # each device's PF is inverted before averaging
+    assert v["pf_total"] == pytest.approx(-(0.90 + 0.92 + 0.94 + 0.96) / 4)
 
 
 async def test_sums_power_and_energy_across_four_devices():
@@ -143,8 +146,10 @@ async def test_sums_power_and_energy_across_four_devices():
         _image({14: -5_000.0, 16: 500.0, 18: 5_025.0, 24: 400.0, 26: 80.0}),
     ]
     _client, v = await _poll(images)
-    assert v["p_total"] == pytest.approx(10_000.0 + 20_000.0 + 30_000.0 - 5_000.0)
-    assert v["q_total"] == pytest.approx(1_000.0 + 2_000.0 - 1_000.0 + 500.0)
+    # P/Q are sign-inverted by the map; each device's own reading is inverted
+    # before summing, so the sum of positive raw registers comes out negative.
+    assert v["p_total"] == pytest.approx(-(10_000.0 + 20_000.0 + 30_000.0 - 5_000.0))
+    assert v["q_total"] == pytest.approx(-(1_000.0 + 2_000.0 - 1_000.0 + 500.0))
     assert v["imp_energy_total"] == pytest.approx(100.0 + 200.0 + 300.0 + 400.0)
     assert v["exp_energy_total"] == pytest.approx(50.0 + 60.0 + 70.0 + 80.0)
     # S is summed straight from each device's own S register, not recomputed
