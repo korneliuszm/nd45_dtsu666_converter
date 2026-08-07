@@ -67,6 +67,10 @@ class SourcePoint(BaseModel):
     # float32 is the ND45 (and default) encoding. The sized integers exist for
     # the Huawei SmartLogger, whose documented "Gain" folds into `scale`.
     dtype: Literal["float32", "u16", "i16", "u32", "i32", "u64", "i64"] = "float32"
+    # How a multi-device source (etango_poller) combines this point across
+    # its aggregating devices. Ignored by single-device sources (nd45,
+    # huawei), where averaging or summing one value is a no-op either way.
+    aggregate: Literal["avg", "sum"] = "avg"
 
     @model_validator(mode="after")
     def _check_shape(self) -> "SourcePoint":
@@ -128,6 +132,10 @@ class DeriveOp(BaseModel):
     from_: list[str] = Field(default_factory=list, alias="from")
     weights: list[str] = Field(default_factory=list)
     value: float | None = None
+    # Same meaning as SourcePoint.aggregate, applied to every target this op
+    # produces (all of an op's targets share one physical kind, e.g. per-phase
+    # apparent power, so one mode per op is sufficient).
+    aggregate: Literal["avg", "sum"] = "avg"
 
     model_config = {"populate_by_name": True}
 
@@ -297,6 +305,9 @@ class RegisterMap(BaseModel):
     # keeps validating. Required only for a bridge whose source names it.
     huawei_plant_source: SourceSide | None = None
     huawei_meter_source: SourceSide | None = None
+    # Optional for the same reason: required only for a bridge whose source
+    # names it (source.register_map == "etango_source").
+    etango_source: SourceSide | None = None
 
     @model_validator(mode="after")
     def _check_every_source_produces_every_target_point(self) -> "RegisterMap":
@@ -378,11 +389,8 @@ class Nd45Conf(BaseModel):
 
 
 class _SourceConfBase(BaseModel):
-    """Shared shape of a bridge's upstream Modbus TCP source."""
+    """Shared shape of a bridge's upstream source, single- or multi-host."""
 
-    host: str
-    port: int = 502
-    unit_id: int
     poll_interval_s: float = Field(gt=0)
     timeout_s: float = Field(gt=0)
     reconnect_delay_s: float = 1.0  # initial backoff for startup connect retry
@@ -406,7 +414,15 @@ class _SourceConfBase(BaseModel):
         return self
 
 
-class Nd45SourceConf(_SourceConfBase):
+class _SingleHostSourceConfBase(_SourceConfBase):
+    """A source polled over exactly one Modbus TCP connection."""
+
+    host: str
+    port: int = 502
+    unit_id: int
+
+
+class Nd45SourceConf(_SingleHostSourceConfBase):
     """Lumel ND45 power analyser: float32 registers, sub-second polling."""
 
     type: Literal["nd45"] = "nd45"
@@ -417,7 +433,7 @@ class Nd45SourceConf(_SourceConfBase):
     register_map: str = "nd45_source"
 
 
-class HuaweiSourceConf(_SourceConfBase):
+class HuaweiSourceConf(_SingleHostSourceConfBase):
     """Huawei SmartLogger: sized-integer registers, seconds-scale refresh.
 
     The SmartLogger is a concentrator that aggregates inverter data over RS485,
@@ -438,7 +454,58 @@ class HuaweiSourceConf(_SourceConfBase):
     register_map: str = "huawei_plant_source"
 
 
-SourceConf = Annotated[Nd45SourceConf | HuaweiSourceConf, Field(discriminator="type")]
+class EtangoDeviceConf(BaseModel):
+    """One CHINT e2TANGO controller polled as part of an etango source."""
+
+    host: str
+    port: int = 502
+    unit_id: int = 1
+    # Signals that this device is part of the group of devices whose readings
+    # are averaged/summed into the bridge's single canonical sample. A device
+    # with aggregate=false is still polled every cycle (and can still fail the
+    # whole sample on a read error) but its values are excluded from the
+    # combination -- e.g. for a future monitoring-only controller.
+    aggregate: bool = True
+
+
+class EtangoSourceConf(_SourceConfBase):
+    """CHINT e2TANGO protection relays used as power meters.
+
+    Unlike Nd45SourceConf/HuaweiSourceConf this has no single host/port: see
+    `devices`, each polled over its own TCP connection and combined by
+    etango_poller.poll_once (averaged or summed per canonical point, per
+    SourcePoint.aggregate/DeriveOp.aggregate in registers.json).
+
+    `unit_id` below is unused by etango_poller -- it exists only so
+    app.supervise_poller's generic call (which passes spec.source.unit_id as
+    run_poller's `slave` for every source type) keeps working without a
+    source-type branch. Per-device unit ids live in EtangoDeviceConf.unit_id.
+    """
+
+    type: Literal["etango"]
+    unit_id: int = 0
+    poll_interval_s: float = Field(default=2.0, gt=0)
+    timeout_s: float = Field(default=3.0, gt=0)
+    stall_timeout_s: float = Field(default=30.0, gt=0)
+    register_map: str = "etango_source"
+    devices: list[EtangoDeviceConf] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_devices(self) -> "EtangoSourceConf":
+        if not self.devices:
+            raise ValueError(
+                "etango source must declare at least one entry in 'devices'"
+            )
+        if not any(d.aggregate for d in self.devices):
+            raise ValueError(
+                "etango source has no device with aggregate=true; nothing to combine"
+            )
+        return self
+
+
+SourceConf = Annotated[
+    Nd45SourceConf | HuaweiSourceConf | EtangoSourceConf, Field(discriminator="type")
+]
 
 
 class DtsuRtuConf(BaseModel):
@@ -535,7 +602,15 @@ class BridgeConf(BaseModel):
     def _check_enabled_is_usable(self) -> "BridgeConf":
         # Only enforced when enabled, so a bridge can ship pre-wired with an
         # empty host as a template and be turned on once the address is known.
-        if self.enabled and not self.source.host.strip():
+        if not self.enabled:
+            return self
+        if isinstance(self.source, EtangoSourceConf):
+            if not any(d.host.strip() for d in self.source.devices if d.aggregate):
+                raise ValueError(
+                    f"bridge {self.name!r} is enabled but has no aggregating "
+                    "etango device with a non-empty host"
+                )
+        elif not self.source.host.strip():
             raise ValueError(
                 f"bridge {self.name!r} is enabled but source.host is empty"
             )

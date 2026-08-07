@@ -17,9 +17,9 @@ from dataclasses import dataclass, field
 
 from pymodbus.client import AsyncModbusTcpClient
 
-from . import huawei_poller, metrics, nd45_poller
+from . import etango_poller, huawei_poller, metrics, nd45_poller
 from .canonical import CanonicalStore, HealthGate, SampleStats
-from .config import AppConfig, BridgeConf, RegisterMap
+from .config import AppConfig, BridgeConf, EtangoSourceConf, RegisterMap
 from .dtsu_server import (
     RtuActivity,
     WireActivity,
@@ -44,6 +44,13 @@ SPREAD_POINTS = ("p_total", "p_l1", "p_l2", "p_l3", "pf_total", "u_l1", "i_l1")
 _POLL_ONCE: dict[str, Callable] = {
     "nd45": nd45_poller.poll_once,
     "huawei": huawei_poller.poll_once,
+    "etango": etango_poller.poll_once,
+}
+
+_VALIDATE_COVERAGE: dict[str, Callable] = {
+    "nd45": nd45_poller.validate_source_coverage,
+    "huawei": huawei_poller.validate_source_coverage,
+    "etango": etango_poller.validate_source_coverage,
 }
 
 
@@ -212,6 +219,22 @@ async def connect_with_retry(
 def _make_client_factory(spec: BridgeConf) -> Callable[[], object]:
     source = spec.source
 
+    if isinstance(source, EtangoSourceConf):
+        def factory():
+            return etango_poller.MultiHostClient([
+                etango_poller.DeviceLink(
+                    client=AsyncModbusTcpClient(
+                        device.host, port=device.port, timeout=source.timeout_s
+                    ),
+                    unit_id=device.unit_id,
+                    aggregate=device.aggregate,
+                    host=device.host,
+                )
+                for device in source.devices
+            ])
+
+        return factory
+
     def factory():
         return AsyncModbusTcpClient(
             source.host, port=source.port, timeout=source.timeout_s
@@ -235,10 +258,7 @@ def build_bridge(
     still wins.
     """
     source_side = registers.source_by_name(spec.source.register_map)
-    if spec.source.type == "nd45":
-        nd45_poller.validate_source_coverage(source_side)
-    else:
-        huawei_poller.validate_source_coverage(source_side)
+    _VALIDATE_COVERAGE[spec.source.type](source_side)
 
     # The metrics endpoint reports what Sigenergy actually reads, which only the
     # recording context can see -- so `run` needs an RtuActivity too, not just
@@ -337,10 +357,7 @@ def build_pipeline(
     # coroutines created but never awaited.
     for spec in specs:
         side = registers.source_by_name(spec.source.register_map)
-        if spec.source.type == "nd45":
-            nd45_poller.validate_source_coverage(side)
-        else:
-            huawei_poller.validate_source_coverage(side)
+        _VALIDATE_COVERAGE[spec.source.type](side)
 
     bridges: list[BridgeRuntime] = []
     coros: list = []

@@ -143,6 +143,59 @@
       {"op": "constant", "targets": ["freq"], "value": 50.0}
     ]
   },
+  "etango_source": {
+    "word_order": "little",
+    "byte_order": "big",
+    "address_offset": 0,
+    "read_groups": [
+      {"base": 0, "count": 32},
+      {"base": 48, "count": 18}
+    ],
+    "points": {
+      "i_l1":  {"addr": 0,  "aggregate": "avg"},
+      "i_l2":  {"addr": 2,  "aggregate": "avg"},
+      "i_l3":  {"addr": 4,  "aggregate": "avg"},
+      "u_l12": {"addr": 6,  "aggregate": "avg"},
+      "u_l23": {"addr": 8,  "aggregate": "avg"},
+      "u_l31": {"addr": 10, "aggregate": "avg"},
+      "freq":  {"addr": 12, "aggregate": "avg"},
+      "p_total": {"addr": 14, "aggregate": "sum"},
+      "q_total": {"addr": 16, "aggregate": "sum"},
+      "s_total": {"addr": 18, "aggregate": "sum"},
+      "pf_total": {"addr": 20, "aggregate": "avg"},
+      "imp_energy_total": {"addr": 24, "aggregate": "sum"},
+      "exp_energy_total": {"addr": 26, "aggregate": "sum"},
+      "reactive_imp_energy_total": {"addr": 28, "aggregate": "sum"},
+      "reactive_exp_energy_total": {"addr": 30, "aggregate": "sum"},
+      "u_l1": {"addr": 48, "aggregate": "avg"},
+      "u_l2": {"addr": 50, "aggregate": "avg"},
+      "u_l3": {"addr": 52, "aggregate": "avg"},
+      "p_l1": {"addr": 54, "aggregate": "sum"},
+      "p_l2": {"addr": 56, "aggregate": "sum"},
+      "p_l3": {"addr": 58, "aggregate": "sum"},
+      "q_l1": {"addr": 60, "aggregate": "sum"},
+      "q_l2": {"addr": 62, "aggregate": "sum"},
+      "q_l3": {"addr": 64, "aggregate": "sum"}
+    },
+    "derive": [
+      {"op": "hypot",
+       "targets": ["s_l1", "s_l2", "s_l3"],
+       "from": ["p_l1", "q_l1", "p_l2", "q_l2", "p_l3", "q_l3"],
+       "aggregate": "sum"},
+      {"op": "pf_from_p_s",
+       "targets": ["pf_l1", "pf_l2", "pf_l3"],
+       "from": ["p_l1", "s_l1", "p_l2", "s_l2", "p_l3", "s_l3"],
+       "aggregate": "avg"},
+      {"op": "split_equal",
+       "targets": ["imp_energy_l1", "imp_energy_l2", "imp_energy_l3"],
+       "from": ["imp_energy_total"],
+       "aggregate": "sum"},
+      {"op": "split_equal",
+       "targets": ["exp_energy_l1", "exp_energy_l2", "exp_energy_l3"],
+       "from": ["exp_energy_total"],
+       "aggregate": "sum"}
+    ]
+  },
   "dtsu_target": {
     "function_code": 3,
     "word_order": "big",
