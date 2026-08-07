@@ -498,11 +498,11 @@ Napięcie w tym samym przebiegu:
   "enabled": true,
   "source": {
     "type": "huawei",
-    "host": "192.168.22.120",
+    "host": "192.168.22.15",
     "port": 502,
     "unit_id": 0,
     "register_map": "huawei_plant_source",
-    "poll_interval_s": 5.0,
+    "poll_interval_s": 1.0,
     "timeout_s": 6.0,
     "stall_timeout_s": 60.0
   },
@@ -520,7 +520,7 @@ Parametry, które wynikają wprost z właściwości SmartLoggera:
 
 | Parametr | Wartość | Dlaczego |
 |---|---:|---|
-| `poll_interval_s` | 5.0 | koncentrator agreguje dane z falowników po RS485 — szybciej nie ma sensu |
+| `poll_interval_s` | 1.0 | koncentrator agreguje dane z falowników po RS485, więc częstsze odpytywanie zwraca tę samą wartość; 1 s to kompromis między świeżością a bezcelowym ruchem (wartość wdrożona 2026-08-04, wcześniej 5.0) |
 | `timeout_s` | 6.0 | dokumentacja Huawei (4.2.4) dopuszcza 5 s timeout Modbus |
 | `max_data_age_s` | 30.0 | musi być ≥ 2 × `poll_interval_s`, inaczej mostek siedzi w permanentnym fail-safe; walidator odrzuca mniejsze |
 | `stall_timeout_s` | 60.0 | po tylu sekundach bez postępu poller jest odbudowywany w procesie |
@@ -535,7 +535,7 @@ Rzeczy, których nie da się sprawdzić testami:
 1. **Baza adresowa.** Huawei dokumentuje „40525"; część klientów Modbus wymaga
    `40524` (0‑ vs 1‑based). Sprawdź `mbpoll` **przed** włączeniem mostka:
    ```bash
-   mbpoll -m tcp -a 0 -t 4 -r 40525 -c 2 192.168.22.120
+   mbpoll -m tcp -a 0 -t 4 -r 40525 -c 2 192.168.22.15
    ```
    Jeśli trzeba skorygować, ustaw `address_offset: -1` w sekcji
    `huawei_plant_source` w `config/registers.json` — bez zmiany kodu. Offset

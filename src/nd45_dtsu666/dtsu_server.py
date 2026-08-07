@@ -297,6 +297,15 @@ def update_datastore(
     Every point is encoded before the first datastore write, so a validation
     failure preserves the complete previous register image.
 
+    A canonical value that is missing entirely raises. Skipping it would leave
+    that one register holding the previous sample while the rest of the image
+    moves on -- and `build_on_update` stamps the store fresh straight after, so
+    nothing downstream could tell. Raising instead lands in the poller's error
+    path, leaves the store stale, and lets the freshness gate silence the output,
+    which is the safe reading of "we do not know this value". `RegisterMap`
+    rejects an unproducible `from` at load time; this covers a source that stops
+    producing a key at runtime.
+
     `ct_ratio` is the configured CT ratio (`dtsu.identity.ir_at`): points with
     `divide_by_ct` (the classic DTSU666 map's secondary-side current, power,
     and energy points) are divided by it before scaling, since the ND45
@@ -305,13 +314,20 @@ def update_datastore(
     """
     slave = context[slave_id]
     pending: list[tuple[int, int, list[int]]] = []
+    missing: list[str] = []
     for side in _targets(target):
         for pt in side.points.values():
             si = canonical.get(pt.from_)
             if si is None:
+                missing.append(pt.from_)
                 continue
             regs = encode_target_point(si, pt, side, ct_ratio=ct_ratio)
             pending.append((side.function_code, pt.addr, regs))
+    if missing:
+        raise KeyError(
+            "canonical sample is missing value(s) for target point(s): "
+            + ", ".join(sorted(set(missing)))
+        )
 
     for function_code, address, registers in pending:
         slave.setValues(function_code, address, registers)

@@ -259,8 +259,8 @@ async def test_poll_fills_the_energy_aliases_the_dtsu_maps_read():
     """This bridge owns a full canonical model, so it must run compute_derived.
 
     dtsu_target and dtsu_sigen_ext_energy reference active_energy_total and the
-    net_* fields via `from`, and update_datastore silently skips a missing key --
-    so without this the energy registers would sit at their previous image.
+    net_* fields via `from`, and update_datastore rejects a sample missing any
+    of them -- so without this the bridge would never serve at all.
     """
     _client, v = await _poll_meter()
     assert v["active_energy_total"] == pytest.approx(7.0 + 3.0)

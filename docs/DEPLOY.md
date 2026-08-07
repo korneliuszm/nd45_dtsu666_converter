@@ -14,12 +14,13 @@ on a deployed host it is reachable at
 `/persistence/app/current_modbus_converter/docs/DEPLOY.md`.
 
 Full architecture/config reference: `CLAUDE.md` in the repo root. This document
-is only the *deploy* procedure plus two incidents worth knowing before you
-touch the service.
+is only the *deploy* procedure plus the field findings worth knowing before you
+touch the service: one open site problem (§0.1-0.2), and two host-level traps
+that are fixed in the checkout but must be verified on each device (§0.3-0.4).
 
 ---
 
-## 0. Two things that will bite you if you skip them
+## 0. Four things that will bite you if you skip them
 
 ### 0.1 A wildly swinging power reading is the plant, not the bridge
 
@@ -83,32 +84,51 @@ faithfully. Established so far:
   Sigenergy regulates on `fc=4, addr=5404, count=16` (`dtsu_sigen_ext_target`,
   p_total..q_l3, ~9.5 reads/s) and never reads `dtsu_target` at all -- useful
   to know when changing maps, but not a fault.
-- What that leaves: since the magnitude, the sign and the CT scaling are all
+- **The bridge's poll rate is not the cause either** (measured 2026-08-04).
+  `source.poll_interval_s` went 0.2s -> 0.1s and the sign changes per minute
+  did not move (41 vs 41 and 45, over 60s each); the config then settled at
+  0.05s. That change is still worth having on its own terms -- the ND45
+  refreshes about every 134 ms, so 0.2s was sampling slower than the source
+  moved -- but it buys nothing against the limit cycle. The bridge's share of
+  the loop's dead time is simply too small to matter.
+- What that leaves: with magnitude, sign, CT scaling and poll rate all
   confirmed right, the remaining suspects are on the **timing/tuning** side --
-  Sigenergy's own regulation period and dead band, and the phase lag this
-  bridge adds versus a directly-wired DTSU666 (`source.poll_interval_s` plus
-  RTU serving latency at 9600 baud). Not yet investigated.
+  Sigenergy's own regulation period and dead band, and whatever phase lag this
+  bridge still adds versus a directly-wired DTSU666 (now dominated by RTU
+  serving latency at 9600 baud, not the poll). Not yet investigated.
 
-### 0.3 A crash-loop leaves the bridge dead until a human intervenes
+### 0.3 A crash-loop used to leave the bridge dead until a human intervened
 
-`nd45-dtsu666@.service` sets `Restart=always` with `RestartSec=2` but no
-start-limit override, so systemd's defaults apply (`StartLimitBurst=5` per
-`StartLimitIntervalSec=10s`). Any genuine crash-loop therefore trips the limit
-within ten seconds, systemd gives up permanently, and the unit sits in
-`failed` -- **Power Sensor dead until someone runs `systemctl reset-failed`**.
-This defeats the assumption in the watchdog design that systemd is the
-backstop. Observed for real on this host 2026-08-04. Recovery:
+**Fixed in the checked-in unit -- verify it survived onto your device.** The
+unit now sets `StartLimitIntervalSec=0` (in `[Unit]`) with `RestartSec=5`, so
+systemd retries forever instead of latching.
+
+What it prevents: with systemd's defaults (`StartLimitBurst=5` per
+`StartLimitIntervalSec=10s`), any genuine crash-loop -- or a transient that
+merely keeps the process from starting, such as the RS-485 device not being
+present yet after a boot -- trips the limit within ten seconds. systemd then
+gives up **permanently** and the unit sits in `failed`: **Power Sensor dead
+until someone runs `systemctl reset-failed`**, which defeats the watchdog
+design's assumption that systemd is the backstop. Observed for real on this
+host 2026-08-04.
+
+Two traps when checking it:
+
+- The directive belongs in `[Unit]`, **not** `[Service]`. systemd moved it in
+  v229 and silently ignores it in the wrong section, so a wrong placement looks
+  like it worked.
+- On an overlayroot device the fixed unit may exist only in RAM -- see §0.4.
+
+```bash
+systemctl show -p StartLimitIntervalUSec nd45-dtsu666@nd45   # want: 0
+```
+
+If you find an instance already latched:
 
 ```bash
 sudo systemctl reset-failed nd45-dtsu666@nd45
 sudo systemctl start nd45-dtsu666@nd45
 ```
-
-Fixed 2026-08-04: the unit now sets `StartLimitIntervalSec=0` (in `[Unit]`) and
-`RestartSec=5`, so systemd retries forever instead of latching. Note the
-directive belongs in `[Unit]`, **not** `[Service]` -- systemd moved it in v229
-and silently ignores it in the wrong section, which looks like it worked until
-you run `systemctl show -p StartLimitIntervalUSec`.
 
 ### 0.4 If `/` is an overlayroot, systemd changes evaporate on reboot
 
@@ -236,7 +256,7 @@ unless you deliberately keep it that way -- see §5 note):
 One bridge at a time, nothing else running against that source:
 
 ```bash
-.venv/bin/python -m nd45_dtsu666 --bridge nd45 diag --interval 0.2        # match source.poll_interval_s
+.venv/bin/python -m nd45_dtsu666 --bridge nd45 diag --interval 0.05       # match source.poll_interval_s
 .venv/bin/python -m nd45_dtsu666 --bridge smartlogger diag --interval 1.0
 ```
 
@@ -283,9 +303,20 @@ holds each RS-485 device:
 ps aux | grep nd45_dtsu666
 ```
 
-Since the Prometheus/`monitor` read-activity check is currently unreliable
-(see §0.2), confirm Sigenergy is actually receiving data by checking
-**Sigenergy's own UI** for the Power Sensor reading, not this bridge's tools.
+Then confirm Sigenergy is actually reading each bus. The read-activity tracker
+is trustworthy (the doubt recorded here earlier was part of the retracted
+finding in §0.1):
+
+```bash
+curl -s localhost:8081/metrics | grep -E 'dtsu_requests_total|dtsu_bus_frames'
+curl -s localhost:8082/metrics | grep -E 'dtsu_requests_total|dtsu_bus_frames'
+```
+
+A rising `dtsu_requests_total` on both ports is the answer you want. Frames on
+the bus with requests stuck at zero means Sigenergy is polling a different
+slave id than `dtsu.slave_id`; no frames at all means wiring, A/B swap or
+direction control. Cross-check the Power Sensor reading in **Sigenergy's own
+UI** as well — that is the only end-to-end confirmation.
 
 ---
 
@@ -298,17 +329,16 @@ not copy these values**, only the shape:
 |---|---|---|
 | bridge name | `nd45` | `smartlogger` |
 | source type | `nd45` | `huawei` |
-| poll interval | 0.2 s | 1.0 s |
+| poll interval | 0.05 s | 1.0 s |
 | `max_data_age_s` | 3.0 s | 30.0 s |
 | RS-485 port | `/dev/ttyAMA2` | `/dev/ttyAMA4` |
 | `slave_id` | 10 | 10 (different bus, fine to repeat) |
 | `metrics_port` | 8081 | 8082 |
 
-Note `CLAUDE.md` currently documents the SmartLogger port as `/dev/ttyAMA3`;
-on this host it is actually `/dev/ttyAMA4` (confirmed against the physical
-wiring 2026-08-04) -- that doc line is stale and should be fixed, but check
-your own device's physical wiring either way rather than trusting either
-source.
+The SmartLogger port is `/dev/ttyAMA4` on this host, confirmed against the
+physical wiring 2026-08-04. (An earlier `/dev/ttyAMA3` in the docs was wrong
+and has been corrected everywhere.) Check your own device's wiring rather than
+trusting any document for this.
 
 ---
 
@@ -356,8 +386,11 @@ sudo systemctl restart nd45-dtsu666@nd45 nd45-dtsu666@smartlogger
 - `/persistence/app/current_modbus_converter` now points at
   `/persistence/app/nd45_hsm_dtsu666`.
 - Both bridges run as `nd45-dtsu666@nd45` / `nd45-dtsu666@smartlogger`.
-- The two incidents in §0 were found and worked around during this cutover;
-  the workaround for §0.2 (disabling the read-activity tracker in `build_bridge`)
-  is an uncommitted-at-time-of-writing change on top of the git history --
-  confirm `git log`/`git status` in the repo before assuming a fresh clone has
-  it.
+- Two "corruption" incidents were written up during this cutover and both were
+  later retracted (§0.1). The workaround for one of them -- disabling the
+  read-activity tracker in `build_bridge` -- has been **reverted**; the tracker
+  is enabled again, gated on `config.prometheus.enabled`. A fresh clone needs
+  nothing done to it.
+- The genuine findings from the same day are §0.3 (the crash-loop start limit)
+  and §0.4 (the overlayroot), both fixed in the checked-in unit file and both
+  worth re-checking on any second device.

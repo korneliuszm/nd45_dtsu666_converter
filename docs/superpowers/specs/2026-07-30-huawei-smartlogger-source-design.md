@@ -3,6 +3,13 @@
 Data: 2026-07-30
 Źródło dokumentacji: `SmartLogger ModBus Interface Definitions`, Issue 35 (2020-02-20)
 
+> **Nota po wdrożeniu (2026-08-04).** Dokument zostaje w wersji projektowej jako
+> zapis decyzji; poniższe szczegóły zmieniły się w rzeczywistym wdrożeniu:
+> port RS485 mostka to **`/dev/ttyAMA4`**, nie `ttyAMA3` (potwierdzone na
+> okablowaniu), a `poll_interval_s` wynosi **1.0 s**, nie 5.0 s. Stan bieżący:
+> `config/config.json`, `docs/smartlogger-dtsu-map.md` i `docs/DEPLOY.md`.
+> Analiza pokrycia rejestrów i reguły `derive` poniżej pozostają aktualne.
+
 ## Problem
 
 Klient chce, żeby mostek potrafił czytać dane także z **Huawei SmartLogger**
