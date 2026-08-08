@@ -1,0 +1,28 @@
+{
+  "enabled": false,
+  "broker": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "username": null,
+    "password": null,
+    "keepalive_s": 30,
+    "tls": false,
+    "tls_insecure": false,
+    "connect_timeout_s": 10.0,
+    "reconnect_delay_s": 2.0,
+    "reconnect_delay_max_s": 30.0
+  },
+  "availability": {
+    "enabled": true,
+    "online": "online",
+    "offline": "offline",
+    "retain": true
+  },
+  "client_id": "nd45-dtsu666",
+  "topic_prefix": "nd45-dtsu666",
+  "qos": 0,
+  "retain": false,
+  "publish_interval_s": 0.2,
+  "publish_timeout_s": 5.0,
+  "points": ["p_total"]
+}

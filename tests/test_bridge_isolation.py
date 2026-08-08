@@ -746,3 +746,72 @@ async def test_recovery_reconnect_keeps_the_watchdog_heartbeat_alive(monkeypatch
     finally:
         stop.set()
         await asyncio.wait_for(task, timeout=5.0)
+
+
+# --- MQTT publishing is per bridge too ---
+
+
+def test_each_bridge_publishes_under_its_own_topics():
+    from nd45_dtsu666.config import MqttConf
+    from nd45_dtsu666.mqtt_publisher import build_source
+
+    config = load_config("config/config.json")
+    source = build_source(MqttConf(topic_prefix="p"), _publish_runtimes(config))
+    topics = {b.name: b.measurement_topic for b in source.bridges}
+    assert len(set(topics.values())) == len(topics), "two bridges share a topic"
+    for name, topic in topics.items():
+        assert topic == f"p/{name}/measurements"
+
+
+def test_each_bridge_publishes_against_its_own_freshness_threshold():
+    """ND45 tolerates 3s, the SmartLogger alternative 30s -- the same split the
+    fail-safe uses, so MQTT goes quiet exactly when that bridge's output does."""
+    from nd45_dtsu666.config import MqttConf
+    from nd45_dtsu666.mqtt_publisher import build_source
+
+    config = load_config("config/config.json")
+    source = build_source(MqttConf(), _publish_runtimes(config))
+    for bridge, spec in zip(source.bridges, config.bridge_specs):
+        assert bridge.gate.max_age == spec.safety.max_data_age_s
+
+
+def test_a_stale_bridge_does_not_silence_its_siblings_payload():
+    from nd45_dtsu666.config import MqttConf
+    from nd45_dtsu666.mqtt_publisher import build_payload, build_source
+
+    config = load_config("config/config.json")
+    source = build_source(MqttConf(), _publish_runtimes(config))
+    fresh, stale = source.bridges[0], source.bridges[1]
+    fresh.store.update({"p_total": 42.0}, 100.0)  # stale's store is never fed
+    assert build_payload(fresh, ["p_total"], 100.0, 0.0) is not None
+    assert build_payload(stale, ["p_total"], 100.0, 0.0) is None
+
+
+def test_two_systemd_instances_present_different_client_ids_and_will_topics():
+    """One connection per client id: a shared one has the broker evict each
+    instance in turn, forever -- the MQTT shape of the prometheus.port collision."""
+    from nd45_dtsu666.config import MqttConf
+    from nd45_dtsu666.mqtt_publisher import build_source
+
+    config = load_config("config/config.json")
+    runtimes = _publish_runtimes(config)
+    conf = MqttConf()
+    first = build_source(conf, runtimes, only=config.bridge_specs[0].name)
+    second = build_source(conf, runtimes, only=config.bridge_specs[1].name)
+    assert first.client_id != second.client_id
+    assert first.availability_topic != second.availability_topic
+
+
+class _PublishRuntime:
+    """Stand-in for app.BridgeRuntime: build_source reads name, spec and store."""
+
+    def __init__(self, spec) -> None:
+        from nd45_dtsu666.canonical import CanonicalStore
+
+        self.name = spec.name
+        self.spec = spec
+        self.store = CanonicalStore()
+
+
+def _publish_runtimes(config):
+    return [_PublishRuntime(spec) for spec in config.bridge_specs]

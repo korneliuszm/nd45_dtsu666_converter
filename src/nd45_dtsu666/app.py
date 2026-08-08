@@ -17,9 +17,9 @@ from dataclasses import dataclass, field
 
 from pymodbus.client import AsyncModbusTcpClient
 
-from . import etango_poller, huawei_poller, metrics, nd45_poller
+from . import etango_poller, huawei_poller, metrics, mqtt_publisher, nd45_poller
 from .canonical import CanonicalStore, HealthGate, SampleStats
-from .config import AppConfig, BridgeConf, EtangoSourceConf, RegisterMap
+from .config import AppConfig, BridgeConf, EtangoSourceConf, MqttConf, RegisterMap
 from .dtsu_server import (
     RtuActivity,
     WireActivity,
@@ -586,6 +586,7 @@ async def run_app(
     client=None,
     clients: dict[str, object] | None = None,
     only: str | None = None,
+    mqtt: MqttConf | None = None,
 ) -> None:
     pipe = build_pipeline(
         config, registers, stop_event, client=client, clients=clients, only=only
@@ -611,6 +612,12 @@ async def run_app(
             )
         )
     metrics_task = metrics.start(config, pipe.metrics, stop_event, only=only)
+    # Same placement rationale as the metrics endpoint: started before the
+    # connect below, so the availability topic reads `online` and the per-bridge
+    # status reads `stale` throughout a source outage, instead of the publisher
+    # being absent for exactly the failure it exists to report. `only` keeps the
+    # two systemd instances' client ids apart on a shared broker.
+    mqtt_task = mqtt_publisher.start(mqtt, pipe.bridges, stop_event, only=only)
 
     # Bridges connect concurrently and independently: an unreachable source must
     # not delay bringing any sibling bridge up.
@@ -638,5 +645,6 @@ async def run_app(
             except Exception:  # noqa: BLE001 - must not mask the real exit reason
                 log.debug("connect task failed during shutdown", exc_info=True)
         await metrics.stop(metrics_task)
+        await mqtt_publisher.stop(mqtt_task)
         for bridge in pipe.bridges:
             _close_quietly(bridge.client, bridge.name)

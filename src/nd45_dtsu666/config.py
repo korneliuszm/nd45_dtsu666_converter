@@ -294,6 +294,14 @@ DERIVED_CANONICAL_KEYS = frozenset(
     {"active_energy_total", "net_imp_energy_total", "net_exp_energy_total"}
 )
 
+# Canonical point names an mqtt.json `points` list may hold. The first two sets
+# are producible by *every* source section, so a name from them is publishable
+# whichever bridge this process happens to run. `dc_power`/`e_daily` exist only
+# on huawei_plant_source and are allowed anyway, so a SmartLogger deployment can
+# publish them without a code change -- a bridge that does not report a
+# configured point just omits it and warns once (see mqtt_publisher).
+MQTT_POINT_KEYS = STATIC_DEBUG_VALUE_KEYS | DERIVED_CANONICAL_KEYS | {"dc_power", "e_daily"}
+
 
 class RegisterMap(BaseModel):
     nd45_source: SourceSide
@@ -648,6 +656,111 @@ class PrometheusConf(BaseModel):
     include_registers: bool = True
 
 
+class MqttBrokerConf(BaseModel):
+    """Where the MQTT publisher connects, and how it backs off when it can't."""
+
+    host: str = "127.0.0.1"
+    port: int = Field(default=1883, ge=1, le=65535)
+    username: str | None = None
+    password: str | None = None
+    # Deliberately below paho's default of 60: at QoS 0 nothing acknowledges a
+    # publish, so a half-open socket is only noticed by the keepalive, and 60s
+    # of silently discarded measurements is a long time at a 0.2s cadence.
+    keepalive_s: int = Field(default=30, ge=5, le=3600)
+    tls: bool = False
+    tls_insecure: bool = False
+    connect_timeout_s: float = Field(default=10.0, gt=0)
+    reconnect_delay_s: float = Field(default=2.0, gt=0)
+    reconnect_delay_max_s: float = Field(default=30.0, gt=0)
+
+    @model_validator(mode="after")
+    def _check_backoff_and_tls(self) -> "MqttBrokerConf":
+        if self.reconnect_delay_max_s < self.reconnect_delay_s:
+            raise ValueError(
+                "broker.reconnect_delay_max_s must not be below reconnect_delay_s"
+            )
+        if self.tls_insecure and not self.tls:
+            raise ValueError("broker.tls_insecure has no meaning while broker.tls is false")
+        return self
+
+
+class MqttAvailabilityConf(BaseModel):
+    """Liveness topics: the process LWT and the per-bridge freshness flag."""
+
+    enabled: bool = True
+    online: str = "online"
+    offline: str = "offline"
+    # Retained unconditionally: an availability flag a late subscriber cannot
+    # read is exactly the one it needs before trusting any measurement it sees.
+    retain: bool = True
+
+
+class MqttConf(BaseModel):
+    """MQTT measurement publisher (see mqtt_publisher.py).
+
+    Loaded from its own file, `config/mqtt.json`, never from config.json. Two
+    reasons: it carries a broker password, and config.json is the file both
+    systemd instances share and every cross-bridge validator reads -- keeping
+    MQTT out of it means the "outside `bridges` there are only `prometheus` and
+    `static_debug`" rule stays true.
+    """
+
+    enabled: bool = False
+    broker: MqttBrokerConf = MqttBrokerConf()
+    availability: MqttAvailabilityConf = MqttAvailabilityConf()
+    # Base client id; the bridge this process runs is appended by client_id_for.
+    client_id: str = Field(default="nd45-dtsu666", min_length=1, max_length=64)
+    topic_prefix: str = Field(default="nd45-dtsu666", min_length=1)
+    qos: int = Field(default=0, ge=0, le=2)
+    # False by default: a retained 0.2s sample is handed to every new subscriber
+    # forever, long after it stopped being true -- the staleness the freshness
+    # gate exists to prevent, moved into the broker.
+    retain: bool = False
+    publish_interval_s: float = Field(default=0.2, gt=0, le=3600)
+    publish_timeout_s: float = Field(default=5.0, gt=0)
+    points: list[str] = Field(default_factory=lambda: ["p_total"])
+
+    def client_id_for(self, only: str | None) -> str:
+        """Client id this process presents to the broker.
+
+        Mirrors AppConfig.metrics_port_for, and for the same failure: with one
+        bridge per systemd instance both processes read this one file, and MQTT
+        allows a single connection per client id. Sharing one would have the
+        broker evict the incumbent, which reconnects and evicts the newcomer --
+        an endless flap, the exact shape of two services sharing prometheus.port.
+        """
+        return self.client_id if only is None else f"{self.client_id}-{only}"
+
+    @field_validator("points", mode="before")
+    @classmethod
+    def _validate_points(cls, points):
+        if not isinstance(points, list):
+            raise ValueError("mqtt points must be a list of canonical value names")
+        unknown = sorted(set(points) - MQTT_POINT_KEYS)
+        if unknown:
+            raise ValueError(f"unknown mqtt point(s): {', '.join(unknown)}")
+        duplicates = sorted({name for name in points if points.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate mqtt point(s): {', '.join(duplicates)}")
+        if not points:
+            raise ValueError(
+                "mqtt points is empty: publishing nothing is what enabled=false is for"
+            )
+        return list(points)
+
+    @field_validator("topic_prefix")
+    @classmethod
+    def _validate_topic_prefix(cls, prefix: str) -> str:
+        # A *published* topic may not hold wildcards, and a leading or trailing
+        # '/' makes an empty topic level that reads as a typo on every dashboard.
+        bad = [char for char in ("+", "#", "\x00") if char in prefix]
+        if bad:
+            raise ValueError(f"topic_prefix must not contain {' or '.join(bad)}")
+        if prefix != prefix.strip("/"):
+            raise ValueError("topic_prefix must not start or end with '/'")
+        return prefix
+
+
 class AppConfig(BaseModel):
     """Process configuration: a list of bridges plus process-wide settings.
 
@@ -884,3 +997,26 @@ def load_registers(path: str) -> RegisterMap:
 def load_config(path: str) -> AppConfig:
     with open(path, encoding="utf-8") as f:
         return AppConfig.model_validate(json.load(f))
+
+
+def load_mqtt_config(path: str) -> MqttConf | None:
+    """MQTT settings from their own file, or None when that file does not exist.
+
+    Absent is not an error. Every deployment, every `config_debug_*.json` run and
+    every test invocation predates this file, and none of them should change
+    behaviour just by upgrading the checkout; a hard failure here would turn a
+    missing file into a crash-loop, since the unit sets Restart=always with the
+    start rate limiting disabled. A file that *is* present but malformed still
+    raises -- a typo'd broker password must fail loudly, not silently stop
+    publishing.
+
+    Returning None rather than a disabled MqttConf lets the caller tell "no file"
+    (worth one INFO line) from "file present, enabled: false" (worth nothing).
+    Logging stays in __main__, where logging is configured; this module remains a
+    pure parser like load_config and load_registers.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            return MqttConf.model_validate(json.load(f))
+    except FileNotFoundError:
+        return None

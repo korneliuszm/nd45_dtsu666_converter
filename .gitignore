@@ -18,6 +18,9 @@ htmlcov/
 
 # Local runtime overrides / secrets
 config/config.local.json
+# A site's real mqtt.json holds a broker password; the shipped one is disabled
+# and password-free, so only local variants are ignored.
+config/mqtt.local.json
 
 # OS / editor
 .DS_Store

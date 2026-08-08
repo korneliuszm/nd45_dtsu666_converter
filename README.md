@@ -67,7 +67,8 @@ bridge; in the `nd45` entry set `source.host`, and under `dtsu` pick the output
 the MBAP header for TCP) and must match what Sigenergy is configured to poll.
 
 The optional `prometheus` section controls the metrics endpoint (see below); omit it
-to accept the defaults.
+to accept the defaults. MQTT publishing lives in its own file, `config/mqtt.json`
+(see [MQTT publishing](#mqtt-publishing)); if that file is absent, MQTT is simply off.
 
 ## Independent bridges
 
@@ -162,7 +163,10 @@ SmartLogger bridge differ only in their values, so the two are read side by side
 ```
 
 Outside `bridges` there are only the two process-wide sections, `prometheus` and
-`static_debug`.
+`static_debug`. MQTT publishing is configured in a **separate file**,
+`config/mqtt.json` — deliberately, so this list stays the whole story of
+`config.json` and a broker password stays out of the file both systemd instances
+read. See [MQTT publishing](#mqtt-publishing).
 
 `slave_id` may repeat across bridges (the RS-485 buses are electrically
 independent); the serial port may not — **among enabled bridges**, which is what
@@ -333,6 +337,80 @@ during a startup outage — `nd45_connected 0` with `data_age +Inf` is the expec
 picture then. It is read-only and unauthenticated; keep it on a trusted network.
 
 Design notes: `docs/superpowers/specs/2026-07-27-prometheus-metrics-design.md`.
+
+## MQTT publishing
+
+Prometheus and the DTSU register map are both **pull** interfaces — something has to
+ask. For consumers that expect data to arrive (Home Assistant, Node-RED, a supervising
+EMS), `run` can also **push** canonical measurements to an MQTT broker.
+
+Configured in its own file, `config/mqtt.json`, every field optional:
+
+```json
+{
+  "enabled": true,
+  "broker": {"host": "127.0.0.1", "port": 1883, "username": null, "password": null},
+  "topic_prefix": "nd45-dtsu666",
+  "client_id": "nd45-dtsu666",
+  "publish_interval_s": 0.2,
+  "qos": 0,
+  "retain": false,
+  "points": ["p_total"]
+}
+```
+
+- **`points`** — canonical value names, the same vocabulary as `registers.json` and
+  `static_debug.values`. An unknown name is rejected at startup rather than silently
+  publishing nothing. `p_total` as shipped; add any of the 35 standard canonical
+  points (plus `active_energy_total`, `net_imp_energy_total`, `net_exp_energy_total`,
+  and `dc_power`/`e_daily` on a SmartLogger bridge). All of them ride in **one**
+  message, so a longer list costs almost nothing.
+- **`publish_interval_s`** — 0.2 s as shipped. Independent of every bridge's poll
+  rate: the publisher samples the canonical store on its own timer, so a source
+  slower than the interval simply repeats a sample (visible as an unchanged `ts`).
+- **`enabled`** — `false` in the shipped file. `--no-mqtt` forces it off from the
+  command line; **a missing `config/mqtt.json` also just means "off"**, so nothing
+  changes for a device that never creates one.
+- **`client_id`** — the bridge name is appended per process (`nd45-dtsu666-nd45`,
+  `nd45-dtsu666-etango`). MQTT allows one connection per client id, so without this
+  the two systemd instances would evict each other in an endless reconnect flap —
+  the same collision `metrics_port` solves for Prometheus.
+
+`--mqtt <path>` overrides the location; by default it is `mqtt.json` **next to
+`--config`**, which is why the systemd units need no change.
+
+Topics, for the `nd45` instance:
+
+| Topic | Payload | Retained |
+|---|---|---|
+| `nd45-dtsu666/nd45/measurements` | `{"ts":1786176205.581,"age_s":0.048,"p_total":12345.6}` | no |
+| `nd45-dtsu666/nd45/status` | `fresh` \| `stale` | yes |
+| `nd45-dtsu666/nd45/availability` | `online` \| `offline` (Last Will) | yes |
+
+**Consumer rule: trust `measurements` only while `availability` is `online` and
+`status` is `fresh`.** The two flags report different failures. `availability` going
+`offline` is the broker delivering the Last Will — the process died or lost its
+connection. `status` going `stale` means the process is alive but its source data is
+older than that bridge's `safety.max_data_age_s`; the publisher then stops sending
+measurements entirely, because that is the same moment the fail-safe silences the
+bridge's DTSU output and Sigenergy stops being fed. Publishing a last-known value
+there would tell a dashboard the opposite of what the battery is seeing.
+
+`ts` is a wall-clock epoch time **of the sample**, not of the message, so a repeated
+`ts` means the source has not moved. `age_s` is how old that sample was when sent.
+
+Measurements are not retained by default: a retained 0.2 s sample is handed to every
+new subscriber forever, long after it stopped being true.
+
+Only `run` publishes. `monitor`, `rtudebug`, `static` and `diag` never do — they are
+diagnostics you run *next to* the live service, and a second client with the same id
+would evict it.
+
+If the broker is unreachable the publisher backs off (2 s doubling to 30 s) and keeps
+retrying; Modbus polling and the DTSU output are unaffected. If `aiomqtt` is not
+installed, MQTT logs an error and turns itself off rather than taking the bridge down.
+
+Design notes: `docs/superpowers/specs/2026-08-08-mqtt-measurement-publisher-design.md`.
 
 ## Bench test before connecting Sigenergy
 Run the configured transport with synthetic data and read it with mbpoll.

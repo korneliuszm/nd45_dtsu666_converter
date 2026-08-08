@@ -253,6 +253,16 @@ unless you deliberately keep it that way -- see §5 note):
   differs (new firmware, different meter model). Normally unchanged between
   sites; if you do edit `huawei_*` sections, re-run
   `scripts/gen_smartlogger_map_doc.py` (a test enforces this).
+- `config/mqtt.json` -- **only if this site pushes measurements to a broker.**
+  Ships with `"enabled": false`, so leaving it alone changes nothing; deleting
+  it also just means MQTT is off. To turn it on set `enabled`, the
+  `broker.host`/`port` and, if the broker authenticates, `username`/`password`.
+  `points` takes canonical value names (`p_total` as shipped) and
+  `publish_interval_s` the period in seconds (0.2 as shipped). Both systemd
+  instances read this one file; the bridge name is appended to `client_id`
+  automatically, so they do not evict each other on the broker.
+  **If you put a password in it, `chmod 600 config/mqtt.json`** -- it is
+  world-readable as checked out, and the file is tracked in git.
 
 ### 3.2 Verify the source(s) BEFORE serving anything
 
@@ -378,6 +388,12 @@ Two traps, both previously hit for real on this host:
 
 ## 5. Upgrading in place
 
+> **Upgrading past 2026-08-08 pulls new runtime dependencies** (`aiomqtt` and its
+> `paho-mqtt`), so the `pip install` below needs PyPI reachable from the device --
+> or a pre-seeded wheel directory. If it fails the new version dir is unusable;
+> the symlink still points at the old one, so nothing is down. Fix the network
+> (or `pip install --no-index --find-links`) and re-run before swapping.
+
 ```bash
 cd /persistence/app
 git clone <remote-url> nd45_hsm_dtsu666_<date-or-tag>
@@ -387,6 +403,9 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 # checkout's identity, don't take the new version's example config
 cp /persistence/app/current_modbus_converter/config/config.json config/
 cp /persistence/app/current_modbus_converter/config/registers.json config/
+# mqtt.json too, if this device uses it: the new checkout ships a DISABLED one,
+# so skipping this line silently turns MQTT publishing off after the upgrade.
+cp /persistence/app/current_modbus_converter/config/mqtt.json config/ 2>/dev/null || true
 
 sudo ln -sfn /persistence/app/nd45_hsm_dtsu666_<date-or-tag> \
              /persistence/app/current_modbus_converter

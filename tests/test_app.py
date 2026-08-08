@@ -715,3 +715,60 @@ def test_a_tcp_output_bridge_has_no_bus_tracker(monkeypatch):
     assert pipe.bridge("nd45").wire is not None  # still RTU
     for coro in pipe.coros:
         coro.close()
+
+
+# --- mqtt publisher wiring ---
+
+
+async def test_run_app_starts_and_stops_the_mqtt_publisher(monkeypatch):
+    """The publisher must come up alongside metrics and be torn down with it."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    from nd45_dtsu666 import app as app_mod
+    from nd45_dtsu666.config import MqttConf
+
+    started, stopped = [], []
+    sentinel = object()
+
+    def fake_start(conf, bridges, stop_event, only=None):
+        started.append((conf, [b.name for b in bridges], only))
+        return sentinel
+
+    async def fake_stop(task):
+        stopped.append(task)
+
+    monkeypatch.setattr(app_mod.mqtt_publisher, "start", fake_start)
+    monkeypatch.setattr(app_mod.mqtt_publisher, "stop", fake_stop)
+
+    config = load_config("config/config.json")
+    stop = asyncio.Event()
+    stop.set()
+    mqtt = MqttConf(enabled=True)
+    await run_app(
+        config, load_registers("config/registers.json"), stop,
+        clients={spec.name: _FakeSourceClient() for spec in config.bridge_specs},
+        only="nd45", mqtt=mqtt,
+    )
+    assert started == [(mqtt, ["nd45"], "nd45")]
+    assert stopped == [sentinel]
+
+
+async def test_run_app_without_a_mqtt_conf_starts_no_publisher(monkeypatch):
+    """Every existing caller passes nothing and must keep behaving identically."""
+    monkeypatch.delenv("WATCHDOG_USEC", raising=False)
+    from nd45_dtsu666 import app as app_mod
+
+    seen = []
+    monkeypatch.setattr(
+        app_mod.mqtt_publisher, "start",
+        lambda conf, bridges, stop_event, only=None: seen.append(conf),
+    )
+
+    config = load_config("config/config.json")
+    stop = asyncio.Event()
+    stop.set()
+    await run_app(
+        config, load_registers("config/registers.json"), stop,
+        clients={spec.name: _FakeSourceClient() for spec in config.bridge_specs},
+        only="nd45",
+    )
+    assert seen == [None]

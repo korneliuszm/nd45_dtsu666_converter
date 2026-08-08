@@ -11,6 +11,10 @@ dependencies = [
     "pymodbus>=3.6,<3.7",
     "pydantic>=2,<3",
     "pyserial>=3.5",
+    # MQTT measurement publisher (mqtt_publisher.py). asyncio-native: paho-mqtt's
+    # own loop_start() is a thread, and this process is one event loop with no
+    # locks -- the same reason prometheus_client was rejected in metrics.py.
+    "aiomqtt>=2.0,<3",
 ]
 
 [project.optional-dependencies]
