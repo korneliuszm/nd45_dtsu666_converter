@@ -143,7 +143,7 @@ def _run_diag(registers, spec: BridgeConf, interval: float = 1.0) -> int:
         where = f"@ {spec.source.host}:{spec.source.port} unit {spec.source.unit_id}"
 
     async def _main() -> None:
-        client = _make_client_factory(spec)()
+        client = _make_client_factory(spec, source_side)()
         await client.connect()
         stats = SampleStats(WATCHED_POINTS, window=600)
         try:

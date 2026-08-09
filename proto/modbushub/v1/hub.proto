@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package modbushub.v1;
+
+option go_package = "github.com/korneliuszm/modbus-hub/gen/modbushub/v1;modbushubv1";
+
+// ModbusHub owns every Modbus connection on the device. Applications declare
+// what they need instead of opening their own links, so a device polled by two
+// applications is still read once, and nothing can interleave frames on a bus.
+//
+// The hub deliberately speaks RAW REGISTERS. It does not scale, decode, or know
+// anything about gain/sign/word order -- each client keeps its own, already
+// field-validated decoding layer.
+service ModbusHub {
+  // Subscribe declares the blocks a client wants and how often. The hub merges
+  // overlapping declarations across all clients, polls once, and streams the
+  // result back to every subscriber. Each SubscribeRequest replaces the
+  // client's previous declaration in full.
+  rpc Subscribe(stream SubscribeRequest) returns (stream BlockUpdate);
+
+  // ReadBlock answers a single block from cache, or from the device when
+  // `force` is set. Used for one-shot diagnostics, not for steady polling.
+  rpc ReadBlock(ReadBlockRequest) returns (BlockUpdate);
+
+  // Write queues a write on the target link's request queue, ahead of polling.
+  rpc Write(WriteRequest) returns (WriteResult);
+
+  // WatchLinks streams link up/down transitions so clients can drive their own
+  // reconnect and fail-safe logic.
+  rpc WatchLinks(WatchLinksRequest) returns (stream LinkStatus);
+}
+
+// BlockRef identifies a contiguous register range on one device.
+message BlockRef {
+  // Link name from the hub's config (not host:port -- the address may change
+  // without the clients' configuration changing).
+  string link = 1;
+  uint32 unit_id = 2;
+  // 3 = read holding registers, 4 = read input registers.
+  uint32 function_code = 3;
+  uint32 base = 4;
+  uint32 count = 5;
+}
+
+message BlockSubscription {
+  BlockRef block = 1;
+  // Desired poll period. The hub uses the shortest period declared for any
+  // subscription covering a given range.
+  uint32 period_ms = 2;
+}
+
+message SubscribeRequest {
+  // Stable identifier for logs and metrics, e.g. "edge-controller" or
+  // "nd45-dtsu666/nd45".
+  string client_id = 1;
+  // The client's complete desired set. Replaces any previous declaration on
+  // this stream.
+  repeated BlockSubscription blocks = 2;
+}
+
+// BlockUpdate carries one block exactly as it came off the wire.
+//
+// A non-empty `error` means the block could not be read; `registers` is then
+// empty and MUST NOT be substituted with a previous value. Clients rely on this
+// to drive fail-safe behaviour (the DTSU bridge silences its output server, the
+// edge controller counts a read error).
+message BlockUpdate {
+  BlockRef block = 1;
+  // uint16 values widened to uint32 -- proto3 has no 16-bit integer type.
+  repeated uint32 registers = 2;
+  // When the device answered. Clients compare this against their own freshness
+  // threshold; the hub does not impose one.
+  int64 read_at_unix_nanos = 3;
+  string error = 4;
+}
+
+message ReadBlockRequest {
+  BlockRef block = 1;
+  // Reject a cached value older than this. 0 accepts any age.
+  uint32 max_age_ms = 2;
+  // Bypass the cache and queue a read on the device.
+  bool force = 3;
+  uint32 timeout_ms = 4;
+}
+
+message WriteRequest {
+  string link = 1;
+  uint32 unit_id = 2;
+  uint32 address = 3;
+  // One value writes FC6 (single register); several write FC16 (multiple).
+  repeated uint32 values = 4;
+  uint32 timeout_ms = 5;
+}
+
+message WriteResult {
+  bool ok = 1;
+  string error = 2;
+  int64 written_at_unix_nanos = 3;
+}
+
+message WatchLinksRequest {
+  // Empty watches every configured link.
+  repeated string links = 1;
+}
+
+message LinkStatus {
+  string link = 1;
+  bool connected = 2;
+  string last_error = 3;
+  int64 last_success_unix_nanos = 4;
+  uint32 consecutive_errors = 5;
+  uint32 backoff_ms = 6;
+}
