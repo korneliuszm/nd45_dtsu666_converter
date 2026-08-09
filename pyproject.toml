@@ -11,10 +11,18 @@ dependencies = [
     "pymodbus>=3.6,<3.7",
     "pydantic>=2,<3",
     "pyserial>=3.5",
-    # Client for modbus-hub (source.via_hub). Only the runtime is needed --
+    # Client for modbus-hub (source.via_hub). Only the runtimes are needed --
     # the stubs in src/nd45_dtsu666/hubpb are generated and committed, so
     # grpcio-tools is a developer dependency, not a deployment one.
+    #
+    # protobuf must be listed explicitly: grpcio does NOT depend on it, and the
+    # generated hub_pb2.py calls ValidateProtobufRuntimeVersion with the
+    # gencode's own version. Without this floor an install can end up with an
+    # older protobuf -- or none at all -- and the failure only appears on the
+    # device, at the moment via_hub is switched on. Raise the floor whenever
+    # scripts/gen_hub_stubs.sh is run with a newer grpcio-tools.
     "grpcio>=1.60",
+    "protobuf>=7.35.1",
 ]
 
 [project.optional-dependencies]

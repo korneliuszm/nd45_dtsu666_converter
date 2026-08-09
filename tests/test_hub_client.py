@@ -482,3 +482,38 @@ def test_a_block_that_keeps_failing_still_counts_as_delivered():
         conn._awaited.discard(block)
     assert not conn._awaited
     assert conn.cache.lookup("nd45", 1, 3, 50, 96).isError()
+
+
+def test_the_generated_stubs_import_against_the_installed_protobuf_runtime():
+    # hub_client imports these lazily, so nothing else in this suite would
+    # notice a missing or too-old protobuf -- the failure would surface on the
+    # device, at the moment via_hub is switched on. The generated hub_pb2 calls
+    # ValidateProtobufRuntimeVersion at import time, so importing it here is the
+    # whole check.
+    from nd45_dtsu666.hubpb import hub_pb2, hub_pb2_grpc
+
+    ref = hub_pb2.BlockRef(link="nd45", unit_id=1, function_code=3, base=50, count=96)
+    assert ref.link == "nd45"
+    assert hasattr(hub_pb2_grpc, "ModbusHubStub")
+
+
+def test_a_subscribe_request_can_be_built_from_real_blocks():
+    # Catches a field renamed in the contract without the client following.
+    from nd45_dtsu666.hubpb import hub_pb2
+
+    blocks = blocks_for_source("nd45", REGISTERS.nd45_source, unit_id=1, link="nd45")
+    req = hub_pb2.SubscribeRequest(
+        client_id="nd45-dtsu666/nd45",
+        blocks=[
+            hub_pb2.BlockSubscription(
+                block=hub_pb2.BlockRef(
+                    link=b.link, unit_id=b.unit_id, function_code=b.fc,
+                    base=b.base, count=b.count,
+                ),
+                period_ms=50,
+            )
+            for b in blocks
+        ],
+    )
+    assert len(req.blocks) == len(blocks)
+    assert req.blocks[0].block.function_code == 3
