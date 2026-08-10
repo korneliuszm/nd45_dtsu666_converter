@@ -402,6 +402,31 @@ class _SourceConfBase(BaseModel):
     # Name of the registers.json section this source decodes.
     register_map: str
 
+    # Read this source through modbus-hub instead of opening our own TCP client.
+    # The hub is the device's single owner of every Modbus link, so a device
+    # this bridge shares with edge-controller is polled once, not twice.
+    # Default off: an existing config file keeps its direct connection, and
+    # switching a bridge over is a one-flag edit that reverts the same way.
+    via_hub: bool = False
+    hub_socket: str = "/run/modbus-hub/hub.sock"
+    # Name of the link in the HUB's own config that owns this device. Links are
+    # addressed by name, never by host:port, so readdressing a device does not
+    # mean editing every client's configuration.
+    hub_link: str = ""
+
+    @model_validator(mode="after")
+    def _check_hub_link_present_when_via_hub(self) -> "_SourceConfBase":
+        # An empty hub_link would subscribe to a link the hub does not have,
+        # which it rejects at subscribe time -- long after the config loaded.
+        # Multi-host sources name their links per device instead (see
+        # EtangoDeviceConf.hub_link), so they are exempt here.
+        if self.via_hub and not self.hub_link and not hasattr(self, "devices"):
+            raise ValueError(
+                "via_hub is set but hub_link is empty; name the link in the "
+                "hub's config that owns this device"
+            )
+        return self
+
     @model_validator(mode="after")
     def _check_stall_timeout_exceeds_poll_interval(self) -> "_SourceConfBase":
         # A stall timeout at or below the poll interval would fire mid-cycle and
@@ -460,6 +485,10 @@ class EtangoDeviceConf(BaseModel):
     host: str
     port: int = 502
     unit_id: int = 1
+    # Name of the link in the hub's config that owns this relay. Required only
+    # when the parent source has via_hub set; each e2TANGO relay is its own TCP
+    # endpoint and therefore its own hub link.
+    hub_link: str = ""
     # Signals that this device is part of the group of devices whose readings
     # are averaged/summed into the bridge's single canonical sample. A device
     # with aggregate=false is still polled every cycle (and can still fail the
@@ -500,6 +529,19 @@ class EtangoSourceConf(_SourceConfBase):
             raise ValueError(
                 "etango source has no device with aggregate=true; nothing to combine"
             )
+        if self.via_hub:
+            missing = [d.host for d in self.devices if not d.hub_link]
+            if missing:
+                raise ValueError(
+                    "via_hub is set but these etango devices have no hub_link: "
+                    + ", ".join(missing)
+                )
+            links = [d.hub_link for d in self.devices]
+            if len(set(links)) != len(links):
+                raise ValueError(
+                    "two etango devices share a hub_link; each relay is its own "
+                    "TCP endpoint and therefore its own link"
+                )
         return self
 
 

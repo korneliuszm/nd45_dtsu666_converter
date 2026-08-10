@@ -216,8 +216,25 @@ async def connect_with_retry(
     return False
 
 
-def _make_client_factory(spec: BridgeConf) -> Callable[[], object]:
+def _make_client_factory(spec: BridgeConf, source_side=None) -> Callable[[], object]:
     source = spec.source
+
+    # Reading through modbus-hub replaces the transport and nothing else: the
+    # returned object satisfies the same duck type, so every poller, the codec,
+    # the canonical store and the DTSU output server are untouched. `source_side`
+    # is needed only here, to turn the map's read_groups into a subscription.
+    if source.via_hub:
+        if source_side is None:
+            raise ValueError(
+                f"bridge {spec.name!r} has via_hub set, but the client factory was "
+                "built without a source side; pass registers.source_by_name(...)"
+            )
+        from .hub_client import make_hub_client
+
+        def hub_factory():
+            return make_hub_client(spec, source_side)
+
+        return hub_factory
 
     if isinstance(source, EtangoSourceConf):
         def factory():
@@ -291,7 +308,7 @@ def build_bridge(
         dtsu_cfg=spec.dtsu,
         sigen_identity=registers.dtsu_sigen_identity,
     )
-    factory = _make_client_factory(spec)
+    factory = _make_client_factory(spec, source_side)
     return BridgeRuntime(
         name=spec.name,
         spec=spec,
