@@ -35,6 +35,10 @@ Full register layouts, address by address:
   SmartLogger bridge: which Huawei register feeds which canonical point, how the
   gaps are filled, and how each one lands in the DTSU666 maps. Its tables are
   generated from `config/registers.json`, so they cannot drift.
+- [`docs/sigenergy-read-cadence.md`](docs/sigenergy-read-cadence.md) — how often
+  Sigenergy actually reads each register, from a live RS-485 capture: which
+  points are polled fast, which are only refreshed every few seconds, and the
+  caveats on that measurement.
 
 ## Install (reComputer R1000, Ubuntu)
 
