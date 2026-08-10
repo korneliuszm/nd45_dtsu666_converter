@@ -44,6 +44,21 @@ checked-out version is live — the systemd units always point at the symlink, s
 an upgrade is "check out the new version, repoint the symlink, restart".
 Full procedure, including upgrade/rollback: `docs/DEPLOY.md`.
 
+**`scripts/deploy.sh` automates that procedure** (clone, venv, config copy-forward,
+systemd install, symlink swap, service restart — including the overlayroot
+persistence step and the disable-the-old-bridge reconciliation from DEPLOY.md
+§0.4/§4.1) and works for both a first install and an upgrade:
+
+```bash
+sudo /persistence/app/current_modbus_converter/scripts/deploy.sh
+```
+
+It stops for confirmation after cloning, building the venv and validating config —
+before anything on the live system changes — so a bad checkout never reaches
+systemd. See the script's own header comment for flags (`--ref`, `--remote-url`)
+and the `rollback` subcommand. The manual steps below remain the reference for
+what it's doing and why, and as a fallback.
+
 ```bash
 sudo mkdir -p /persistence/app
 cd /persistence/app

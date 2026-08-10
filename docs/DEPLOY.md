@@ -220,6 +220,14 @@ symlink, restart" -- the systemd units never change. See §5.
 
 ## 3. Install
 
+`scripts/deploy.sh` automates sections 3 and 5 below, including the overlayroot
+persistence in §0.4 and the disable-the-old-bridge reconciliation in §4.1 --
+`sudo scripts/deploy.sh` from an existing checkout (or with `--remote-url` for a
+bare host) handles both a first install and an upgrade, stopping for confirmation
+before anything on the live system changes. What follows is the manual procedure
+it reproduces -- read it to know what the script is doing and why, and use it
+directly if you don't have root, need to deviate, or the script itself fails.
+
 ```bash
 # 1. Get the code onto the box, under its own version directory.
 sudo mkdir -p /persistence/app
@@ -377,6 +385,9 @@ Two traps, both previously hit for real on this host:
 ---
 
 ## 5. Upgrading in place
+
+`scripts/deploy.sh` automates this section too -- see the note at the top of
+section 3. What follows is the manual procedure for reference or fallback.
 
 ```bash
 cd /persistence/app
