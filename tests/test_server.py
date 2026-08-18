@@ -240,6 +240,23 @@ def test_sigen_identity_and_handshake_are_seeded_exactly():
     assert slave.getValues(3, 0xF114, count=2) == [0x0000, 0x1500]
 
 
+def test_handshake_magic_is_overridden_per_bridge_from_dtsu_cfg():
+    registers = load_registers("config/registers.json")
+    cfg = DtsuConf(
+        transport="rtu",
+        slave_id=1,
+        identity=DtsuIdentityConf(handshake_magic=5377),
+        rtu=DtsuRtuConf(port="/dev/null"),
+    )
+    context = build_context(
+        [registers.dtsu_target, registers.dtsu_sigen_ext_target],
+        slave_id=1,
+        dtsu_cfg=cfg,
+        sigen_identity=registers.dtsu_sigen_identity,
+    )
+    assert context[1].getValues(3, 0xF114, count=2) == [0x0000, 0x1501]
+
+
 def test_sigen_ext_energy_active_reads_are_valid_and_unknown_gap_is_zero():
     registers = load_registers("config/registers.json")
     targets = [

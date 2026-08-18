@@ -73,10 +73,16 @@ def write_static_registers(slave: ModbusSlaveContext, slave_id: int, dtsu_cfg: D
 
 
 def write_sigen_identity(
-    slave: ModbusSlaveContext, identity: StaticIdentitySide
+    slave: ModbusSlaveContext, identity: StaticIdentitySide, dtsu_cfg: DtsuConf | None = None
 ) -> None:
-    """Seed configured Sigen OEM identity values into FC03 holding registers."""
-    for point in identity.points.values():
+    """Seed configured Sigen OEM identity values into FC03 holding registers.
+
+    `handshake_magic` is overridden per bridge from `dtsu_cfg.identity.handshake_magic`
+    when given -- registers.json's own static_value is shared by every bridge (see
+    CLAUDE.md), so a `dtsu_cfg` lets each bridge answer the Sigen handshake with its
+    own magic value instead of all of them serving the same one.
+    """
+    for name, point in identity.points.items():
         if point.type == "ascii":
             raw = point.static_value.encode("ascii")
             padded = raw.ljust(point.register_count * 2, b"\0")
@@ -86,6 +92,8 @@ def write_sigen_identity(
             ]
         else:
             value = point.static_value
+            if name == "handshake_magic" and dtsu_cfg is not None:
+                value = dtsu_cfg.identity.handshake_magic
             values = [(value >> 16) & 0xFFFF, value & 0xFFFF]
         slave.setValues(identity.function_code, point.addr, values)
 
@@ -281,7 +289,7 @@ def build_context(
     if dtsu_cfg is not None:
         write_static_registers(slave, slave_id, dtsu_cfg)
     if sigen_identity is not None:
-        write_sigen_identity(slave, sigen_identity)
+        write_sigen_identity(slave, sigen_identity, dtsu_cfg)
     return ModbusServerContext(slaves={slave_id: slave}, single=False)
 
 

@@ -590,6 +590,12 @@ class DtsuIdentityConf(BaseModel):
     b_lcd: int = Field(default=0, ge=0, le=0xFFFF)
     endian: int = Field(default=0, ge=0, le=0xFFFF)
     protocol: int = Field(default=0, ge=0, le=0xFFFF)
+    # Sigen OEM handshake register (0xF114, dtsu_sigen_identity.handshake_magic).
+    # Overrides the registers.json static default per bridge -- unlike the other
+    # identity fields above, that map is shared by every bridge (see CLAUDE.md),
+    # so without a per-bridge override every meter on the site would answer the
+    # handshake with the same magic value.
+    handshake_magic: int = Field(default=5376, ge=0, le=0xFFFFFFFF)
 
 
 class DtsuConf(BaseModel):

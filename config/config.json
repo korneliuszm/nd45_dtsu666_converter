@@ -26,7 +26,8 @@
           "disp": 10,
           "b_lcd": 1,
           "endian": 4,
-          "protocol": 0
+          "protocol": 0,
+          "handshake_magic": 5376
         },
         "rtu": {
           "port": "/dev/ttyAMA2",
@@ -68,7 +69,8 @@
           "disp": 10,
           "b_lcd": 1,
           "endian": 4,
-          "protocol": 0
+          "protocol": 0,
+          "handshake_magic": 5377
         },
         "rtu": {
           "port": "/dev/ttyAMA4",
@@ -113,7 +115,8 @@
           "disp": 10,
           "b_lcd": 1,
           "endian": 4,
-          "protocol": 0
+          "protocol": 0,
+          "handshake_magic": 5378
         },
         "rtu": {
           "port": "/dev/ttyAMA4",
